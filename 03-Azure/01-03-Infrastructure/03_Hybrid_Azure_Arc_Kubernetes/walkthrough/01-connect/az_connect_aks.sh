@@ -51,5 +51,5 @@ fi
 echo ""
 
 echo "Connecting the cluster to Azure Arc"
-az connectedk8s connect --name $arc_cluster_name --resource-group $arc_resource_group --location $location --tags 'on-prem kubernetes cluster for microhack' --infrastructure 'azure' --distribution 'aks'
+az connectedk8s connect --name $arc_cluster_name --resource-group $arc_resource_group --location $location --infrastructure 'azure' --distribution 'aks'
 
