@@ -13,6 +13,6 @@ client_secret="WILL-BE-REPLACED-BY-SCRIPT"
 
 - plan and deploy an AKS cluster which will simulate an on-prem Kubernetes cluster which will be used in the following challenge to arc-enable:
 ```bash
-terraform plan -out=tfplan
+terraform plan -var-file=fixtures.tfvars -out=tfplan
 terraform apply tfplan
 ``` 
