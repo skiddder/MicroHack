@@ -1,7 +1,5 @@
-#!/bin/sh
-
-# <--- Change the following environment variables according to your Azure service principal name --->
-
+#!/bin/bash
+# This script connects an existing AKS cluster to Azure Arc
 echo "Exporting environment variables"
 
 export onprem_aks_cluster_name='onprem_aks'
@@ -31,25 +29,27 @@ rm -rf ~/.azure/AzureArcCharts
 echo "Checking if you have up-to-date Azure Arc AZ CLI 'connectedk8s' extension..."
 az extension show --name "connectedk8s" &> extension_output
 if cat extension_output | grep -q "not installed"; then
-az extension add --name "connectedk8s"
-rm extension_output
+    az extension add --name "connectedk8s"
 else
-az extension update --name "connectedk8s"
-rm extension_output
+    az extension update --name "connectedk8s"
 fi
+rm extension_output
 echo ""
 
 echo "Checking if you have up-to-date Azure Arc AZ CLI 'k8s-configuration' extension..."
 az extension show --name "k8s-configuration" &> extension_output
 if cat extension_output | grep -q "not installed"; then
-az extension add --name "k8s-configuration"
-rm extension_output
+    az extension add --name "k8s-configuration"
 else
-az extension update --name "k8s-configuration"
-rm extension_output
+    az extension update --name "k8s-configuration"
 fi
+rm extension_output
 echo ""
 
 echo "Connecting the cluster to Azure Arc"
-az connectedk8s connect --name $arc_cluster_name --resource-group $arc_resource_group --location $location --infrastructure 'azure' --distribution 'aks'
+az connectedk8s connect --name $arc_cluster_name \
+    --resource-group $arc_resource_group \
+    --location $location \
+    --infrastructure 'azure' \
+    --distribution 'aks'
 
