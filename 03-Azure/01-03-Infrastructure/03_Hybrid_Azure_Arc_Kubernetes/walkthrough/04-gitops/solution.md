@@ -35,6 +35,7 @@ az k8s-extension create \
 
 ### Solution
 #### Scenario 1 - Manage cluster configuration using GitOps
+In order to manage a namespace via flux, you need a repository. In this microhack we're using a public github repository. If using a private repo make sure to add credentials so flux is able to access your repository. The following command creates a flux configuration which watches the namespaces folder within this repository. All namespace definitions found in this folder will be applied to the cluster.
 ```bash
 repository="https://github.com/skiddder/MicroHack" #Change to your own fork of the Microhack repository
 path="/03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/namespaces"
@@ -50,6 +51,8 @@ az k8s-configuration flux create \
   --branch main \
   --kustomization name=namespace path=$path prune=true interval=1m
 ```
+Copy itops.yaml and name it team1.yaml. Open it in your editor and change the labels.name and name values to "team1". Save the file and commit and push it. The flux configuration is configured to pull for changes every 10min. After 10min the new namespace will appear in your cluster.
+
 #### Scenario 2 - Build and deploy (CI/CD) apps using GitOps
 ### Resources
 * [GitOps for Azure Kubernetes Service](https://learn.microsoft.com/en-us/azure/architecture/example-scenario/gitops-aks/gitops-blueprint-aks) 

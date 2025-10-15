@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    name: test
-  annotations:
-    contoso.com/owner: "test@contoso.com"
-  name: test
