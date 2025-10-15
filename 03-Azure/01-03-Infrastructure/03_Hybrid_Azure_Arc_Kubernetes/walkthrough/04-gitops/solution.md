@@ -35,7 +35,21 @@ az k8s-extension create \
 
 ### Solution
 #### Scenario 1 - Manage cluster configuration using GitOps
+```bash
+repository="https://github.com/skiddder/MicroHack" #Change to your own fork of the Microhack repository
+path="/03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/namespaces"
 
+az k8s-configuration flux create \
+  --resource-group $arc_resource_group \
+  --cluster-name $arc_cluster_name \
+  --cluster-type connectedClusters \
+  --name flux-config-namespace \
+  --namespace flux-system \
+  --scope cluster \
+  --url $repository \
+  --branch main \
+  --kustomization name=namespace path=$path prune=true interval=1m
+```
 #### Scenario 2 - Build and deploy (CI/CD) apps using GitOps
 ### Resources
 * [GitOps for Azure Kubernetes Service](https://learn.microsoft.com/en-us/azure/architecture/example-scenario/gitops-aks/gitops-blueprint-aks) 
