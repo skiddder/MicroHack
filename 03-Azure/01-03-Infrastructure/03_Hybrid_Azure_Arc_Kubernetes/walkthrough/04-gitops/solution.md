@@ -16,7 +16,7 @@ az provider register --namespace Microsoft.KubernetesConfiguration
 az extension add -n k8s-configuration
 az extension add -n k8s-extension
 ```
-* Flux CLI installed
+* Flux CLI installed #TODO: Is this required?
 ```bash
 curl -s https://fluxcd.io/install.sh | sudo bash
 ```
