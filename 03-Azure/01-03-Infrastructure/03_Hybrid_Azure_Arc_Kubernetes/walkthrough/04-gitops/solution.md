@@ -78,7 +78,7 @@ az k8s-configuration flux create \
   --cluster-type connectedClusters \
   --name flux-config-hello-world \
   --namespace hello-world \
-  --scope namespace \
+  --scope cluster \
   --url https://github.com/skiddder/MicroHack \
   --branch main \
   --kustomization name=hello-world path=./03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/app-depl prune=true interval=1m
