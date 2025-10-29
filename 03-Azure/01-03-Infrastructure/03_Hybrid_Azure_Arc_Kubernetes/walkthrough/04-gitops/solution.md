@@ -53,6 +53,22 @@ az k8s-configuration flux create \
 ```
 Copy itops.yaml and name it team1.yaml. Open it in your editor and change the labels.name and name values to "team1". Save the file and commit and push it. The flux configuration is configured to pull for changes every 10min. After 10min the new namespace will appear in your cluster.
 
-#### Scenario 2 - Build and deploy (CI/CD) apps using GitOps
+#### Scenario 2 - Deploy an app using GitOps
+In this microhack the focus is on automating deployment rather than on building the app. Therefore, we are not creating a full CI/CD pipeline at this point. Instead we will focus on how GitOps can be used to pull a new container version when your existing build pipeline has created and pushed it to your container repository.
+
+We start by creating v1.0.0 of our demo hello-world app manually and push it to the existing Azure Container Registry of the microhack environment.
+```bash
+# use Azure Container Registry built-in function to create and push a container image to our registryssh 
+acr_name=mharcaksacr
+
+az acr build \
+  --registry $acr_name \
+  --image hello-world-flux:v1.0.0 \
+  --file Dockerfile \
+  .
+```
+
+Now, we are using the yaml deployment and service definitions located in folder '03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/app-depl' to create a kustomization which will deploy the container. Please note there is also a file called kustomization.yaml in that folder which tells flux how to handle the deployment.
+
 ### Resources
-* [GitOps for Azure Kubernetes Service](https://learn.microsoft.com/en-us/azure/architecture/example-scenario/gitops-aks/gitops-blueprint-aks) 
+* [GitOps for Azure Kubernetes Service](https://learn.microsoft.com/en-us/azure/architecture/example-scenario/gitops-aks/gitops-blueprint-aks)
