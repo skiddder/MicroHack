@@ -68,7 +68,27 @@ az acr build \
   .
 ```
 
-Now, we are using the yaml deployment and service definitions located in folder '03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/app-depl' to create a kustomization which will deploy the container. Please note there is also a file called kustomization.yaml in that folder which tells flux how to handle the deployment.
+Now, we are using the yaml deployment and service definitions located in folder '03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/app-depl' to create a kustomization which will deploy the container. Please note there is also a file called kustomization.yaml in that folder which tells flux how to handle the deployment. Open the deployment.yaml in your editor, find the image definition on line 19 and change the repository name according to your Azure Container Registry name (i.e. 'mharck8sacr01'). Save the file. 
+
+Use Azure CLI to tell Flux to sync this folder:
+```bash
+az k8s-configuration flux create \
+  --resource-group $arc_resource_group \
+  --cluster-name $arc_cluster_name \
+  --cluster-type connectedClusters \
+  --name flux-config-hello-world \
+  --namespace hello-world \
+  --scope namespace \
+  --url https://github.com/skiddder/MicroHack \
+  --branch main \
+  --kustomization name=hello-world path=./03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/app-depl prune=true interval=1m
+```
+
+When the kustomization has been applied, you can use kubectl to validate that the hello world app was deployed successfully:
+```bash
+kubectl get pods -n hello-world
+kubectl get svc -n hello-world
+```
 
 ### Resources
 * [GitOps for Azure Kubernetes Service](https://learn.microsoft.com/en-us/azure/architecture/example-scenario/gitops-aks/gitops-blueprint-aks)

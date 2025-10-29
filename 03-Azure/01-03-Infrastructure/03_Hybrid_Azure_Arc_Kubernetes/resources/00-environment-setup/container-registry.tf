@@ -1,7 +1,7 @@
 # will be used in challenge 04-gitops
 variable "acr_name" {
     description = "The name of the Azure Container Registry"
-    default     = "mharcaksacr"
+    default     = "mharck8sacr01"
 }
 
 variable "container_registry_sku" {
