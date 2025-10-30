@@ -1,0 +1,39 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageUpdateAutomation
+metadata:
+  name: hello-world-auto
+  namespace: hello-world
+spec:
+  interval: 1m
+  sourceRef:
+    kind: GitRepository
+    name: flux-config-namespace        # <-- MUST equal your existing GitRepository CR name defined in your Kustomization, NOT ImageRepository
+    namespace: flux-system             # <-- usually flux-system (where your GitRepository CR lives)
+  git:
+    checkout:
+      ref:
+        branch: main                   # <-- branch Flux will read/write
+    commit:
+      author:
+        name: flux-bot
+        email: flux-bot@local
+      messageTemplate: |
+        chore: update hello-world image to {{range .Updated.Images}}{{.NewImage}}{{end}}
+    push:
+      branch: main                     # <-- branch to push commits to
+    # You created the GitHub secret already (HTTPS + PAT):
+    secretRef:
+      name: git-writer-creds           # <-- Secret in flux-system for repo write (PAT or SSH)
+    # If you used SSH instead of HTTPS, replace with:
+    # ssh:
+    #   secretRef:
+    #     name: git-writer-ssh
+  update:
+    strategy: Setters
+    # ----- IMPORTANT PATHS -----
+    # This path must point to the folder in your repo where the app manifests live.
+    # It is *relative to the Git repo root* defined by your GitRepository CR.
+    path: ./03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/app-depl
+    # Include patterns restrict what files Flux is allowed to edit.
+    includePaths:
+      - "03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/app-depl/**.yaml"

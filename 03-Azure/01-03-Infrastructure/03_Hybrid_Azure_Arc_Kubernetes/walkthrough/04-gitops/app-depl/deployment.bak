@@ -17,6 +17,6 @@ spec:
     spec:
       containers:
       - name: hello-world
-        image: mharcaksacr.azurecr.io/hello-world-flux:v1.0.0 # {"$imagepolicy": "hello-world:hello-world-policy"}
+        image: mharcaksacr.azurecr.io/hello-world-flux:v1.0.0 # <== adjust this to match the image in your Azure Container Registry
         ports:
         - containerPort: 8080

@@ -1,0 +1,16 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: hello-world-policy
+  namespace: hello-world               # <-- must match ImageRepository namespace
+spec:
+  imageRepositoryRef:
+    name: hello-world-repo             # <-- must match ImageRepository.metadata.name
+  policy:
+    # If you tag images as 1.0.0, 1.1.0, etc., semver is ideal:
+    semver:
+      range: "1.x"                     # <-- choose the highest 1.* tag (e.g., 1.1.0, 1.2.0)
+    # If you *don’t* use semver, switch to e.g.:
+    # alphabetical:
+    #   order: asc
+    # or numerical with optional filters (see Flux docs)

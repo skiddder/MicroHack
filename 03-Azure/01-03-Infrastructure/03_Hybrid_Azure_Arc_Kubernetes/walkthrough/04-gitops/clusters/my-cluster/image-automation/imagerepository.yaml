@@ -1,0 +1,10 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: hello-world-repo
+  namespace: hello-world               # <-- same namespace as your app
+spec:
+  image: mharcaksacr.azurecr.io/hello-world-flux  # <-- ACR login server + repository
+  interval: 1m                         # <-- how often to poll ACR for new tags
+  secretRef:
+    name: acr-pull-creds               # <-- docker-registry secret in *hello-world* namespace
