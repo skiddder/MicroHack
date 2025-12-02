@@ -6,10 +6,24 @@ Duration: 20 minutes
 ## Prerequisites
 Please ensure that you successfully verified the [general prerequisites](../../Readme.md#general-prerequisites) before starting this challenge.
 
-## Task 1 - Create Azure resource group
-## Task 2 - Connect K8s cluster using script
+## Task 1 - Login to Azure
+In your shell environment, login to Azure using the account you got assigned during the microhack.
+```bash
+az logout # only required if you are logged in with another user from a previous session
+
+az login # browser popup opens with credential prompt. Provide your user details and MFA if required
+```
+
+## Task 2 - Create Azure resource group
+Next you will need to create a resource group where the arc-enabled-kuberenetes resource will be created. Please use the postfix which matches your microhack user account - i.e. exchange the "01" with "04" if you are user04. 
+```bash
+az group create --name mh-arc-k8s-01 --location westeurope
+```
+
+
+## Task 3 - Connect K8s cluster using script
 * Open file az_connect_aks.sh in your editor
-* Check the export variable values and adjust the values to match your environment and save your changes. 
+* Check the export variable values and adjust the values to match your environment (i.e. replace "01" with "04" if you are user04) and save your changes. 
 ```bash
 # adjust the postfix according to your microhack user number
 export onprem_aks_cluster_name='onprem-k8s-01'  
