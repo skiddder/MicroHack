@@ -22,7 +22,7 @@ az group create --name mh-arc-k8s-01 --location westeurope
 
 
 ## Task 3 - Connect K8s cluster using script
-* Open file az_connect_aks.sh in your editor
+* Open file az_connect_aks.sh in your editor. You can find the file in the microhack repo at 03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/01-connect
 * Check the export variable values and adjust the values to match your environment (i.e. replace "01" with "04" if you are user04) and save your changes. 
 ```bash
 # adjust the postfix according to your microhack user number
