@@ -1,11 +1,11 @@
 variable "resource_group_name" {
   description = "The Azure resource group this AKS Managed Kubernetes Cluster should be provisioned"
-  default     = "mh-arc-aks-onprem"
+  default     = "mh-arc-k8s-onprem"
 }
 
 variable "aks_name" {
   description = "This AKS Managed Kubernetes Cluster name"
-  default     = "onprem_aks"
+  default     = "onprem-k8s"
 }
 
 variable "prefix" {

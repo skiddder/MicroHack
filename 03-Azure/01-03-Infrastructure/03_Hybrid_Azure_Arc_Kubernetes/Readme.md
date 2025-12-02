@@ -79,20 +79,35 @@ In order to successfully work through the challenges in this MicroHack, you will
 * [An Azure account with an active subscription](https://azure.microsoft.com/free/?WT.mc_id=A261C142F)
 * [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) (Hint: Make sure to use the lastest version)
 * [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#install-using-native-package-management)
+* [Helm] (https://helm.sh/docs/intro/install/)
 
-💡*Hint*: The solution has been verified using [Visual Studio Code](https://code.visualstudio.com/) with integrated Linux Bash Shell ([WSL(https://learn.microsoft.com/en-us/windows/wsl/install)]). In order to clone this repository to your local system, use either git or the github plugin vor VSC.
+💡*Hint*: The solution has been verified using [Visual Studio Code](https://code.visualstudio.com/) with integrated Linux Bash Shell ([WSL(https://learn.microsoft.com/en-us/windows/wsl/install)]). In order to clone this repository to your local system, use either git or the github plugin for VSC.
 
 ## Challenge 1 - Onboarding your Kubernetes Cluster
 
+
 ### Goal
+In challenge 1 you will connect/onboard your existing K8s cluster to Azure Arc. 
 
 ### Actions
+* Verify all prerequisites are in place
+  * Resource Providers
+  * Azure CLI extensions
+  * Resource group (Name: mh-arc-k8s)
+  * Connectivity to required Azure endpoints
+* Deploy the Azure Arc agent pods to your k8s cluster
+* Assign permissions to view k8s resources in the Azure portal
 
 ### Success Criteria
+* Your k8s cluster appears in the Azure portal under Azure Arc > Infrastructure > Kubernetes clusters and is in status "Connected"
+* In the Azure portal below Kubernetes resources > Workloads you can see all deployments and pods running on your cluster.
 
 ### Learning Resources
+* (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/azure-rbac)
+* (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/kubernetes-resource-view)
 
 ### Solution - Spoilerwarning
+[Solution Steps](walkthrough/01-connect/solution.md)
 
 ## Challenge 2 - Configure Gitops for cluster management
 

@@ -2,10 +2,10 @@
 # This script connects an existing AKS cluster to Azure Arc
 echo "Exporting environment variables"
 
-export onprem_aks_cluster_name='onprem_aks'
-export onprem_resource_group='mh-arc-aks-onprem'
-export arc_resource_group='mh-arc-aks'
-export arc_cluster_name='mh-arc-enabled-K8s'
+export onprem_aks_cluster_name='onprem-k8s'
+export onprem_resource_group='mh-arc-k8s-onprem'
+export arc_resource_group='mh-arc-k8s'
+export arc_cluster_name='mh-arc-enabled-k8s'
 export location="westeurope"
 
 # Registering Azure Arc providers
