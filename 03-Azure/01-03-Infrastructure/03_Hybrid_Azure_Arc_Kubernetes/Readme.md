@@ -103,6 +103,7 @@ In challenge 1 you will connect/onboard your existing K8s cluster to Azure Arc.
 * In the Azure portal below Kubernetes resources > Workloads you can see all deployments and pods running on your cluster.
 
 ### Learning Resources
+* (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/quickstart-connect-cluster?tabs=azure-cli)
 * (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/azure-rbac)
 * (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/kubernetes-resource-view)
 

@@ -2,10 +2,11 @@
 # This script connects an existing AKS cluster to Azure Arc
 echo "Exporting environment variables"
 
-export onprem_aks_cluster_name='onprem-k8s'
-export onprem_resource_group='mh-arc-k8s-onprem'
-export arc_resource_group='mh-arc-k8s'
-export arc_cluster_name='mh-arc-enabled-k8s'
+# adjust the postfix according to your microhack user number
+export onprem_aks_cluster_name='onprem-k8s-01'  
+export onprem_resource_group='mh-arc-k8s-onprem-01'
+export arc_resource_group='mh-arc-k8s-01'
+export arc_cluster_name='mh-arc-enabled-k8s-01'
 export location="westeurope"
 
 # Registering Azure Arc providers
