@@ -1,4 +1,6 @@
-# MicroHack Azure Arc for Kubernetes
+![image](img/banner.png)
+
+# MicroHack Azure Arc-enabled Kubernetes
 
 - [**MicroHack Introduction**](#microhack-introduction)
   - [What is Azure Arc for Kubernetes?](#what-is-azure-arc-for-kubernetes)

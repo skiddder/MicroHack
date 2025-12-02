@@ -143,7 +143,28 @@ kubectl -n hello-world create secret docker-registry acr-pull-creds \
 *Least-privilege tip*: Admin user is registry‑wide and long‑lived. Prefer a scoped SP with RABC for production.
 
 ##### Flux Image Automation
-In order for the image automation kustomization to work, we need to change the existing 'app-depl/deployment.yaml' so flux knows where and how to update the image in the deployment manifest:
+
+Have a look at folder 'clusters/my-cluster/image-automation'. It contains four yaml files which are required for the image-automation to function.
+* imagepolicy.yaml
+* imagerepository.yaml
+* imageupdateautomation.yaml
+* kustomization.yaml
+Optionally, you can check the existing flux setup:
+```bash
+# List Flux configurations pointing to your github repo
+kubectl -n flux-system get gitrepositories.source.toolkit.fluxcd.io
+```
+Make sure that the gitrepository name matches the name in the imageautomation.yaml:
+```yaml
+spec:
+  interval: 1m
+  sourceRef:
+    kind: GitRepository
+    name: flux-config-namespace        # <-- MUST equal your existing GitRepository CR name defined in your Kustomization, NOT ImageRepository
+    namespace: flux-system  
+```
+
+In order for the image automation kustomization to work, we need to change the existing 'app-depl/deployment.yaml' so flux knows where and how to update the image in the deployment manifest (note the comment in spec.containers.image):
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -168,46 +189,28 @@ spec:
         ports:
         - containerPort: 8080
 ```
-Then have a look at folder 'clusters/my-cluster/image-automation'. It contains four yaml files which are required for the image-automation to function.
-* imagepolicy.yaml
-* imagerepository.yaml
-* imageupdateautomation.yaml
-* kustomization.yaml
-Optionally, you can check the existing flux setup:
+Save, commit and push your changes.
+
+Now we are ready to create the new image-automation kustomization using Azure CLI:
 ```bash
-# List Flux configurations pointing to your github repo
-kubectl -n flux-system get gitrepositories.source.toolkit.fluxcd.io
-```
-Make sure that the gitrepository name matches the name in the imageautomation.yaml:
-```yaml
-spec:
-  interval: 1m
-  sourceRef:
-    kind: GitRepository
-    name: flux-config-namespace        # <-- MUST equal your existing GitRepository CR name defined in your Kustomization, NOT ImageRepository
-    namespace: flux-system  
-```
-Now we are ready to apply the new kustomizations for the image automation:
-```bash
-az k8s-configuration flux kustomization create \
+az k8s-configuration flux create \
   --resource-group $arc_resource_group \
   --cluster-name $arc_cluster_name \
   --cluster-type connectedClusters \
-  --flux-configuration-name flux-config-namespace \
-  --name image-automation \
-  --namespace flux-system \
-  --path ./03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/clusters/my-cluster/image-automation \
-  --prune true \
-  --wait \
-  --timeout 60s \
-  --sync-interval PT1M
+  --name flux-config-image-automation \
+  --namespace hello-world \
+  --scope cluster \
+  --url https://github.com/skiddder/MicroHack \
+  --branch main \
+  --kustomization name=image-automation path=./03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/clusters/my-cluster/image-automation prune=true interval=1m
 ```
-
 
 Last thing is to update the existing kustomization for our hello-world app:
 ```bash
-# identify the existing kustomization name - in the example below it's "hello-world"
+# identify the existing kustomization name
 az k8s-configuration flux list   --resource-group $arc_resource_group   --cluster-name $arc_cluster_name   --cluster-type connectedClusters   -o table
+
+# expected output (in the example below it's "hello-world")
 Namespace    Name                     Scope    ProvisioningState    ComplianceState    StatusUpdatedAt                   SourceUpdatedAt
 -----------  -----------------------  -------  -------------------  -----------------  --------------------------------  -------------------------
 hello-world  flux-config-hello-world  cluster  Succeeded            Compliant          2025-10-30T11:11:41.423000+00:00  2025-10-30T09:35:17+00:00
@@ -215,11 +218,20 @@ flux-system  flux-config-namespace    cluster  Succeeded            Compliant   
 
 # Validate that the path is pointing to the correct folder
 az k8s-configuration flux kustomization list --name flux-config-hello-world  --resource-group $arc_resource_group   --cluster-name $arc_cluster_name   --cluster-type connectedClusters   -o table
+
+# example output
 Name         Path                                                                                           DependsOn    SyncInterval    Timeout    Prune    Force
 -----------  ---------------------------------------------------------------------------------------------  -----------  --------------  ---------  -------  -------
 hello-world  ./03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/04-gitops/app-depl               1m              10m        True     False
 
-# todo update
+# update hello-world app kustomization
+az k8s-configuration flux kustomization update \
+  --resource-group $arc_resource_group \
+  --cluster-name $arc_cluster_name \
+  --cluster-type connectedClusters \
+  --flux-configuration-name flux-config-namespace \
+  --name flux-config-hello-world \
+  --depends-on image-automation
 ```
 
 ### Resources
