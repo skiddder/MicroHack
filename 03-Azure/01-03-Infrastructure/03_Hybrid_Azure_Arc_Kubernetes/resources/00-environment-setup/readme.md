@@ -3,7 +3,7 @@ When working through the challenges of this microhack, it's assumed that you hav
 
 In this folder you find terraform code to deploy a k8s cluster and container registry in Azure for each participant of the microhack. It's intended that coaches create these resources for their participants before the microhack starts, so the participants can directly start with challenge 1 (onboarding/arc-enabling their cluster).
 
-As a microhack coach, you will be given a subscription in the central microhack tenant. Terraform expects the subscription id within the azurerm provider. Therefore, you need to to adjust the provider.tf file in this folder:
+As a microhack coach, you will be given a subscription in the central microhack tenant. Terraform expects the subscription id within the azurerm provider. Therefore, you need to to create the provider.tf file in this folder. To achieve this, copy the provider-template.txt:
 
 - Identify your subscription_id:
 ```bash
