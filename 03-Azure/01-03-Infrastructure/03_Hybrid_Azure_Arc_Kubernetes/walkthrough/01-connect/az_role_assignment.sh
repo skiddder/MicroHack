@@ -5,8 +5,8 @@
 #!/bin/bash
 # This script assigns the "Azure Arc Kubernetes Viewer" role to a specified Azure AD entity for a given Azure Arc Kubernetes cluster
 
-export arc_resource_group='mh-arc-k8s'
-export arc_cluster_name='mh-arc-enabled-k8s'
+export arc_resource_group='mh-01-arc-k8s'
+export arc_cluster_name='01-arc-enabled-k8s'
 
 # get the resource id of the Azure Arc Kubernetes cluster
 k8s_cluster_resource_id=$(az connectedk8s show --name $arc_cluster_name --resource-group $arc_resource_group --query id -o tsv)

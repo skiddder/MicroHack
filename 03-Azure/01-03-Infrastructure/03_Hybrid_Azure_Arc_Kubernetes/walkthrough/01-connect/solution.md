@@ -11,25 +11,25 @@ In your shell environment, login to Azure using the account you got assigned dur
 ```bash
 az logout # only required if you are logged in with another user from a previous session
 
-az login # browser popup opens with credential prompt. Provide your user details and MFA if required
+az login # browser popup opens with credential prompt. Provide your user details and MFA as required
 ```
 
 ## Task 2 - Create Azure resource group
-Next you will need to create a resource group where the arc-enabled-kuberenetes resource will be created. Please use the postfix which matches your microhack user account - i.e. exchange the "01" with "04" if you are user04. 
+Next you will need to create a resource group where the arc-enabled-k8s resource will be created. Please use the postfix which matches your microhack user account - i.e. exchange the "01" with "04" if you are user04. 
 ```bash
 az group create --name mh-arc-k8s-01 --location westeurope
 ```
 
 
 ## Task 3 - Connect K8s cluster using script
-* Open file az_connect_aks.sh in your editor. You can find the file in the microhack repo at 03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/01-connect
+* Open file az_connect_aks.sh in your editor - i.e. in Visual Studio Code. You can find the file in the microhack repo in the folder '03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/01-connect'
 * Check the export variable values and adjust the values to match your environment (i.e. replace "01" with "04" if you are user04) and save your changes. 
 ```bash
 # adjust the postfix according to your microhack user number
-export onprem_aks_cluster_name='onprem-k8s-01'  
-export onprem_resource_group='mh-arc-k8s-onprem-01'
-export arc_resource_group='mh-arc-k8s-01'
-export arc_cluster_name='mh-arc-enabled-k8s-01'
+export onprem_aks_cluster_name='01-onprem-k8s'  
+export onprem_resource_group='mh-01-arc-k8s-onprem'
+export arc_resource_group='mh-01-arc-k8s'
+export arc_cluster_name='01-arc-enabled-k8s'
 ```
 * Execute the script to
     * register required resource providers:

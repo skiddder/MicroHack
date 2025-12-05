@@ -1,7 +1,7 @@
 # will be used in challenge 04-gitops
 variable "acr_name" {
     description = "The name of the Azure Container Registry"
-    default     = "mharck8sacr01"
+    default     = "mhacr"
 }
 
 variable "container_registry_sku" {
@@ -15,10 +15,32 @@ variable "container_registry_admin_enabled" {
     default     = true
 }
 
+resource "azurerm_resource_group" "mh_k8s_arc" {
+  count    = length(local.indices)
+  name     = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-arc"
+  location = var.arc_location
+}
+
 resource "azurerm_container_registry" "this" {
-    name                = var.acr_name
-    resource_group_name = var.resource_group_name
-    location            = var.location
+    count               = length(local.indices)
+    name                = "${format("%02d", local.indices[count.index])}${var.acr_name}"
+    resource_group_name = azurerm_resource_group.mh_k8s_arc[count.index].name
+    location            = azurerm_resource_group.mh_k8s_arc[count.index].location
     sku                 = var.container_registry_sku
     admin_enabled       = var.container_registry_admin_enabled
+}
+
+output "rg_names_arc" {
+  #value = azurerm_resource_group.mh_k8s_onprem.name
+  value = {
+    for i, rg in azurerm_resource_group.mh_k8s_arc : 
+    local.indices[i] => rg.name
+  }
+}
+
+output "acr_names" {
+    value = {
+        for i, acr in azurerm_container_registry.this :
+        local.indices[i] => acr.name
+    }
 }

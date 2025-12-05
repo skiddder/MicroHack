@@ -1,21 +1,38 @@
-variable "resource_group_name" {
-  description = "The Azure resource group this AKS Managed Kubernetes Cluster should be provisioned"
-  default     = "mh-arc-k8s-onprem"
+variable "start_index" {
+  description = "Starting index for resource naming"
+  type        = number
+  default     = 37
 }
 
-variable "aks_name" {
+variable "end_index" {
+  description = "Ending index for resource naming"
+  type        = number
+  default     = 39
+}
+
+variable "arc_location" {
+  description = "The Azure Region in which all resources for Azure Arc should be provisioned"
+  default     = "westeurope"
+}
+
+variable "onprem_resources" {
+  description = "The Azure Region in which all resources for this AKS Managed Kubernetes Cluster should be provisioned"
+  default     = ["italynorth", "francecentral", "swedencentral", "norwayeast", "germanywestcentral", "switzerlandnorth", "austriaeast", "northeurope", "polandcentral", "uksouth"]
+}
+
+variable "resource_group_base_name" {
+  description = "Base name for resource groups (will be prefixed with index)"
+  default     = "k8s"
+}
+
+variable "aks_base_name" {
   description = "This AKS Managed Kubernetes Cluster name"
-  default     = "onprem-k8s"
+  default     = "k8s-onprem"
 }
 
 variable "prefix" {
   description = "A prefix used for all resources for this AKS Managed Kubernetes Cluster"
   default     = "aks"
-}
-
-variable "location" {
-  description = "The Azure Region in which all resources for this AKS Managed Kubernetes Cluster should be provisioned"
-  default     = "germanywestcentral"
 }
 
 variable "kubernetes_version" {

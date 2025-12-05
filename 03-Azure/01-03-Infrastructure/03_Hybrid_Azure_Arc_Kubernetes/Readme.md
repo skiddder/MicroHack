@@ -72,11 +72,19 @@ After completing this MicroHack you will be familiar with:
 
 ## MicroHack Challenges
 
+In order to play through the challenges, your microhack coach prepared a k8s cluster for you, which you will use as your onprem environment. In the case of this microhack, we are using an AKS cluster for ease of environment provisioning. In a real world scenario this makes no sense of course, as AKS is already fully integrated in Azure and also, you would not deploy data services into an AKS cluster when you could do this natively in Azure...
+
+For each user there are two resource groups pre-created by your coach. 
+| Name                | Description                                                                               |
+|---------------------|-------------------------------------------------------------------------------------------|
+| mh-01-arc-k8s-onprem| In this resource group you can find the k8s cluster which mimicks your onprem environment |
+| mh-01-arc-k8s       | Into this resource group your arc resources will be stored                                | 
+
 ### General Prerequisites
 
 In order to successfully work through the challenges in this MicroHack, you will need the following prerequisites:
 
-* [An Azure account with an active subscription](https://azure.microsoft.com/free/?WT.mc_id=A261C142F)
+* [An Azure account with owner permissions on an active subscription](https://azure.microsoft.com/free/?WT.mc_id=A261C142F)
 * [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) (Hint: Make sure to use the lastest version)
 * [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#install-using-native-package-management)
 * [Helm] (https://helm.sh/docs/intro/install/)
@@ -93,7 +101,7 @@ In challenge 1 you will connect/onboard your existing K8s cluster to Azure Arc.
 * Verify all prerequisites are in place
   * Resource Providers
   * Azure CLI extensions
-  * Resource group (Name: mh-arc-k8s)
+  * Resource group (Name: mh-arc-k8s-<xy>)
   * Connectivity to required Azure endpoints
 * Deploy the Azure Arc agent pods to your k8s cluster
 * Assign permissions to view k8s resources in the Azure portal
