@@ -19,16 +19,27 @@ resource "azurerm_kubernetes_cluster" "onprem" {
     vm_size    = var.vm_size
   }
 
-  service_principal {
-    client_id     = var.client_id
-    client_secret = var.client_secret
+  # service_principal {
+  #   client_id     = var.client_id
+  #   client_secret = var.client_secret
+  # }
+
+  identity {
+    type = "SystemAssigned"
   }
 
   tags = {
     Project = "simulated onprem k8s cluster for microhack"
   }
 
-  role_based_access_control_enabled = true
+  role_based_access_control_enabled = false
+
+  # Workload Identity
+  workload_identity_enabled = false
+  oidc_issuer_enabled       = false
+
+  # Add-ons
+  azure_policy_enabled = false
   
 }
 
