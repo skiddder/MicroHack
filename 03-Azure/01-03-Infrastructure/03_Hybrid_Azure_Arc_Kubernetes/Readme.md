@@ -93,7 +93,6 @@ In order to successfully work through the challenges in this MicroHack, you will
 
 ## Challenge 1 - Onboarding your Kubernetes Cluster
 
-
 ### Goal
 In challenge 1 you will connect/onboard your existing K8s cluster to Azure Arc. 
 
@@ -114,11 +113,13 @@ In challenge 1 you will connect/onboard your existing K8s cluster to Azure Arc.
 * (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/quickstart-connect-cluster?tabs=azure-cli)
 * (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/azure-rbac)
 * (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/kubernetes-resource-view)
+* (https://learn.microsoft.com/en-us/cli/azure/connectedk8s?view=azure-cli-latest)
 
 ### Solution - Spoilerwarning
 [Solution Steps](walkthrough/01-connect/solution.md)
 
-## Challenge 2 - Configure Gitops for cluster management
+
+## Challenge 2 - Enable Azure Monitor for Containers
 
 ### Goal
 
@@ -130,7 +131,7 @@ In challenge 1 you will connect/onboard your existing K8s cluster to Azure Arc.
 
 ### Solution - Spoilerwarning
 
-## Challenge 3 - Enable Azure Monitor for Containers
+## Challenge 3 - KAITO
 
 ### Goal
 
@@ -154,7 +155,7 @@ In challenge 1 you will connect/onboard your existing K8s cluster to Azure Arc.
 
 ### Solution - Spoilerwarning
 
-## Challenge 5 - Improve Governance using Azure Policy for Kubernetes
+## Challenge 5 - Configure Gitops for cluster management
 
 ### Goal
 
@@ -166,7 +167,7 @@ In challenge 1 you will connect/onboard your existing K8s cluster to Azure Arc.
 
 ### Solution - Spoilerwarning
 
-## Challenge 6 - Ship Azure Machine Learning Container to your cluster
+## Challenge 6 (optional) - Improve Governance using Azure Policy for Kubernetes
 
 ### Goal
 
@@ -177,6 +178,8 @@ In challenge 1 you will connect/onboard your existing K8s cluster to Azure Arc.
 ### Learning Resources
 
 ### Solution - Spoilerwarning
+
+## Challenge 7 (optional) - Ship Azure Machine Learning Container to your cluster
 
 ## Contributors
 * Simon Schwingel [GitHub](https://github.com/skiddder); [LinkedIn](https://www.linkedin.com/in/simon-schwingel-b602869a/)

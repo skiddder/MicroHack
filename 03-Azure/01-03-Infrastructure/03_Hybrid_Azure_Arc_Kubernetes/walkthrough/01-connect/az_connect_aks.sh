@@ -3,10 +3,10 @@
 echo "Exporting environment variables"
 
 # adjust the postfix according to your microhack user number
-export onprem_aks_cluster_name='01-onprem-k8s'  
-export onprem_resource_group='mh-01-arc-k8s-onprem'
-export arc_resource_group='mh-01-arc-k8s'
-export arc_cluster_name='01-arc-enabled-k8s'
+export onprem_aks_cluster_name='37-k8s-onprem'  
+export onprem_resource_group='37-k8s-onprem'
+export arc_resource_group='37-k8s-arc'
+export arc_cluster_name='37-k8s-arc-enabled'
 export location="westeurope"
 
 # Registering Azure Arc providers
@@ -19,7 +19,7 @@ az provider show -n Microsoft.Kubernetes -o table
 az provider show -n Microsoft.KubernetesConfiguration -o table
 az provider show -n Microsoft.ExtendedLocation -o table
 
-# Getting AKS credentials
+# Get AKS credentials and store them in local kubeconfig
 echo "Getting AKS credentials (kubeconfig)"
 az aks get-credentials --name $onprem_aks_cluster_name --resource-group $onprem_resource_group --overwrite-existing
 

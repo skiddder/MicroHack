@@ -14,7 +14,7 @@ subscription
 |
 └── xy-k8s-onprem (resource group)
     |
-    └── xy-k8s-onprem (aks cluster)
+    └── xy-k8s-onprem (k8s cluster)
 ```
 
 ## Prerequisites
@@ -55,6 +55,8 @@ client_secret="WILL-BE-REPLACED-BY-SCRIPT"
 az logout # only required if you have been logged in with another account
 az login  # use the subscription owner account you received as coach from your central microhack tenant
 
+ sudo chmod +x ./create_sp.sh # add execution permissions on the script file of not yet done
+
 ./create_sp.sh
 ```
 Validate that provider.tf and fixtures.tfvars are using the correct values.
@@ -81,7 +83,7 @@ terraform init # download terraform providers
 
 terraform plan -var-file=fixtures.tfvars -out=tfplan
 
-# have a look at the resources which will be created. There should be a two resource groups per participant as well as an AKS cluster and an Azure container registry.
+# have a look at the resources which will be created. There should be two resource groups per participant as well as an AKS cluster and an Azure container registry.
 # after validation:
 
 terraform apply tfplan
@@ -105,3 +107,7 @@ rg_names_onprem = {
   "38" = "38-k8s-onprem"
 }
 ```
+
+TODO: Add resource deletion instructions...
+
+[Back to the challenges](../../Readme.md#challenge-1---onboarding-your-kubernetes-cluster)
