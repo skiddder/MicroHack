@@ -9,6 +9,8 @@ Please ensure that you successfully verified
 * that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem".
 * that you can successfully connect to all [required Azure endpoings](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements?tabs=azure-cloud)
 
+💡*Hint*: There are two connectivity-check scripts available [here](../../resources/).
+
 ## Task 1 - Login to Azure
 In your shell environment, login to Azure using the account you got assigned during the microhack.
 ```bash

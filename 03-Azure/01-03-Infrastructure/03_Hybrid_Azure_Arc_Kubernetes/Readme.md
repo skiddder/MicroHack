@@ -9,6 +9,10 @@
 - [**MicroHack Challenges**](#microhack-challenges)
   - [General Prerequisites](#general-prerequisites)
   - [Challenge 1 - Onboarding your Kubernetes Cluster](#challenge-1---onboarding-your-kubernetes-cluster)
+  - [Challenge 2 - Enable Azure Monitor for Containers](#challenge-2---enable-azure-monitor-for-containers)
+  - [Challenge 3 - KAITO](#challenge-3---kaito)
+  - [Challenge 4 - Deploy SQL Managed Instance](#challenge-4---deploy-sql-managed-instance-to-your-cluster)
+  - [Challenge 5 - Configure GitOps for Cluster Management](#challenge-5---configure-gitops-for-cluster-management)
 
 
 ## MicroHack Introduction
