@@ -86,15 +86,15 @@ set -euo pipefail
 # ----------------------------------------------------------------------------
 
 
-REGION="${1:-westeurope}"
+REGION_RAW="${1:-westeurope}"
+
+# Normalize region to Azure FQDN segment (lowercase, remove spaces)
+REGION="$(echo "$REGION_RAW" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+
 CURL_TIMEOUT=7
 OPENSSL_TIMEOUT=7
 
-COLOR_OK="\033[32m"
-COLOR_ERR="\033[31m"
-COLOR_WARN="\033[33m"
-COLOR_DIM="\033[90m"
-COLOR_RESET="\033[0m"
+COLOR_OK="\033[32m"; COLOR_ERR="\033[31m"; COLOR_WARN="\033[33m"; COLOR_DIM="\033[90m"; COLOR_RESET="\033[0m"
 
 h1(){ echo -e "\n\033[1m$1\033[0m"; }
 ok(){ echo -e "${COLOR_OK}✔${COLOR_RESET} $1"; }
@@ -114,41 +114,54 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# Endpoints for Azure Monitor for Arc-enabled Kubernetes (PUBLIC MODE)
+# Endpoint sets (PUBLIC monitoring mode)
 # ------------------------------------------------------------------------------
 
-MONITOR_ENDPOINTS=(
-  # Logs ingestion
-  "*.ods.opinsights.azure.com"
-  "*.ingest.monitor.azure.com"
+# Logs ingestion (Container Insights DCE) — region specific
+LOGS_ENDPOINTS=(
+  "${REGION}.ingest.monitor.azure.com"
+  "${REGION}.ods.opinsights.azure.com"
+  # Optional legacy OMS endpoint (some agents may still ping it)
+  "${REGION}.oms.opinsights.azure.com"
+)
 
-  # Metrics ingestion
-  "global.handler.metrics.monitor.azure.com"
+# Metrics ingestion (Managed Prometheus DCE) — region specific
+METRICS_ENDPOINTS=(
+  "${REGION}.metrics.ingest.monitor.azure.com"
+)
 
-  # Control-plane
+# Control-plane handlers — global + region specific
+CONTROL_ENDPOINTS=(
   "global.handler.control.monitor.azure.com"
+  "${REGION}.handler.control.monitor.azure.com"
+)
 
-  # Diagnostics telemetry (Application Insights)
+# Auth & diagnostics telemetry
+AUX_ENDPOINTS=(
+  "login.microsoftonline.com"
   "dc.services.visualstudio.com"
+)
 
-  # Container Insights / AMA Extension image pulls
+# Images & artifacts
+ARTIFACT_ENDPOINTS=(
   "mcr.microsoft.com"
-  "*.blob.core.windows.net"
+  # Use a concrete storage account host rather than base "blob.core.windows.net"
+  "azuremonitorcontainerinsights.blob.core.windows.net"
+)
+
+ALL_ENDPOINTS=(
+  "${LOGS_ENDPOINTS[@]}"
+  "${METRICS_ENDPOINTS[@]}"
+  "${CONTROL_ENDPOINTS[@]}"
+  "${AUX_ENDPOINTS[@]}"
+  "${ARTIFACT_ENDPOINTS[@]}"
 )
 
 PASSED=()
 FAILED=()
 
-# DNS check (supports wildcard pattern testing)
 dns_check(){
   local host="$1"
-
-  if [[ "$host" == *"*"* ]]; then
-    # Wildcard: test base domain only
-    local base=$(echo "$host" | sed 's/\*\.//')
-    host="$base"
-  fi
-
   if [[ "$RESOLVER_CMD" == "dig +short" ]]; then
     dig +short "$host" | grep -E '^[0-9a-fA-F:.]+$' >/dev/null \
       && ok "DNS resolves: $host" \
@@ -166,8 +179,6 @@ dns_check(){
 
 tls_check(){
   local host="$1"
-  [[ "$host" == *"*"* ]] && host=$(echo "$host" | sed 's/\*\.//')
-
   timeout "$OPENSSL_TIMEOUT" \
     bash -c "echo | openssl s_client -servername ${host} -connect ${host}:443 >/dev/null 2>&1" \
     && ok "TLS OK: ${host}:443" \
@@ -176,8 +187,6 @@ tls_check(){
 
 https_check(){
   local host="$1"
-  [[ "$host" == *"*"* ]] && host=$(echo "$host" | sed 's/\*\.//')
-
   curl -sS -I --connect-timeout "$CURL_TIMEOUT" "https://${host}" >/dev/null 2>&1 \
     && ok "HTTPS OK: https://${host}" \
     || { err "HTTPS FAILED: https://${host}"; return 1; }
@@ -187,27 +196,27 @@ https_check(){
 # EXECUTION
 # ------------------------------------------------------------------------------
 
-h1 "Azure Arc NODE Monitoring Connectivity Check (Public Monitoring Mode)"
+h1 "Azure Arc NODE Monitoring Connectivity Check (Public Mode) — region: ${REGION}"
 
 [[ -n "${HTTPS_PROXY:-}" || -n "${HTTP_PROXY:-}" ]] \
   && echo -e "${COLOR_DIM}Proxy detected. HTTPS_PROXY=${HTTPS_PROXY:-<unset>} HTTP_PROXY=${HTTP_PROXY:-<unset>}${COLOR_RESET}"
 
-h1 "1) DNS Checks"
-for host in "${MONITOR_ENDPOINTS[@]}"; do
+h1 "1) DNS"
+for host in "${ALL_ENDPOINTS[@]}"; do
   dns_check "$host" \
     && PASSED+=("DNS:$host") \
     || FAILED+=("DNS:$host")
 done
 
-h1 "2) TLS Handshake Checks (443)"
-for host in "${MONITOR_ENDPOINTS[@]}"; do
+h1 "2) TLS Handshake (443)"
+for host in "${ALL_ENDPOINTS[@]}"; do
   tls_check "$host" \
     && PASSED+=("TLS:$host") \
     || FAILED+=("TLS:$host")
 done
 
-h1 "3) HTTPS Reachability Checks (443)"
-for host in "${MONITOR_ENDPOINTS[@]}"; do
+h1 "3) HTTPS Reachability (443)"
+for host in "${ALL_ENDPOINTS[@]}"; do
   https_check "$host" \
     && PASSED+=("HTTPS:$host") \
     || FAILED+=("HTTPS:$host")
@@ -221,11 +230,11 @@ if (( ${#FAILED[@]} > 0 )); then
   for f in "${FAILED[@]}"; do echo " - $f"; done
 
   echo -e "\nTroubleshooting Hints:"
-  echo " - Ensure outbound HTTPS (443) is allowed to *.monitor.azure.com, *.opinsights.azure.com"
-  echo " - Disable TLS inspection for Azure Monitor ingestion endpoints"
-  echo " - Ensure *.blob.core.windows.net is allowed (AMA extension image pull)"
-  echo " - Ensure mcr.microsoft.com is reachable (Azure Monitor extension images)"
-  echo " - Ensure your proxy allows wildcard domains and full TLS passthrough"
+  echo " - Allow outbound HTTPS (443) to *.ingest.monitor.azure.com, *.ods/oms.opinsights.azure.com"
+  echo " - Allow outbound HTTPS (443) to ${REGION}.metrics.ingest.monitor.azure.com for Managed Prometheus"
+  echo " - Allow global and regional handler control endpoints"
+  echo " - Disable TLS inspection for these FQDNs; the agents expect end-to-end TLS"
+  echo " - Ensure mcr.microsoft.com and Azure Monitor storage are reachable for extension artifacts"
   exit 1
 else
   echo -e "${COLOR_OK}All Azure Monitor connectivity checks passed.${COLOR_RESET}"
