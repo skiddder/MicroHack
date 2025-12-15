@@ -4,6 +4,7 @@
 * You require at least Contributor access to the cluster for onboarding.
 * You require Monitoring Reader or Monitoring Contributor to view data after monitoring is enabled.
 * Verify the firewall requirements in addition to the Azure Arc-enabled Kubernetes network requirements.
+* A Log Analytics workspace (law). (If you used the terraform to deploy the microhack environment, each participant already has a law in his arc resource group.)
 
 ## Task 1 -
 Execute the following cli command to install the monitoring extension with default settings:
@@ -19,8 +20,8 @@ az k8s-extension create \
     --extension-type Microsoft.AzureMonitor.Containers
 ```
 
-## Task 2 - 
-## Task 3 -
+## Task 3 - 
+## Task 4 -
 
 You successfully completed challenge 2! 🚀🚀🚀
 

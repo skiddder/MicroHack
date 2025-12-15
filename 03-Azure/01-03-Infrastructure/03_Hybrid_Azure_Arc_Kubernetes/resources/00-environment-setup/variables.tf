@@ -58,3 +58,20 @@ variable "client_secret" {
   description = "The Client Secret for the Service Principal to use for this AKS Managed Kubernetes Cluster"
   sensitive = true
 }
+
+# container reguistry variables for gitops challenge
+variable "acr_name" {
+    description = "The name of the Azure Container Registry"
+    default     = "mhacr"
+}
+
+variable "container_registry_sku" {
+    description = "The SKU of the Azure Container Registry"
+    default     = "Basic"
+}
+
+variable "container_registry_admin_enabled" {
+    description = "Specifies whether the admin user is enabled. Defaults to false."
+    type        = bool
+    default     = true
+}

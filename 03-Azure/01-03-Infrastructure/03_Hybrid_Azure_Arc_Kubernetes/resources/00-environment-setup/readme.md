@@ -8,13 +8,15 @@ In this folder you find terraform code to deploy a k8s cluster and container reg
 ```
 subscription
 |
-├── xy-k8s-arc (resource group)
+├── <xy>-k8s-arc (resource group)
 |   |
-│   └── xymhacr (container registry)
+│   └── <xy>mhacr (container registry)
+|   |
+|   └── <xy>-law (log analytics workspace)
 |
-└── xy-k8s-onprem (resource group)
+└── <xy>-k8s-onprem (resource group)
     |
-    └── xy-k8s-onprem (k8s cluster)
+    └── <xy>-k8s-onprem (k8s cluster)
 ```
 
 ## Prerequisites
