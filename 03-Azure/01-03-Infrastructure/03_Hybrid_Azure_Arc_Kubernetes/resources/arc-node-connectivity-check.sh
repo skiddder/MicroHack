@@ -86,7 +86,6 @@ NODE_CORE=(
   "login.windows.net"                              # legacy AAD
   "mcr.microsoft.com"                              # agent/ext images
   "gbl.his.arc.azure.com"                          # MSI certs
-  "${REGION}.his.arc.azure.com"                    # MSI certs (regional)
   "graph.microsoft.com"                            # RBAC (optional but checked)
   "linuxgeneva-microsoft.azurecr.io"               # some extensions payloads
 )
