@@ -37,7 +37,7 @@ variable "prefix" {
 
 variable "kubernetes_version" {
   description = "Kubernetes version deployed"
-  default     = "1.31.5"
+  default     = "1.34"
 }
 
 variable "node_count" {

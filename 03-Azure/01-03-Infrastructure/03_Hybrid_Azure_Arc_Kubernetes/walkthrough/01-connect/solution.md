@@ -4,8 +4,10 @@ Duration: 20 minutes
 [Home](../../Readme.md#challenge-1---onboarding-your-kubernetes-cluster) - [Next Challenge's Solution](../02-azure_monitor/solution.md)
 
 ## Prerequisites
-Please ensure that you successfully verified the [general prerequisites](../../Readme.md#general-prerequisites) before starting this challenge.
-Validate that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem".
+Please ensure that you successfully verified 
+* the [general prerequisites](../../Readme.md#general-prerequisites) before starting this challenge.
+* that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem".
+* that you can successfully connect to all [required Azure endpoings](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements?tabs=azure-cloud)
 
 ## Task 1 - Login to Azure
 In your shell environment, login to Azure using the account you got assigned during the microhack.
