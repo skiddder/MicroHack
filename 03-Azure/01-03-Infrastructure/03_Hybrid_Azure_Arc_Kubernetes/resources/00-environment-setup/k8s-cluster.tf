@@ -1,45 +1,303 @@
-resource "azurerm_kubernetes_cluster" "onprem" {
+# Create Virtual Network for K3s cluster
+resource "azurerm_virtual_network" "onprem" {
   count               = length(local.indices)
-  name                = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-onprem"
+  name                = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-vnet"
+  address_space       = ["10.${100 + local.indices[count.index]}.0.0/16"]
   location            = azurerm_resource_group.mh_k8s_onprem[count.index].location
   resource_group_name = azurerm_resource_group.mh_k8s_onprem[count.index].name
-  dns_prefix          = var.prefix
 
-  kubernetes_version = var.kubernetes_version
-  
-  default_node_pool {
-    name       = "default"
-    node_count = var.node_count
-    vm_size    = var.vm_size
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+  }
+}
+
+# Create subnet for K3s VMs
+resource "azurerm_subnet" "onprem" {
+  count                = length(local.indices)
+  name                 = "k3s-subnet"
+  resource_group_name  = azurerm_resource_group.mh_k8s_onprem[count.index].name
+  virtual_network_name = azurerm_virtual_network.onprem[count.index].name
+  address_prefixes     = ["10.${100 + local.indices[count.index]}.1.0/24"]
+}
+
+# Create Network Security Group for K3s VMs
+resource "azurerm_network_security_group" "onprem" {
+  count               = length(local.indices)
+  name                = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-nsg"
+  location            = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  resource_group_name = azurerm_resource_group.mh_k8s_onprem[count.index].name
+
+  security_rule {
+    name                       = "SSH"
+    priority                   = 1001
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "22"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
   }
 
-  # service_principal {
-  #   client_id     = var.client_id
-  #   client_secret = var.client_secret
-  # }
+  security_rule {
+    name                       = "K3s-API"
+    priority                   = 1002
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "6443"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
 
-  identity {
-    type = "SystemAssigned"
+  security_rule {
+    name                       = "K3s-NodePort"
+    priority                   = 1003
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "30000-32767"
+    source_address_prefix      = "10.${100 + local.indices[count.index]}.0.0/16"
+    destination_address_prefix = "*"
   }
 
   tags = {
     Project = "simulated onprem k8s cluster for microhack"
   }
-
-  role_based_access_control_enabled = false
-
-  # Workload Identity
-  workload_identity_enabled = false
-  oidc_issuer_enabled       = false
-
-  # Add-ons
-  azure_policy_enabled = false
-  
 }
 
-output "onprem_k8s_name" {
+# Associate Network Security Group to the subnet
+resource "azurerm_subnet_network_security_group_association" "onprem" {
+  count                  = length(local.indices)
+  subnet_id              = azurerm_subnet.onprem[count.index].id
+  network_security_group_id = azurerm_network_security_group.onprem[count.index].id
+}
+
+# Create public IPs for K3s VMs
+resource "azurerm_public_ip" "onprem_master" {
+  count               = length(local.indices)
+  name                = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-master-ip"
+  resource_group_name = azurerm_resource_group.mh_k8s_onprem[count.index].name
+  location            = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  allocation_method   = "Static"
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+  }
+}
+
+resource "azurerm_public_ip" "onprem_worker" {
+  count               = length(local.indices)
+  name                = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-worker1-ip"
+  resource_group_name = azurerm_resource_group.mh_k8s_onprem[count.index].name
+  location            = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  allocation_method   = "Static"
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+  }
+}
+
+resource "azurerm_public_ip" "onprem_worker2" {
+  count               = length(local.indices)
+  name                = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-worker2-ip"
+  resource_group_name = azurerm_resource_group.mh_k8s_onprem[count.index].name
+  location            = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  allocation_method   = "Static"
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+  }
+}
+
+# Create Network Interfaces
+resource "azurerm_network_interface" "onprem_master" {
+  count               = length(local.indices)
+  name                = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-master-nic"
+  location            = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  resource_group_name = azurerm_resource_group.mh_k8s_onprem[count.index].name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.onprem[count.index].id
+    private_ip_address_allocation = "Static"
+    private_ip_address            = "10.${100 + local.indices[count.index]}.1.10"
+    public_ip_address_id          = azurerm_public_ip.onprem_master[count.index].id
+  }
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+  }
+}
+
+resource "azurerm_network_interface" "onprem_worker" {
+  count               = length(local.indices)
+  name                = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-worker1-nic"
+  location            = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  resource_group_name = azurerm_resource_group.mh_k8s_onprem[count.index].name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.onprem[count.index].id
+    private_ip_address_allocation = "Static"
+    private_ip_address            = "10.${100 + local.indices[count.index]}.1.11"
+    public_ip_address_id          = azurerm_public_ip.onprem_worker[count.index].id
+  }
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+  }
+}
+
+resource "azurerm_network_interface" "onprem_worker2" {
+  count               = length(local.indices)
+  name                = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-worker2-nic"
+  location            = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  resource_group_name = azurerm_resource_group.mh_k8s_onprem[count.index].name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.onprem[count.index].id
+    private_ip_address_allocation = "Static"
+    private_ip_address            = "10.${100 + local.indices[count.index]}.1.12"
+    public_ip_address_id          = azurerm_public_ip.onprem_worker2[count.index].id
+  }
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+  }
+}
+
+# Create K3s Master VM
+resource "azurerm_linux_virtual_machine" "onprem_master" {
+  count                           = length(local.indices)
+  name                            = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-master"
+  resource_group_name             = azurerm_resource_group.mh_k8s_onprem[count.index].name
+  location                        = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  size                            = var.vm_size
+  disable_password_authentication = false
+  admin_username                  = "mhadmin"
+  admin_password                  = var.admin_password
+
+  network_interface_ids = [
+    azurerm_network_interface.onprem_master[count.index].id,
+  ]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Premium_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts-gen2"
+    version   = "latest"
+  }
+
+  custom_data = base64encode(templatefile("${path.module}/k3s-master-setup.sh", {
+    k3s_version = var.k3s_version
+    cluster_token = var.cluster_token
+  }))
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+    Role    = "master"
+  }
+}
+
+# Create K3s Worker VM 1
+resource "azurerm_linux_virtual_machine" "onprem_worker" {
+  count                           = length(local.indices)
+  name                            = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-worker1"
+  resource_group_name             = azurerm_resource_group.mh_k8s_onprem[count.index].name
+  location                        = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  size                            = var.vm_size
+  disable_password_authentication = false
+  admin_username                  = "mhadmin"
+  admin_password                  = var.admin_password
+
+  network_interface_ids = [
+    azurerm_network_interface.onprem_worker[count.index].id,
+  ]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Premium_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts-gen2"
+    version   = "latest"
+  }
+
+  custom_data = base64encode(templatefile("${path.module}/k3s-worker-setup.sh", {
+    k3s_version = var.k3s_version
+    cluster_token = var.cluster_token
+    master_ip = "10.${100 + local.indices[count.index]}.1.10"
+  }))
+
+  depends_on = [azurerm_linux_virtual_machine.onprem_master]
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+    Role    = "worker"
+  }
+}
+
+# Create K3s Worker VM 2
+resource "azurerm_linux_virtual_machine" "onprem_worker2" {
+  count                           = length(local.indices)
+  name                            = "${format("%02d", local.indices[count.index])}-${var.resource_group_base_name}-worker2"
+  resource_group_name             = azurerm_resource_group.mh_k8s_onprem[count.index].name
+  location                        = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  size                            = var.vm_size
+  disable_password_authentication = false
+  admin_username                  = "mhadmin"
+  admin_password                  = var.admin_password
+
+  network_interface_ids = [
+    azurerm_network_interface.onprem_worker2[count.index].id,
+  ]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Premium_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts-gen2"
+    version   = "latest"
+  }
+
+  custom_data = base64encode(templatefile("${path.module}/k3s-worker-setup.sh", {
+    k3s_version = var.k3s_version
+    cluster_token = var.cluster_token
+    master_ip = "10.${100 + local.indices[count.index]}.1.10"
+  }))
+
+  depends_on = [azurerm_linux_virtual_machine.onprem_master]
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+    Role    = "worker"
+  }
+}
+
+output "k3s_cluster_info" {
   value = {
-    for i, k8s in azurerm_kubernetes_cluster.onprem :
-    local.indices[i] => k8s.name
+    for i in range(length(local.indices)) :
+    format("%02d", local.indices[i]) => {
+      master_ssh    = "ssh mhadmin@${azurerm_public_ip.onprem_master[i].ip_address}"
+      worker1_ssh   = "ssh mhadmin@${azurerm_public_ip.onprem_worker[i].ip_address}"
+      worker2_ssh   = "ssh mhadmin@${azurerm_public_ip.onprem_worker2[i].ip_address}"
+      kubeconfig_setup = "mkdir -p ~/.kube && scp mhadmin@${azurerm_public_ip.onprem_master[i].ip_address}:/home/mhadmin/.kube/config ~/.kube/config && sed -i 's/127\\.0\\.0\\.1/${azurerm_public_ip.onprem_master[i].ip_address}/g' ~/.kube/config"
+    }
   }
 }

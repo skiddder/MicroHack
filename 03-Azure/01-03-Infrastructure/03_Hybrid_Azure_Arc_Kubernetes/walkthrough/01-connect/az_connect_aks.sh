@@ -3,7 +3,6 @@
 echo "Exporting environment variables"
 
 # adjust the postfix according to your microhack user number
-export onprem_aks_cluster_name='37-k8s-onprem'  
 export onprem_resource_group='37-k8s-onprem'
 export arc_resource_group='37-k8s-arc'
 export arc_cluster_name='37-k8s-arc-enabled'
@@ -18,10 +17,6 @@ az provider register --namespace Microsoft.ExtendedLocation --wait
 az provider show -n Microsoft.Kubernetes -o table
 az provider show -n Microsoft.KubernetesConfiguration -o table
 az provider show -n Microsoft.ExtendedLocation -o table
-
-# Get AKS credentials and store them in local kubeconfig
-echo "Getting AKS credentials (kubeconfig)"
-az aks get-credentials --name $onprem_aks_cluster_name --resource-group $onprem_resource_group --overwrite-existing
 
 echo "Clear cached helm Azure Arc Helm Charts"
 rm -rf ~/.azure/AzureArcCharts
@@ -51,6 +46,6 @@ echo "Connecting the cluster to Azure Arc"
 az connectedk8s connect --name $arc_cluster_name \
     --resource-group $arc_resource_group \
     --location $location \
-    --infrastructure 'azure' \
-    --distribution 'aks'
+    --infrastructure 'generic' \
+    --distribution 'k3s'
 

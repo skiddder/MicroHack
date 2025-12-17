@@ -9,3 +9,10 @@ resource "azurerm_log_analytics_workspace" "law" {
     sku                 = "PerGB2018"
     retention_in_days   = 30
 }
+
+output "law" {
+  value = {
+    for i, item in azurerm_log_analytics_workspace.law : 
+    local.indices[i] => item.id
+  }
+}

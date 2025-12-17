@@ -16,7 +16,7 @@ variable "arc_location" {
 }
 
 variable "onprem_resources" {
-  description = "The Azure Region in which all resources for this AKS Managed Kubernetes Cluster should be provisioned"
+  description = "The Azure Regions in which K3s cluster VMs should be provisioned"
   default     = ["italynorth", "francecentral", "swedencentral", "norwayeast", "germanywestcentral", "switzerlandnorth", "austriaeast", "northeurope", "polandcentral", "uksouth"]
 }
 
@@ -25,39 +25,46 @@ variable "resource_group_base_name" {
   default     = "k8s"
 }
 
-variable "aks_base_name" {
-  description = "This AKS Managed Kubernetes Cluster name"
-  default     = "k8s-onprem"
+variable "k3s_cluster_base_name" {
+  description = "Base name for K3s cluster resources"
+  default     = "k3s-onprem"
 }
 
 variable "prefix" {
-  description = "A prefix used for all resources for this AKS Managed Kubernetes Cluster"
-  default     = "aks"
+  description = "A prefix used for all K3s cluster resources"
+  default     = "k3s"
 }
 
-variable "kubernetes_version" {
-  description = "Kubernetes version deployed"
-  default     = "1.34"
+variable "k3s_version" {
+  description = "K3s version to install"
+  default     = "v1.33.6+k3s1" # "v1.28.4+k3s1"
 }
 
-variable "node_count" {
-  description = "The number of Azure VMs for this AKS Managed Kubernetes Cluster node pool"
-  default     = 2
+variable "cluster_token" {
+  description = "Token for K3s cluster authentication"
+  type        = string
+  sensitive = true
+}
+
+variable "admin_password" {
+  description = "Admin password for VMs"
+  type        = string
+  sensitive   = true
 }
 
 variable "vm_size" {
-  description = "The Azure VM size for this AKS Managed Kubernetes Cluster node pool"
-  default     = "Standard_D4as_v5" # ATTENTION: While writing this microhack, arc-data-controller images are only available for amd64 architectures!
+  description = "The Azure VM size for K3s nodes"
+  default     = "Standard_D2as_v5" # For arc-enabled Managed SQL Instances, AMD cores are a hard requirement at the time of creating this microhack, so scale-up if required, but stick to AMD-based SKUs
 }
 
-variable "client_id" {
-  description = "The Client ID for the Service Principal to use for this AKS Managed Kubernetes Cluster"
-}
+# variable "client_id" {
+#   description = "The Client ID for the Service Principal to use for this AKS Managed Kubernetes Cluster"
+# }
 
-variable "client_secret" {
-  description = "The Client Secret for the Service Principal to use for this AKS Managed Kubernetes Cluster"
-  sensitive = true
-}
+# variable "client_secret" {
+#   description = "The Client Secret for the Service Principal to use for this AKS Managed Kubernetes Cluster"
+#   sensitive = true
+# }
 
 # container reguistry variables for gitops challenge
 variable "acr_name" {

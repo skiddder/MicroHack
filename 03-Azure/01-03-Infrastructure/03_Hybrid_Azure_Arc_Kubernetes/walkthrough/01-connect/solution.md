@@ -7,9 +7,9 @@ Duration: 20 minutes
 Please ensure that you successfully verified 
 * the [general prerequisites](../../Readme.md#general-prerequisites) before starting this challenge.
 * that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem".
-* that you can successfully connect to all [required Azure endpoings](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements?tabs=azure-cloud)
+* that you can successfully connect to all [required Azure endpoints](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements?tabs=azure-cloud)
 
-💡*Hint*: There are two connectivity-check scripts available [here](../../resources/).
+💡*Hint*: There are several connectivity-check scripts available [here](../../resources/).
 
 ## Task 1 - Login to Azure
 In your shell environment, login to Azure using the account you got assigned during the microhack.
@@ -22,8 +22,30 @@ In case you are prompted to select a subscription, please do so. In the microhac
 
 Validate that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem". 
 Click on your onprem resource group's name (i.e. 37-k8s-onprem).
-There should be an aks resource in this resource group. Click on its name and validate that the cluster is running. In case it's stopped, start it.
-![img-aks-start](img/aks-start.png)
+There should be 3 VMs in this resource group. Make sure that all VMs are in state 'running'. For each VM, click on its name
+![img-start-vm](img/vm-start.png)
+
+To connect to your k8s cluster, we first need to merge the cluster credentials into your local ~/.kube/config file. You can use the following bash script for this:
+```bash
+# Extract user number from Azure username (e.g., LabUser-37 -> 37)
+azure_user=$(az account show --query user.name --output tsv)
+user_number=$(echo $azure_user | sed -n 's/.*LabUser-\([0-9]\+\).*/\1/p')
+
+# Get puplic ip of master node via Azure cli according to user-number
+master_pip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" --output tsv)
+
+# Create .kube directory if it doesn't exist
+mkdir -p ~/.kube
+
+# Copy the kubeconfig to standard location
+scp mhadmin@$master_pip:/home/mhadmin/.kube/config ~/.kube/config
+
+# replace localhost address with the public ip of master node
+sed -i "s/127.0.0.1/$master_pip/g" ~/.kube/config
+
+# Now kubectl works directly
+kubectl get nodes
+```
 
 ## Task 2 - Connect K8s cluster using script
 * In your shell go the folder where you cloned the microhack repository. Then change to the folder '03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/01-connect/'
@@ -50,7 +72,7 @@ export arc_cluster_name='37-k8s-arc-enabled'
         * k8s-configuration
     * connecting the simulated onprem cluster to Azure Arc using the Azure CLI approach
 
-💡 ATTENTION: The k8s cluster to be onboarded as a connected cluster must be the default cluster in kubeconfig. The az_connect_aks.sh script fetches the aks credentials and merges it into kubeconfig for you. 
+💡 *Important*: Make sure that your kubectl works and is pointing to the k8s cluster you want to onboard before executing the script!
 
 ```bash
 ./az_connect_aks.sh 
