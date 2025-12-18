@@ -28,16 +28,16 @@ set -euo pipefail
 #
 # How to Run Inside the Cluster:
 #
-# 1. Start an Ubuntu diagnostic pod:
+# 1. Start an Ubuntu diagnostic pod with resource limits on master node:
 #    kubectl run arccheck --image=ubuntu:22.04 -it --restart=Never -- bash
 #    
 #    If you already have a suitable pod, you can exec into it instead:
 #    kubectl exec -it <pod-name> -- bash
 #    i.e. kubectl exec -it arccheck -- bash
 #
-# 2. Install required tools inside the pod:
-#    apt update
-#    apt install -y curl dnsutils openssl ca-certificates
+# 2. Install required tools inside the pod (optimized for speed):
+#    apt update --quiet && apt install -y --no-install-recommends \
+#      curl dnsutils openssl ca-certificates
 #
 # 3. Download the script into the pod:
 #    curl -sSL -o arc-node-onboarding-check.sh <RAW_GITHUB_URL>
