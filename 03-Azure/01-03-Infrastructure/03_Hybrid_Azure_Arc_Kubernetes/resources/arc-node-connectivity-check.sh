@@ -92,28 +92,46 @@ NODE_CORE=(
   "gbl.his.arc.azure.com"                          # MSI certs
   "graph.microsoft.com"                            # RBAC (optional but checked)
   "linuxgeneva-microsoft.azurecr.io"               # some extensions payloads
+  "${REGION}.obo.arc.azure.com:8084"               # Arc agent communication
 )
 
 PASSED=(); FAILED=()
 
 check_dns(){ local h="$1"
+  # Strip port if present for DNS lookup
+  local host_only="${h%:*}"
   if [[ "$RESOLVER_CMD" == "dig +short" ]]; then
-    dig +short "$h" | grep -E '^[0-9a-fA-F:.]+$' >/dev/null && ok "DNS resolves: $h" || { err "DNS failed: $h"; return 1; }
+    dig +short "$host_only" | grep -E '^[0-9a-fA-F:.]+$' >/dev/null && ok "DNS resolves: $host_only" || { err "DNS failed: $host_only"; return 1; }
   elif [[ "$RESOLVER_CMD" == "nslookup" ]]; then
-    nslookup "$h" >/dev/null 2>&1 && ok "DNS resolves: $h" || { err "DNS failed: $h"; return 1; }
+    nslookup "$host_only" >/dev/null 2>&1 && ok "DNS resolves: $host_only" || { err "DNS failed: $host_only"; return 1; }
   else
-    getent hosts "$h" >/dev/null 2>&1 && ok "DNS resolves: $h" || { err "DNS failed: $h"; return 1; }
+    getent hosts "$host_only" >/dev/null 2>&1 && ok "DNS resolves: $host_only" || { err "DNS failed: $host_only"; return 1; }
   fi
 }
 
 check_tls(){ local h="$1"
-  timeout "${OPENSSL_TIMEOUT}" bash -c "echo | openssl s_client -servername ${h} -connect ${h}:443 >/dev/null 2>&1" \
-    && ok "TLS handshake OK: ${h}:443" || { err "TLS handshake failed: ${h}:443"; return 1; }
+  local host_only="${h%:*}"
+  local port="${h##*:}"
+  # If no port specified, default to 443
+  [[ "$port" == "$host_only" ]] && port="443"
+  timeout "${OPENSSL_TIMEOUT}" bash -c "echo | openssl s_client -servername ${host_only} -connect ${host_only}:${port} >/dev/null 2>&1" \
+    && ok "TLS handshake OK: ${host_only}:${port}" || { err "TLS handshake failed: ${host_only}:${port}"; return 1; }
 }
 
 check_https(){ local h="$1"
-  curl -sS -I --connect-timeout "${CURL_TIMEOUT}" "https://${h}" >/dev/null 2>&1 \
-    && ok "HTTPS reachable: https://${h}" || { err "HTTPS blocked/unreachable: https://${h}"; return 1; }
+  local host_only="${h%:*}"
+  local port="${h##*:}"
+  # If no port specified, default to 443
+  [[ "$port" == "$host_only" ]] && port="443"
+  # For non-443 ports, use HTTP instead of HTTPS and just test connectivity
+  if [[ "$port" == "443" ]]; then
+    curl -sS -I --connect-timeout "${CURL_TIMEOUT}" "https://${h}" >/dev/null 2>&1 \
+      && ok "HTTPS reachable: https://${h}" || { err "HTTPS blocked/unreachable: https://${h}"; return 1; }
+  else
+    # For custom ports, test TCP connectivity instead of HTTPS
+    timeout "${CURL_TIMEOUT}" bash -c "echo >/dev/tcp/${host_only}/${port}" 2>/dev/null \
+      && ok "TCP reachable: ${host_only}:${port}" || { err "TCP blocked/unreachable: ${host_only}:${port}"; return 1; }
+  fi
 }
 
 mcr_probe(){
