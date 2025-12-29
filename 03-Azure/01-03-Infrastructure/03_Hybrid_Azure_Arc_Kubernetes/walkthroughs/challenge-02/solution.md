@@ -1,5 +1,7 @@
 # Walkthrough Challenge 2 - Enable Azure Monitor for Containers
 
+[Back to challenge](../../challenges/challenge-02.md) - [Next Challenge's Solution](../challenge-03/solution.md)
+
 ## Prerequisites
 * You require at least Contributor access to the cluster for onboarding.
 * You require Monitoring Reader or Monitoring Contributor to view data after monitoring is enabled.
@@ -106,4 +108,4 @@ Policy‑related recommendations
 
 You successfully completed challenge 2! 🚀🚀🚀
 
-[Back to the challenges](../../Readme.md#challenge-3---kaito) - [Next Challenge's Solution]()
+[Next challenge](../../challenges/challenge-03.md) - [Next Challenge's Solution](../challenge-03/solution.md)

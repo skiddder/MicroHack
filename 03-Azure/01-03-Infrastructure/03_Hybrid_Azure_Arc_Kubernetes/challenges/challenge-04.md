@@ -9,3 +9,6 @@
 ### Learning Resources
 
 ### Solution - Spoilerwarning
+[Solution Steps](../walkthroughs/challenge-04/solution.md)
+
+[Next challenge](challenge-05.md) | [Back](../Readme.md)

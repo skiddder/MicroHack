@@ -1,3 +1,7 @@
+# Walkthrough Challenge 4 - Deploy SQL Managed Instance to your cluster
+
+[Back to challenge](../../challenges/challenge-04.md) - [Next Challenge's Solution](../challenge-05/solution.md)
+
 ## prerequisites
 - [client tools](https://learn.microsoft.com/en-us/azure/azure-arc/data/install-client-tools)
 - Provider reqistration
@@ -57,3 +61,7 @@ Open file '02-create-sql-mi.sh' in your editor. Adjust parameters to reflect you
 Now, it's time to grab a coffee as the creation will take several minutes.
 
 ## Connect to your SQL Managed Instance
+
+You successfully completed challenge 1! 🚀🚀🚀
+
+[Next challenge](../../challenges/challenge-05.md) - [Next Challenge's Solution](../challenge-05/solution.md)

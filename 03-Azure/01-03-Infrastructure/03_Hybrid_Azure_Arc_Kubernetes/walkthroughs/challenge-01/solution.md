@@ -1,7 +1,7 @@
 # Walkthrough Challenge 1 - Onboarding your Kubernetes Cluster
-Duration: 20 minutes
+Duration: 15 minutes
 
-[Home](../../Readme.md#challenge-1---onboarding-your-kubernetes-cluster) - [Next Challenge's Solution](../02-azure_monitor/solution.md)
+[Back to challenge](../../challenges/challenge-01.md) - [Next Challenge's Solution](../challenge-02/solution.md)
 
 ## Prerequisites
 Please ensure that you successfully verified 
@@ -9,7 +9,7 @@ Please ensure that you successfully verified
 * that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem".
 * that you can successfully connect to all [required Azure endpoints](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements?tabs=azure-cloud)
 
-💡*Hint*: There are several connectivity-check scripts available [here](../../resources/).
+💡*Hint*: There are several connectivity-check scripts available [here](../../lab/scripts/).
 
 ## Task 1 - Login to Azure
 In your shell environment, login to Azure using the account you got assigned during the microhack.
@@ -201,4 +201,4 @@ Now, reload the resources page in the Azure portl. You should see at least the f
 
 You successfully completed challenge 1! 🚀🚀🚀
 
-[Back to the challenges](../../Readme.md#challenge-2---configure-gitops-for-cluster-management) - [Next Challenge's Solution](../02-azure_monitor/solution.md)
+[Next challenge](../../challenges/challenge-02.md) - [Next Challenge's Solution](../challenge-02/solution.md)

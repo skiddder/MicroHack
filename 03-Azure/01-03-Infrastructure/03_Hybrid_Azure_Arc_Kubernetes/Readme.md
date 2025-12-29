@@ -2,17 +2,18 @@
 
 # MicroHack Azure Arc-enabled Kubernetes
 
-- [**MicroHack Introduction**](#microhack-introduction)
-  - [What is Azure Arc for Kubernetes?](#what-is-azure-arc-for-kubernetes)
-- [**MicroHack Context**](#microhack-context)
-- [**Objectives**](#objectives)
-- [**MicroHack Challenges**](#microhack-challenges)
-  - [General Prerequisites](#general-prerequisites)
-  - [Challenge 1 - Onboarding your Kubernetes Cluster](#challenge-1---onboarding-your-kubernetes-cluster)
-  - [Challenge 2 - Enable Azure Monitor for Containers](#challenge-2---enable-azure-monitor-for-containers)
-  - [Challenge 3 - KAITO](#challenge-3---kaito)
-  - [Challenge 4 - Deploy SQL Managed Instance](#challenge-4---deploy-sql-managed-instance-to-your-cluster)
-  - [Challenge 5 - Configure GitOps for Cluster Management](#challenge-5---configure-gitops-for-cluster-management)
+* [**MicroHack Introduction**](#microhack-introduction)
+  * [What is Azure Arc for Kubernetes?](#what-is-azure-arc-for-kubernetes)
+* [**MicroHack Context**](#microhack-context)
+* [**Objectives**](#objectives)
+* [**General Prerequisites**](#general-prerequisites)
+* [**MicroHack Challenges**](#microhack-challenges)
+  * [Challenge 01 - Onboarding your Kubernetes Cluster](challenges/challenge-01.md))
+  * [Challenge 02 - Enable Azure Monitor for Containers](challenges/challenge-02.md)
+  * [Challenge 03 - KAITO](challenges/challenge-03.md)
+  * [Challenge 04 - Deploy SQL Managed Instance](challenges/challenge-04.md)
+  * [Challenge 05 - Configure GitOps for Cluster Management](challenges/challenge-05.md)
+* [**Contributors**](#contributors)
 
 
 ## MicroHack Introduction
@@ -76,24 +77,26 @@ After completing this MicroHack you will be familiar with:
 
 ## MicroHack Challenges
 
-In order to play through the challenges, your microhack coach prepared a k8s cluster for you, which you will use as your onprem environment. In the case of this microhack, we are using an AKS cluster for ease of environment provisioning. In a real world scenario this makes no sense of course, as AKS is already fully integrated in Azure and also, you would not deploy data services into an AKS cluster when you could do this natively in Azure...
+In order to play through the challenges, your microhack coach prepared a k8s cluster for you, which you will use as your onprem environment. In the case of this microhack, we are using an K3s cluster. 
 
 For each user there are two resource groups pre-created by your coach. 
-| Name                | Description                                                                               |
-|---------------------|-------------------------------------------------------------------------------------------|
-| mh-01-arc-k8s-onprem| In this resource group you can find the k8s cluster which mimicks your onprem environment |
-| mh-01-arc-k8s       | Into this resource group your arc resources will be stored                                | 
+| Name            | Description                                                                                 |
+|-----------------|---------------------------------------------------------------------------------------------|
+| 00-k8s-onprem   | In this resource group you can find the k8s cluster which simulates your onprem environment |
+| 00-k8s-arc      | Into this resource group your arc resources will be stored                                  | 
 
 ### General Prerequisites
 
 In order to successfully work through the challenges in this MicroHack, you will need the following prerequisites:
 
-* [An Azure account with owner permissions on an active subscription](https://azure.microsoft.com/free/?WT.mc_id=A261C142F)
+* [An Azure account with owner permissions on an active subscription](https://azure.microsoft.com/free/?WT.mc_id=A261C142F) 
 * [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) (Hint: Make sure to use the lastest version)
 * [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#install-using-native-package-management)
-* [Helm] (https://helm.sh/docs/intro/install/)
+* [Helm](https://helm.sh/docs/intro/install/)
 
-💡*Hint*: The solution has been verified using [Visual Studio Code](https://code.visualstudio.com/) with integrated Linux Bash Shell ([WSL(https://learn.microsoft.com/en-us/windows/wsl/install)]). In order to clone this repository to your local system, use either git or the github plugin for VSC.
+💡*Hint*: 
+* The solution has been verified using [Visual Studio Code](https://code.visualstudio.com/) with integrated Linux Bash Shell ([WSL](https://learn.microsoft.com/en-us/windows/wsl/install)). 
+* In order to clone this repository to your local system, use either git or the github plugin for VSC. 
 
 ## Contributors
 * Simon Schwingel [GitHub](https://github.com/skiddder); [LinkedIn](https://www.linkedin.com/in/simon-schwingel-b602869a/)
