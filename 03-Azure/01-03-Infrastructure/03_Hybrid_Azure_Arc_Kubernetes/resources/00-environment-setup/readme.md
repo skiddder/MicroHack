@@ -47,7 +47,7 @@ subscription
 - **VM Size**: Standard_D2s_v3 (sufficient for K3s, smaller than AKS requirements)
 - **OS**: Ubuntu 22.04 LTS
 - **K3s Version**: v1.33.6+k3s1
-- **Admin User**: mhadmin
+- **Admin User**: Set via admin_user in fixtures.tfvars
 - **VMs per cluster**: 3 VMs (1 master + 2 workers)
 - **Password**: Must be set in fixtures.tfvars (no default value)
 
@@ -104,8 +104,9 @@ start_index = 37
 end_index = 39
 
 # Security - REQUIRED
+admin_user     = "<replace-with-your-own-user-name>"
 admin_password = "<replace-with-your-own-secure-password>"
-cluster_token = "<replace-with-your-own-secure-cluster-token>"
+cluster_token  = "<replace-with-your-own-secure-cluster-token>"   # Simple string for K3s
 ```
 
 * Execute terraform plan and apply. Make sure to include your fixtures.tfvars file.
@@ -139,16 +140,16 @@ acr_names = {
 }
 k3s_cluster_info = {
   "37" = {
-    "kubeconfig_setup" = "mkdir -p ~/.kube && scp mhadmin@x.x.x.x:/home/mhadmin/.kube/config ~/.kube/config && sed -i 's/127.0.0.1/x.x.x.x/g' ~/.kube/config"
-    "master_ssh" = "ssh mhadmin@x.x.x.x"
-    "worker1_ssh" = "ssh mhadmin@y.y.y.y"
-    "worker2_ssh" = "ssh mhadmin@z.z.z.z"
+    "kubeconfig_setup" = "mkdir -p ~/.kube && scp <admin_user>@x.x.x.x:/home/<admin_user>/.kube/config ~/.kube/config && sed -i 's/127.0.0.1/x.x.x.x/g' ~/.kube/config"
+    "master_ssh" = "ssh <admin_user>@x.x.x.x"
+    "worker1_ssh" = "ssh <admin_user>@y.y.y.y"
+    "worker2_ssh" = "ssh <admin_user>@z.z.z.z"
   }
   "38" = {
-    "kubeconfig_setup" = "mkdir -p ~/.kube && scp mhadmin@20.19.166.105:/home/mhadmin/.kube/config ~/.kube/config && sed -i 's/127.0.0.1/a.a.a.a/g' ~/.kube/config"
-    "master_ssh" = "ssh mhadmin@a.a.a.a"
-    "worker1_ssh" = "ssh mhadmin@b.b.b.b"
-    "worker2_ssh" = "ssh mhadmin@c.c.c.c"
+    "kubeconfig_setup" = "mkdir -p ~/.kube && scp <admin_user>@20.19.166.105:/home/<admin_user>/.kube/config ~/.kube/config && sed -i 's/127.0.0.1/a.a.a.a/g' ~/.kube/config"
+    "master_ssh" = "ssh <admin_user>@a.a.a.a"
+    "worker1_ssh" = "ssh <admin_user>@b.b.b.b"
+    "worker2_ssh" = "ssh <admin_user>@c.c.c.c"
   }
 }
 law = {
@@ -171,15 +172,25 @@ rg_names_onprem = {
 
 ### 1. Access your cluster
 ```bash
-master_pip="<master-ip>" # replace with public ip address of your master node
+# Set admin username (must match the admin_user value in fixtures.tfvars)
+admin_user="<replace-with-admin-user-from-fixtures.tfvars>"  # e.g., "mhadmin"
+
+# Extract user number from Azure username (e.g., LabUser-37 -> 37)
+azure_user=$(az account show --query user.name --output tsv)
+user_number=$(echo $azure_user | sed -n 's/.*LabUser-\([0-9]\+\).*/\1/p')
+
+# Get public ip of master node via Azure CLI according to user-number
+master_pip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" --output tsv)
+
+echo "Connecting to master node: $master_pip with user: $admin_user"
 
 # Create .kube directory if it doesn't exist
 mkdir -p ~/.kube
 
 # Copy the kubeconfig to standard location
-scp mhadmin@$master_pip:/home/mhadmin/.kube/config ~/.kube/config
+scp $admin_user@$master_pip:/home/$admin_user/.kube/config ~/.kube/config
 
-# replace localhost address with the public ip of master node
+# Replace localhost address with the public ip of master node
 sed -i "s/127.0.0.1/$master_pip/g" ~/.kube/config
 
 # Now kubectl works directly

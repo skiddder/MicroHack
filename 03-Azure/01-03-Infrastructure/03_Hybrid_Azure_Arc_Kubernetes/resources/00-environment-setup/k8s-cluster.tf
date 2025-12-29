@@ -178,7 +178,7 @@ resource "azurerm_linux_virtual_machine" "onprem_master" {
   location                        = azurerm_resource_group.mh_k8s_onprem[count.index].location
   size                            = var.vm_size
   disable_password_authentication = false
-  admin_username                  = "mhadmin"
+  admin_username                  = var.admin_user
   admin_password                  = var.admin_password
 
   network_interface_ids = [
@@ -216,7 +216,7 @@ resource "azurerm_linux_virtual_machine" "onprem_worker" {
   location                        = azurerm_resource_group.mh_k8s_onprem[count.index].location
   size                            = var.vm_size
   disable_password_authentication = false
-  admin_username                  = "mhadmin"
+  admin_username                  = var.admin_user
   admin_password                  = var.admin_password
 
   network_interface_ids = [
@@ -257,7 +257,7 @@ resource "azurerm_linux_virtual_machine" "onprem_worker2" {
   location                        = azurerm_resource_group.mh_k8s_onprem[count.index].location
   size                            = var.vm_size
   disable_password_authentication = false
-  admin_username                  = "mhadmin"
+  admin_username                  = var.admin_user
   admin_password                  = var.admin_password
 
   network_interface_ids = [

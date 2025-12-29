@@ -43,21 +43,21 @@ scp mhadmin@$master_pip:/home/mhadmin/.kube/config ~/.kube/config
 # replace localhost address with the public ip of master node
 sed -i "s/127.0.0.1/$master_pip/g" ~/.kube/config
 
-# Now kubectl works directly
+# Now kubectl works directly on your local client - no need to ssh into the master node anymore
 kubectl get nodes
 ```
 
 ## Task 2 - Connect K8s cluster using script
-* In your shell go the folder where you cloned the microhack repository. Then change to the folder '03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/01-connect/'
-* Open file az_connect_aks.sh in your editor - i.e. in Visual Studio Code. 
-* Check the export variable values and adjust the values to match your environment (i.e. replace "37" with "04" if you are LabUser-04) and save your changes. 
+* In your shell go to the folder where you cloned the microhack repository. Then change to the sub-folder '03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/01-connect/'
+* Open file az_connect_k8s.sh in your editor - i.e. in Visual Studio Code. 
+* If you are using the script in the microhack, it will automatically identify the correct values. But if unsure or working in another environment, check the export variable values and adjust the values to match your environment (i.e. replace "37" with "04" if you are LabUser-04) and save your changes. 
 
 ```bash
 # adjust the prefix according to your microhack user number
-export onprem_aks_cluster_name='37-k8s-onprem'  
-export onprem_resource_group='37-k8s-onprem'
-export arc_resource_group='37-k8s-arc'
-export arc_cluster_name='37-k8s-arc-enabled'
+export onprem_resource_group="${user_number}-k8s-onprem"
+export arc_resource_group="${user_number}-k8s-arc"
+export arc_cluster_name="${user_number}-k8s-arc-enabled"
+export location="westeurope"
 ```
 
 * Execute the script to
@@ -65,7 +65,6 @@ export arc_cluster_name='37-k8s-arc-enabled'
         * Microsoft.Kubernetes
         * Microsoft.KubernetesConfiguration
         * Microsoft.ExtendedLocation
-    * merge the AKS credentials of the onprem cluster into your kube.config file
     * remove Azure Arc helm charts which might exist from previous connection attempts
     * install required Azure CLI extensions or update them to latest version:
         * connectedk8s
@@ -75,7 +74,7 @@ export arc_cluster_name='37-k8s-arc-enabled'
 💡 *Important*: Make sure that your kubectl works and is pointing to the k8s cluster you want to onboard before executing the script!
 
 ```bash
-./az_connect_aks.sh 
+./az_connect_k8s.sh 
 ```
 
 Wait until the script terminates. Expected result sould look comparable to this out:
@@ -142,7 +141,6 @@ Step: 2025-12-12T14-34-55Z: Starting to install Azure arc agents on the Kubernet
 {
   "aadProfile": {
     "adminGroupObjectIDs": null,
-    "enableAzureRbac": null,
     "tenantId": null
   },
   [...]
@@ -156,7 +154,7 @@ Step: 2025-12-12T14-34-55Z: Starting to install Azure arc agents on the Kubernet
   "arcAgentryConfigurations": null,
   "azureHybridBenefit": "NotApplicable",
   "connectivityStatus": "Connecting",
-  "distribution": "aks",
+  "distribution": "k3s",
   "distributionVersion": null,
   "gateway": null,
   [...]
@@ -184,7 +182,21 @@ You should see your resource of type 'Kubernetes - Azure Arc'. (i.e. if you are 
 
 Notice the Arc Agent version in the overview page.
 
-In the navigation pane in section 'Kubernetes resources' click on 'Namespaces'. Next to the default namespaces you should see 
+In the navigation pane in section 'Kubernetes resources' click on 'Namespaces'. You will see a prompt to provide an access token:
+
+![access-token](img/access-token.png)
+
+In order to get access to the k8s resources from the Azure portal assign your entra user a clusterRoleBinding with appropriate permissions:
+```bash
+# get the user principal from entra
+azure_user=$(az ad signed-in-user show --query userPrincipalName -o tsv)
+
+# create a clusterRoleBinding for the user
+kubectl create clusterrolebinding demo-user-binding --clusterrole cluster-admin --user=$azure_user
+
+```
+Now, reload the resources page in the Azure portl. You should see at least the following namespaces:
+
 ![img-namespaces](img/namespaces.png)
 
 You successfully completed challenge 1! 🚀🚀🚀

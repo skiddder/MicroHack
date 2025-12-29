@@ -46,6 +46,11 @@ variable "cluster_token" {
   sensitive = true
 }
 
+variable "admin_user" {
+  description = "Admin username for VMs"
+  type        = string
+}
+
 variable "admin_password" {
   description = "Admin password for VMs"
   type        = string
