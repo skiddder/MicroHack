@@ -1,14 +1,14 @@
-## Challenge 5 - Configure Gitops for cluster management
+# Challenge 5 - Configure Gitops for cluster management
 
-### Goal
+## Goal
 
-### Actions
+## Actions
 
-### Success Criteria
+## Success Criteria
 
-### Learning Resources
+## Learning Resources
 
-### Solution - Spoilerwarning
+## Solution - Spoilerwarning
 [Solution Steps](../walkthroughs/challenge-05/solution.md)
 
 [Next challenge](challenge-06.md) | [Back](../Readme.md)

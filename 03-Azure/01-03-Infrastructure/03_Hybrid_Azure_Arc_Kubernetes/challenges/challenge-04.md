@@ -1,14 +1,14 @@
-## Challenge 4 - Deploy SQL Managed Instance to your cluster
+# Challenge 4 - Deploy SQL Managed Instance to your cluster
 
-### Goal
+## Goal
 
-### Actions
+## Actions
 
-### Success Criteria
+## Success Criteria
 
-### Learning Resources
+## Learning Resources
 
-### Solution - Spoilerwarning
+## Solution - Spoilerwarning
 [Solution Steps](../walkthroughs/challenge-04/solution.md)
 
 [Next challenge](challenge-05.md) | [Back](../Readme.md)
