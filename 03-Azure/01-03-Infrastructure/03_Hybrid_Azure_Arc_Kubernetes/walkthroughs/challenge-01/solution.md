@@ -1,5 +1,5 @@
 # Walkthrough Challenge 1 - Onboarding your Kubernetes Cluster
-Duration: 15 minutes
+Duration: 15-30 minutes
 
 [Back to challenge](../../challenges/challenge-01.md) - [Next Challenge's Solution](../challenge-02/solution.md)
 

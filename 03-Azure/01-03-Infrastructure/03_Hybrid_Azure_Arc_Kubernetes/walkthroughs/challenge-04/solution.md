@@ -62,6 +62,6 @@ Now, it's time to grab a coffee as the creation will take several minutes.
 
 ## Connect to your SQL Managed Instance
 
-You successfully completed challenge 1! 🚀🚀🚀
+You successfully completed challenge 4! 🚀🚀🚀
 
 [Next challenge](../../challenges/challenge-05.md) - [Next Challenge's Solution](../challenge-05/solution.md)
