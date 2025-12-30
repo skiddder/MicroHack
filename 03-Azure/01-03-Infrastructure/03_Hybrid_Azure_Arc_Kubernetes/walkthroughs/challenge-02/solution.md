@@ -324,7 +324,7 @@ constraint_name="k8sazurev3allowedcapabilities.constraints.gatekeeper.sh/azurepo
 kubectl describe $constraint_name
 ```
 
-Note that many violations are originating from the defender pods itself. This is (at time of writing) a known issue. A simple workaround is to exclude the **mdc, gatekeeper-system and azure-arc** namespaces from policy evaluation (not in scope of the microhack). 
+💡**Note:** that many violations are originating from the defender pods itself. This is (at time of writing) a known issue. A simple workaround is to exclude the **mdc, gatekeeper-system and azure-arc** namespaces from policy evaluation (not in scope of the microhack). 
 
 
 You successfully completed challenge 2! 🚀🚀🚀
