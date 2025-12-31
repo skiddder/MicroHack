@@ -17,12 +17,42 @@ echo "Detected user number: $user_number"
 echo "Setting up kubectl access to the K3s cluster..."
 # Get puplic ip of master node via Azure cli according to user-number
 master_pip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" --output tsv)
+
+# Retrieve admin_user and admin_password from fixtures.tfvars
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LAB_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+FIXTURES_FILE="$LAB_DIR/fixtures.tfvars"
+
+if [ ! -f "$FIXTURES_FILE" ]; then
+    echo "Error: fixtures.tfvars not found at $FIXTURES_FILE"
+    echo "Please ensure fixtures.tfvars exists in the lab directory"
+    exit 1
+fi
+
+# Extract admin_user and admin_password from fixtures.tfvars
+admin_user=$(grep -E '^\s*admin_user\s*=' "$FIXTURES_FILE" | sed -E 's/.*=\s*"(.*)".*/\1/')
+admin_password=$(grep -E '^\s*admin_password\s*=' "$FIXTURES_FILE" | sed -E 's/.*=\s*"(.*)".*/\1/')
+
+if [ -z "$admin_user" ] || [ -z "$admin_password" ]; then
+    echo "Error: Could not extract admin_user or admin_password from fixtures.tfvars"
+    echo "Please ensure fixtures.tfvars contains admin_user and admin_password variables"
+    exit 1
+fi
+
+echo "Using admin user: $admin_user"
+
 # Create .kube directory if it doesn't exist
 mkdir -p ~/.kube
-# Copy the kubeconfig to standard location
-# TODO: scp prompts for password - retrieve and use password from fixtures.tfvars silently
-# TODO: on first ssh connection to master node, you may need to accept the host key fingerprint. Ensure this happens silently
-scp mhadmin@$master_pip:/home/mhadmin/.kube/config ~/.kube/config
+
+# Copy the kubeconfig to standard location using sshpass for silent authentication
+# and SSH options to accept host keys automatically
+if ! command -v sshpass &> /dev/null; then
+    echo "Error: sshpass is not installed. Installing sshpass..."
+    sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+fi
+
+sshpass -p "$admin_password" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    ${admin_user}@${master_pip}:/home/${admin_user}/.kube/config ~/.kube/config
 # replace localhost address with the public ip of master node
 sed -i "s/127.0.0.1/$master_pip/g" ~/.kube/config
 # Now kubectl works directly on your local client - no need to ssh into the master node anymore
