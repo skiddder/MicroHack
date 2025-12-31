@@ -128,7 +128,7 @@ terraform apply tfplan
    - Master node: Installs K3s server, configures networking, sets up kubeconfig
    - Worker nodes: Wait for master, then join the cluster as K3s agents
 3. **Cluster becomes ready** in ~5-10 minutes after VM deployment
-4. **SSH access** is available immediately with the mhadmin user and your password
+4. **SSH access** is available immediately with your user and your password
 
 The expected output looks approximately like this depending on the start_index and end_index parameters:
 ```bash
@@ -173,7 +173,7 @@ rg_names_onprem = {
 ### 1. Access your cluster
 ```bash
 # Set admin username (must match the admin_user value in fixtures.tfvars)
-admin_user="<replace-with-admin-user-from-fixtures.tfvars>"  # e.g., "mhadmin"
+admin_user="<replace-with-admin-user-from-fixtures.tfvars>" 
 
 # Extract user number from Azure username (e.g., LabUser-37 -> 37)
 azure_user=$(az account show --query user.name --output tsv)

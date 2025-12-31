@@ -14,6 +14,20 @@ fi
 
 echo "Detected user number: $user_number"
 
+echo "Setting up kubectl access to the K3s cluster..."
+# Get puplic ip of master node via Azure cli according to user-number
+master_pip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" --output tsv)
+# Create .kube directory if it doesn't exist
+mkdir -p ~/.kube
+# Copy the kubeconfig to standard location
+# TODO: scp prompts for password - retrieve and use password from fixtures.tfvars silently
+# TODO: on first ssh connection to master node, you may need to accept the host key fingerprint. Ensure this happens silently
+scp mhadmin@$master_pip:/home/mhadmin/.kube/config ~/.kube/config
+# replace localhost address with the public ip of master node
+sed -i "s/127.0.0.1/$master_pip/g" ~/.kube/config
+# Now kubectl works directly on your local client - no need to ssh into the master node anymore
+kubectl get nodes
+
 # Set variables based on detected user number
 export onprem_resource_group="${user_number}-k8s-onprem"
 export arc_resource_group="${user_number}-k8s-arc"
@@ -68,6 +82,9 @@ sleep 30
 
 echo "Verifying Arc connection status..."
 az connectedk8s show --resource-group $arc_resource_group --name $arc_cluster_name --query "{name:name, connectivityStatus:connectivityStatus}"
+
+echo "Creating a clusterRoleBinding for the user..."
+kubectl create clusterrolebinding demo-user-binding --clusterrole cluster-admin --user=$azure_user
 
 echo ""
 echo "✅ Azure Arc connection completed successfully!"

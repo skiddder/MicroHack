@@ -188,6 +188,7 @@ resource "azurerm_linux_virtual_machine" "onprem_master" {
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
+    disk_size_gb         = 128  # P10 managed disk for better IOPS (500) and throughput (100 MB/s)
   }
 
   source_image_reference {
@@ -226,6 +227,7 @@ resource "azurerm_linux_virtual_machine" "onprem_worker" {
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
+    disk_size_gb         = 128  # P10 managed disk for better IOPS (500) and throughput (100 MB/s)
   }
 
   source_image_reference {
@@ -267,6 +269,7 @@ resource "azurerm_linux_virtual_machine" "onprem_worker2" {
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
+    disk_size_gb         = 128  # P10 managed disk for better IOPS (500) and throughput (100 MB/s)
   }
 
   source_image_reference {

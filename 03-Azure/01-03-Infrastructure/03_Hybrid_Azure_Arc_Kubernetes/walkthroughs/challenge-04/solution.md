@@ -3,16 +3,19 @@
 [Back to challenge](../../challenges/challenge-04.md) - [Next Challenge's Solution](../challenge-05/solution.md)
 
 ## prerequisites
-- [client tools](https://learn.microsoft.com/en-us/azure/azure-arc/data/install-client-tools)
-- Provider reqistration
-```shell
+* You have an arc-connected k8s cluster/finisched challenge 01.
+* [client tools](https://learn.microsoft.com/en-us/azure/azure-arc/data/install-client-tools)
+* A Log Analytics workspace (law). (If you used the terraform to deploy the microhack environment, each participant already has a law in his arc resource group.)
+* You must be logged in to az cli (az login)
+* kubectl defaults to your arc-enabled k8s cluster
+* Provider reqistration
+```bash
 az provider register --namespace Microsoft.AzureArcData
 ```
-
-## Read about the prerequisites and concepts
-1. Create Azure Arc [data services cluster extension](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/conceptual-extensions)
-2. Create a [custom location] on your arc-enabled k8s(https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/custom-locations#create-custom-location)
-3. create the Arc data controller
+* yq yammel query tool
+```bash
+sudo snap install yq
+```
 
 ## Create arc data services controller
 Open the file '01-enable-dataservice.sh' in your editor.
