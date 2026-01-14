@@ -8,14 +8,19 @@ apt-get upgrade -y
 # Install required packages
 apt-get install -y curl wget apt-transport-https ca-certificates gnupg lsb-release
 
-# Install Docker (required for some workloads)
+# Install Docker (optional for some workloads)
+# Note: k3s includes its own container runtime, so Docker is optional
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 apt-get update
-apt-get install -y docker-ce docker-ce-cli containerd.io
 
-# Add mhadmin to docker group
-usermod -aG docker mhadmin
+# Install Docker without pinning containerd.io version, continue on error
+apt-get install -y docker-ce docker-ce-cli containerd.io || echo "Docker installation failed, continuing with k3s (which includes its own container runtime)"
+
+# Add mhadmin to docker group if docker was installed successfully
+if command -v docker &> /dev/null; then
+    usermod -aG docker mhadmin
+fi
 
 # Install K3s server (master node)
 export INSTALL_K3S_VERSION=${k3s_version}

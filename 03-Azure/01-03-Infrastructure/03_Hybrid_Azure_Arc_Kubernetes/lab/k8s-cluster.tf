@@ -59,7 +59,7 @@ resource "azurerm_network_security_group" "onprem" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "30000-32767"
-    source_address_prefix      = "10.${100 + local.indices[count.index]}.0.0/16"
+    source_address_prefix      = "*"
     destination_address_prefix = "*"
   }
 
@@ -294,10 +294,10 @@ output "k3s_cluster_info" {
   value = {
     for i in range(length(local.indices)) :
     format("%02d", local.indices[i]) => {
-      master_ssh    = "ssh mhadmin@${azurerm_public_ip.onprem_master[i].ip_address}"
-      worker1_ssh   = "ssh mhadmin@${azurerm_public_ip.onprem_worker[i].ip_address}"
-      worker2_ssh   = "ssh mhadmin@${azurerm_public_ip.onprem_worker2[i].ip_address}"
-      kubeconfig_setup = "mkdir -p ~/.kube && scp mhadmin@${azurerm_public_ip.onprem_master[i].ip_address}:/home/mhadmin/.kube/config ~/.kube/config && sed -i 's/127\\.0\\.0\\.1/${azurerm_public_ip.onprem_master[i].ip_address}/g' ~/.kube/config"
+      master_ssh    = "ssh ${var.admin_user}@${azurerm_public_ip.onprem_master[i].ip_address}"
+      worker1_ssh   = "ssh ${var.admin_user}@${azurerm_public_ip.onprem_worker[i].ip_address}"
+      worker2_ssh   = "ssh ${var.admin_user}@${azurerm_public_ip.onprem_worker2[i].ip_address}"
+      kubeconfig_setup = "mkdir -p ~/.kube && scp ${var.admin_user}@${azurerm_public_ip.onprem_master[i].ip_address}:/home/${var.admin_user}/.kube/config ~/.kube/config && sed -i 's/127.0.0.1/${azurerm_public_ip.onprem_master[i].ip_address}/g' ~/.kube/config"
     }
   }
 }

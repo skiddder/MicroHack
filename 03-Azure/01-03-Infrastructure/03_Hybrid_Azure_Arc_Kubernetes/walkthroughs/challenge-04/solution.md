@@ -14,53 +14,181 @@ az provider register --namespace Microsoft.AzureArcData
 2. Create a [custom location] on your arc-enabled k8s(https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/custom-locations#create-custom-location)
 3. create the Arc data controller
 
-## Create arc data services controller
-Open the file '01-enable-dataservice.sh' in your editor.
+## Task 1 - Create arc data services controller
 
-Get a list of available storage profiles by running the CLI command below. Pick an appropriate storage profile for your environment. In this microhack, you need to choose one of the aks profiles.
+The deployment uses ARM templates as this is the most robust way for deployment at the time of writing this microhack. Before deploying, you need to prepare the parameter file with your specific values.
+
+### Step 1: Gather required values
+
 ```bash
-az arcdata dc config list
+# Get current LabUser's number
+export azure_user=$(az account show --query user.name --output tsv)
+export user_number=$(echo $azure_user | sed -n 's/.*LabUser-\([0-9]\+\).*/\1/p')
+export subscription_id=$(az account show --query id -o tsv)
+export resource_group="$user_number-k8s-arc"
+
+# Get Log Analytics workspace details
+export log_analytics_workspace_id=$(az monitor log-analytics workspace show -g $resource_group -n "$user_number-law" --query customerId -o tsv)
+export log_analytics_primary_key=$(az monitor log-analytics workspace get-shared-keys -g $resource_group -n "$user_number-law" --query primarySharedKey -o tsv)
+
+# Generate new GUIDs for role assignments
+export guid1=$(uuidgen)
+export guid2=$(uuidgen)
+
+echo "Your values:"
+echo "USER_NUMBER: $user_number"
+echo "SUBSCRIPTION_ID: $subscription_id"
+echo "LOG_ANALYTICS_WORKSPACE_ID: $log_analytics_workspace_id"
+echo "GUID 1: $guid1"
+echo "GUID 2: $guid2"
 ```
-To check the details of a given profile, export the profile locally for inspection:
+
+### Step 2: Update parameters.json
+
+Copy the template file and replace placeholders:
+
 ```bash
-# example - adjust --source value to view other profiles
-az arcdata dc config init --source azure-arc-aks-default-storage --path ./arcdata-profile
+cd walkthroughs/challenge-04/templates
+
+# Remove the old one and start fresh
+rm parameters-my.json
+# Create a working copy
+cp parameters.json parameters-my.json
+
+# Replace placeholders (Linux/WSL)
+# Note: Escape special sed characters in the primary key to handle any potential delimiters
+escaped_key=$(printf '%s\n' "$log_analytics_primary_key" | sed 's/[\/&]/\\&/g')
+
+sed -i "s/<USER_NUMBER>/$user_number/g" parameters-my.json
+sed -i "s/<SUBSCRIPTION_ID>/$subscription_id/g" parameters-my.json
+sed -i "s/<LOG_ANALYTICS_WORKSPACE_ID>/$log_analytics_workspace_id/g" parameters-my.json
+sed -i "s/<LOG_ANALYTICS_PRIMARY_KEY>/$escaped_key/g" parameters-my.json
+sed -i "s/<GENERATE_GUID_1>/$guid1/g" parameters-my.json
+sed -i "s/<GENERATE_GUID_2>/$guid2/g" parameters-my.json
+
+# Alternative: manual replacement
+# Edit parameters-my.json and replace:
+#   <USER_NUMBER> with your user number
+#   <SUBSCRIPTION_ID> with your subscription ID
+#   <LOG_ANALYTICS_WORKSPACE_ID> with workspace ID
+#   <LOG_ANALYTICS_PRIMARY_KEY> with workspace key
+#   <GENERATE_GUID_1> with first new GUID (use 'uuidgen' command)
+#   <GENERATE_GUID_2> with second new GUID (use 'uuidgen' command again)
 ```
-Adjust the parameters in the beginning of the script to reflect your environment:
+
+### Step 3: Deploy the Arc Data Controller
+
 ```bash
-export arc_resource_group='mh-arc-aks'
-export arc_cluster_name='mh-arc-enabled-K8s'
-export customlocation_name='onprem-aks-cl'       # <-- you can change this according to your naming convention
-export extensionInstanceName="arc-data-services" # <-- you can change this according to your naming convention
-export arc_data_namespace="arc-data-controller"  # <-- you can change this according to your naming convention
-export arc_data_profile_name='azure-arc-aks-default-storage'
+read -s -p "Enter password for metrics/logs dashboard: " DC_PASSWORD && echo
+
+# Validate the deployment first
+az deployment group validate \
+  --resource-group $resource_group \
+  --template-file template.json \
+  --parameters parameters-my.json \
+  --parameters dataController_metricsAndLogsDashboardPassword="$DC_PASSWORD"
+
+# Deploy (you'll be prompted for the dashboard password)
+az deployment group create \
+  --resource-group $resource_group \
+  --template-file template.json \
+  --parameters parameters-my.json \
+  --parameters dataController_metricsAndLogsDashboardPassword="$DC_PASSWORD" \
+  --verbose
 ```
-Save the file and run it. During script execution you will be prompted for some parameters:
 
-| Parameter | Example | Description | 
-|-----------|---------|-------------|
-| Log Analytics workspace ID | xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx | Provide just the guid, not the full path of the resource. You can copy it in the Azure Portal from your Log Analytics workspace from Settings > Agents > Log Analytics agents instructions.  |
-| Log Analytics primary key  | adjf23nadfSAFSAh32j23jksjj223LKasdf== | base64 encoded string. You can copy it in the Azure Portal from your Log Analytics workspace from Settings > Agents > Log Analytics agents instructions. |
-| Monitoring administrator username | john-doe | Used to access your grafana dashboard if configured |
-| Monitoring administrator password | P@ssW0rd | Passwords must be at least 8 characters long, cannot contain the username, and must contain characters from three of the following four sets: Uppercase letters, Lowercase letters, Base 10 digits, and Symbols. Please try again. |
+The deployment takes 10-15 minutes. You can monitor progress with:
 
-When the script finishes, the kubernetes cluster should be ready to host arc-enabled data services such as SQL MI and PostgreSQL.
+```bash
+# Watch deployment status
+az deployment group show \
+  --resource-group $resource_group \
+  --name template \
+  --query properties.provisioningState
 
-## Read about SQL Managed Instance concepts
-* [Deploy a SQL Managed Instance enabled by Azure Arc](https://learn.microsoft.com/en-us/azure/azure-arc/data/create-sql-managed-instance)
+# Monitor operations
+az deployment operation group list \
+  --resource-group $resource_group \
+  --name template \
+  --query "[].{Resource:properties.targetResource.resourceName, State:properties.provisioningState}" -o table
+```
 
-## Create SQL Managed Instance in connected cluster
+## Task 2 - Create SQL Managed Instance in connected cluster
 
-Open file '02-create-sql-mi.sh' in your editor. Adjust parameters to reflect your environment, save and execute the script. During script execution you will be prompted for required parameters
+```bash
+# Set SQL MI name (must start with a letter for Kubernetes naming rules)
+export sqlmi_name="sqlmi-${user_number}-1"
+export custom_location="${user_number}-onprem"
 
-| Parameter | Example | Description |
-|-----------|---------|-------------|
-| SQL Managed Instance admin username | sa | sql admin account |
-| SQL Managed Instance admin password | P@ssW0rd | password for the admin account |
+# Create SQL MI (you'll be prompted for sql admin user and password)
+az sql mi-arc create \
+  --name $sqlmi_name \
+  --resource-group $resource_group \
+  --custom-location $custom_location \
+  --cores-request 1 \
+  --memory-request 3Gi
+```
 
-Now, it's time to grab a coffee as the creation will take several minutes.
+The creation takes 5-10 minutes. Monitor progress:
 
-## Connect to your SQL Managed Instance
+```bash
+# Check deployment status
+az sql mi-arc show --name $sqlmi_name --resource-group $resource_group --query "properties.k8sRaw.status.state" -o tsv
+
+# Check pods in the namespace
+kubectl get pods -n ${user_number}-onprem -l app.kubernetes.io/name=$sqlmi_name
+```
+
+## Task 3 - Connect to your SQL Managed Instance
+
+### Prerequisites
+
+**Network Security Group (NSG)**: The Terraform deployment has already configured the NSG to allow external access to the NodePort range (30000-32767) required for SQL MI connectivity. No additional NSG configuration is needed.
+
+### Get connection details
+
+```bash
+# Get the master node public IP
+MASTER_IP=$(az vm show -g ${user_number}-onprem -n ${user_number}-onprem-master --show-details --query publicIps -o tsv)
+
+# Get the NodePort assigned to SQL MI
+NODE_PORT=$(kubectl get svc ${sqlmi_name}-external-svc -n ${user_number}-onprem -o jsonpath='{.spec.ports[0].nodePort}')
+
+echo "Connection details:"
+echo "Server: $MASTER_IP,$NODE_PORT"
+echo "Username: sa"
+echo "Password: <your-sql-password>"
+echo ""
+echo "Connection string:"
+echo "Server=$MASTER_IP,$NODE_PORT;Database=master;User Id=sa;Password=<your-password>;TrustServerCertificate=true;"
+```
+
+### Connect using VS Code SQL Server extension
+
+#### 1. Install the **SQL Server (mssql)** extension in VS Code:
+
+![SQL PlugIn installation](img/01-sql-plugin-install.png)
+
+#### 2. After installation completed, in the SQL PlutIn click **Add Connection**:
+
+![Connect to SQL MI](img/02-connect.sqlmi.png)
+
+#### 3. Enter connection details:
+**💡Note: In this lab we are using the public ip to connect to the service.**
+   - **Input type**: Parameters
+   - **Server:** `<Public-IP-Master-Node>,<NODE_PORT>` (e.g., `20.123.45.67,31433`, optionally, use the following command: ```echo "$master_pip,$(kubectl get svc ${sqlmi_name}-external-svc -n ${custom_location} -o jsonpath='{.spec.ports[0].nodePort}')"```
+   - **Trust Server Certificate:** Yes
+   - **Authentication Type:** SQL Login
+   - **User name:** (the admin account you entered during SQL MI creation)
+   - **Password:** (the password you entered during SQL MI creation)
+   - **Database:** `master` (or leave empty)
+
+#### 4. Click **Connect**
+#### 5. Expand Databases, then expand System Databases and right click on **master**. In the context menu select **New Query**.
+![alt text](img/03-create-query.png)
+
+#### 6. Query database version using ```SELECT @@VERSION;```:
+![alt text](img/04-query-version.png)
 
 You successfully completed challenge 4! 🚀🚀🚀
 

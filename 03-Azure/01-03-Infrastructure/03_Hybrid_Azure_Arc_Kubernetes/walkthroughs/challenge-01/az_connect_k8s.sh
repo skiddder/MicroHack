@@ -1,4 +1,7 @@
 #!/bin/bash
+# exit on first error
+set -e
+
 # This script connects an existing K3s cluster to Azure Arc with Azure RBAC enabled
 echo "Exporting environment variables"
 
@@ -66,19 +69,9 @@ az connectedk8s connect --name $arc_cluster_name \
 echo "Waiting for Arc connection to be established..."
 sleep 30
 
-echo "Verifying Arc connection status..."
-az connectedk8s show --resource-group $arc_resource_group --name $arc_cluster_name --query "{name:name, connectivityStatus:connectivityStatus}"
-
 echo ""
-echo "✅ Azure Arc connection completed successfully!"
-echo ""
-echo "📋 Summary:"
-echo "   - Cluster: $arc_cluster_name"
+echo "Summary:"
 echo "   - Resource Group: $arc_resource_group" 
-echo "   - Status: Connected"
-echo ""
-echo "🌐 You can view the cluster in Azure Portal:"
-echo "   https://portal.azure.com/#@/resource/subscriptions/$(az account show --query id --output tsv)/resourceGroups/$arc_resource_group/providers/Microsoft.Kubernetes/connectedClusters/$arc_cluster_name"
-echo ""
-echo "📝 Note: You will need to provide an access token to view Kubernetes resources in the portal."
+echo "   - Status:"
+az connectedk8s show --resource-group $arc_resource_group --name $arc_cluster_name --query "{name:name, connectivityStatus:connectivityStatus}"
 

@@ -11,7 +11,7 @@ Please ensure that you successfully verified
 
 💡*Hint*: There are several connectivity-check scripts available [here](../../lab/scripts/).
 
-## Task 1 - Login to Azure
+## Task 0 - Login to Azure
 In your shell environment, login to Azure using the account you got assigned during the microhack.
 ```bash
 az logout # only required if you are logged in with another user from a previous session
@@ -25,8 +25,12 @@ Click on your onprem resource group's name (i.e. 37-k8s-onprem).
 There should be 3 VMs in this resource group. Make sure that all VMs are in state 'running'. For each VM, click on its name
 ![img-start-vm](img/vm-start.png)
 
+## Task 1 - Validate connection to your K3s cluster
 To connect to your k8s cluster, we first need to merge the cluster credentials into your local ~/.kube/config file. You can use the following bash script for this:
 ```bash
+# Set admin username (use the admin_user value provided by your coach)
+admin_user="<replace-with-admin_user-from-fixtures.tfvars>"
+
 # Extract user number from Azure username (e.g., LabUser-37 -> 37)
 azure_user=$(az account show --query user.name --output tsv)
 user_number=$(echo $azure_user | sed -n 's/.*LabUser-\([0-9]\+\).*/\1/p')
@@ -38,7 +42,7 @@ master_pip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem
 mkdir -p ~/.kube
 
 # Copy the kubeconfig to standard location
-scp mhadmin@$master_pip:/home/mhadmin/.kube/config ~/.kube/config
+scp $admin_user@$master_pip:/home/$admin_user/.kube/config ~/.kube/config
 
 # replace localhost address with the public ip of master node
 sed -i "s/127.0.0.1/$master_pip/g" ~/.kube/config
@@ -50,7 +54,7 @@ kubectl get nodes
 ## Task 2 - Connect K8s cluster using script
 * In your shell go to the folder where you cloned the microhack repository. Then change to the sub-folder '03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/01-connect/'
 * Open file az_connect_k8s.sh in your editor - i.e. in Visual Studio Code. 
-* If you are using the script in the microhack, it will automatically identify the correct values. But if unsure or working in another environment, check the export variable values and adjust the values to match your environment (i.e. replace "37" with "04" if you are LabUser-04) and save your changes. 
+* If you are using the script in the microhack, it will automatically identify the correct values. But if unsure or working in another environment, check the export variable values and adjust the values to match your environment and save your changes. 
 
 ```bash
 # adjust the prefix according to your microhack user number

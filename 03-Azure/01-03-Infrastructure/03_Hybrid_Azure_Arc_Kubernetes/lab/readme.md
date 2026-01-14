@@ -109,13 +109,12 @@ admin_password = "<replace-with-your-own-secure-password>"
 cluster_token  = "<replace-with-your-own-secure-cluster-token>"   # Simple string for K3s
 ```
 
-* Execute terraform plan and apply. Make sure to include your fixtures.tfvars file.
 ```bash
 terraform init # download terraform providers
 
 terraform plan -var-file=fixtures.tfvars -out=tfplan
 
-# have a look at the resources which will be created. There should be two resource groups per participant as well as K3s VMs and an Azure container registry.
+# have a look at the resources which will be created. There should be resource groups per participant, K3s VMs, Azure container registry, and Azure Bastion hub.
 # after validation:
 
 terraform apply tfplan
@@ -128,7 +127,7 @@ terraform apply tfplan
    - Master node: Installs K3s server, configures networking, sets up kubeconfig
    - Worker nodes: Wait for master, then join the cluster as K3s agents
 3. **Cluster becomes ready** in ~5-10 minutes after VM deployment
-4. **SSH access** is available immediately with the mhadmin user and your password
+4. **SSH access** is available immediately with the admin_user and your password
 
 The expected output looks approximately like this depending on the start_index and end_index parameters:
 ```bash
@@ -140,13 +139,13 @@ acr_names = {
 }
 k3s_cluster_info = {
   "37" = {
-    "kubeconfig_setup" = "mkdir -p ~/.kube && scp <admin_user>@x.x.x.x:/home/<admin_user>/.kube/config ~/.kube/config && sed -i 's/127.0.0.1/x.x.x.x/g' ~/.kube/config"
+    "kubeconfig_setup" = "mkdir -p ~/.kube && scp <admin_user>@x.x.x.x:/home/<admin_user>/.kube/config ~/.kube/config && sed -i 's/127\\.0\\.0\\.1/x.x.x.x/g' ~/.kube/config"
     "master_ssh" = "ssh <admin_user>@x.x.x.x"
     "worker1_ssh" = "ssh <admin_user>@y.y.y.y"
     "worker2_ssh" = "ssh <admin_user>@z.z.z.z"
   }
   "38" = {
-    "kubeconfig_setup" = "mkdir -p ~/.kube && scp <admin_user>@20.19.166.105:/home/<admin_user>/.kube/config ~/.kube/config && sed -i 's/127.0.0.1/a.a.a.a/g' ~/.kube/config"
+    "kubeconfig_setup" = "mkdir -p ~/.kube && scp <admin_user>@20.19.166.105:/home/<admin_user>/.kube/config ~/.kube/config && sed -i 's/127\\.0\\.0\\.1/a.a.a.a/g' ~/.kube/config"
     "master_ssh" = "ssh <admin_user>@a.a.a.a"
     "worker1_ssh" = "ssh <admin_user>@b.b.b.b"
     "worker2_ssh" = "ssh <admin_user>@c.c.c.c"
@@ -173,7 +172,7 @@ rg_names_onprem = {
 ### 1. Access your cluster
 ```bash
 # Set admin username (must match the admin_user value in fixtures.tfvars)
-admin_user="<replace-with-admin-user-from-fixtures.tfvars>"  # e.g., "mhadmin"
+admin_user="<replace-with-admin-user-from-fixtures.tfvars>"
 
 # Extract user number from Azure username (e.g., LabUser-37 -> 37)
 azure_user=$(az account show --query user.name --output tsv)
@@ -247,7 +246,7 @@ sudo /usr/local/bin/k3s-agent-uninstall.sh
 
 ## Clean Up - After Microhack
 
-TODO: Add information on how to delete resource which have not been created via terraform during the microhack.
+When done with the microhack, call terraform destroy to clean up.
 
 ```bash
 terraform destroy -var-file=fixtures.tfvars
@@ -256,3 +255,4 @@ terraform destroy -var-file=fixtures.tfvars
 This will remove all created resources including VMs, networks, and public IPs.
 
 [Back to the challenges](../../Readme.md#challenge-1---onboarding-your-kubernetes-cluster)
+
