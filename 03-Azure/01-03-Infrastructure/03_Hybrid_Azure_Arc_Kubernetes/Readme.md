@@ -82,9 +82,9 @@ In order to play through the challenges, your microhack coach prepared a k8s clu
 For each user there are two resource groups pre-created by your coach. 
 | Name            | Description                                                                                 |
 |-----------------|---------------------------------------------------------------------------------------------|
-| 00-k8s-onprem   | In this resource group you can find the k8s cluster which simulates your onprem environment |
-| 00-k8s-arc      | Into this resource group your arc resources will be stored                                  | 
-
+| xy-k8s-onprem   | In this resource group you can find the k8s cluster which simulates your onprem environment |
+| xy-k8s-arc      | Into this resource group your arc resources will be stored                                  | 
+(xy is a placeholder for your LabUser number you will receive from your coach to access the environment)
 ### General Prerequisites
 
 In order to successfully work through the challenges in this MicroHack, you will need the following prerequisites:
@@ -100,3 +100,6 @@ In order to successfully work through the challenges in this MicroHack, you will
 
 ## Contributors
 * Simon Schwingel [GitHub](https://github.com/skiddder); [LinkedIn](https://www.linkedin.com/in/simon-schwingel-b602869a/)
+
+## Get Started
+[Challenge-01](challenges/challenge-01.md)
