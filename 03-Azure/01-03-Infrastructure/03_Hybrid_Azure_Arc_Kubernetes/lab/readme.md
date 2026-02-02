@@ -114,7 +114,7 @@ terraform init # download terraform providers
 
 terraform plan -var-file=fixtures.tfvars -out=tfplan
 
-# have a look at the resources which will be created. There should be resource groups per participant, K3s VMs, Azure container registry, and Azure Bastion hub.
+# have a look at the resources which will be created. There should be resource groups per participant, K3s VMs, and Azure container registry.
 # after validation:
 
 terraform apply tfplan
@@ -139,13 +139,13 @@ acr_names = {
 }
 k3s_cluster_info = {
   "37" = {
-    "kubeconfig_setup" = "mkdir -p ~/.kube && scp <admin_user>@x.x.x.x:/home/<admin_user>/.kube/config ~/.kube/config && sed -i 's/127\\.0\\.0\\.1/x.x.x.x/g' ~/.kube/config"
+    "kubeconfig_setup" = "mkdir -p ~/.kube && scp <admin_user>@x.x.x.x:/home/<admin_user>/.kube/config ~/.kube/config && sed -i 's/127.0.0.1/x.x.x.x/g' ~/.kube/config"
     "master_ssh" = "ssh <admin_user>@x.x.x.x"
     "worker1_ssh" = "ssh <admin_user>@y.y.y.y"
     "worker2_ssh" = "ssh <admin_user>@z.z.z.z"
   }
   "38" = {
-    "kubeconfig_setup" = "mkdir -p ~/.kube && scp <admin_user>@20.19.166.105:/home/<admin_user>/.kube/config ~/.kube/config && sed -i 's/127\\.0\\.0\\.1/a.a.a.a/g' ~/.kube/config"
+    "kubeconfig_setup" = "mkdir -p ~/.kube && scp <admin_user>@20.19.166.105:/home/<admin_user>/.kube/config ~/.kube/config && sed -i 's/127.0.0.1/a.a.a.a/g' ~/.kube/config"
     "master_ssh" = "ssh <admin_user>@a.a.a.a"
     "worker1_ssh" = "ssh <admin_user>@b.b.b.b"
     "worker2_ssh" = "ssh <admin_user>@c.c.c.c"
