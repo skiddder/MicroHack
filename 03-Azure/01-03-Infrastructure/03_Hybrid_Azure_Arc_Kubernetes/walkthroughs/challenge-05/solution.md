@@ -84,8 +84,12 @@ az k8s-configuration flux create \
   --scope cluster \
   --url $repository \
   --branch main \
+  --interval 1m \
   --kustomization name=namespaces path=$path prune=true interval=1m
 ```
+
+💡 **Note**: The `--interval 1m` parameter sets how often Flux checks your Git repository for changes, while the kustomization `interval=1m` controls how often the configuration is applied. Both are set to 1 minute for quick feedback during this challenge. In production this should be set in accordance to the --sync-timeout setting.
+
 The first namespace from the existing YAML in the `namespaces` folder is created automatically after Flux picks up the configuration. This usually takes 1-2 minutes (the sync interval is set to 1 minute).
 
 Now create an additional namespace for team1:
