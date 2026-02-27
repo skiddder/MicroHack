@@ -185,6 +185,10 @@ resource "azurerm_linux_virtual_machine" "onprem_master" {
     azurerm_network_interface.onprem_master[count.index].id,
   ]
 
+  identity {
+    type = "SystemAssigned"
+  }
+
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
@@ -222,6 +226,10 @@ resource "azurerm_linux_virtual_machine" "onprem_worker" {
   network_interface_ids = [
     azurerm_network_interface.onprem_worker[count.index].id,
   ]
+
+  identity {
+    type = "SystemAssigned"
+  }
 
   os_disk {
     caching              = "ReadWrite"
@@ -264,6 +272,10 @@ resource "azurerm_linux_virtual_machine" "onprem_worker2" {
     azurerm_network_interface.onprem_worker2[count.index].id,
   ]
 
+  identity {
+    type = "SystemAssigned"
+  }
+
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
@@ -287,6 +299,63 @@ resource "azurerm_linux_virtual_machine" "onprem_worker2" {
   tags = {
     Project = "simulated onprem k8s cluster for microhack"
     Role    = "worker"
+  }
+}
+
+# Auto-shutdown schedule for K3s Master VMs
+resource "azurerm_dev_test_global_vm_shutdown_schedule" "master" {
+  count              = length(local.indices)
+  virtual_machine_id = azurerm_linux_virtual_machine.onprem_master[count.index].id
+  location           = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  enabled            = true
+
+  daily_recurrence_time = "1800"
+  timezone              = "W. Europe Standard Time"
+
+  notification_settings {
+    enabled = false
+  }
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+  }
+}
+
+# Auto-shutdown schedule for K3s Worker1 VMs
+resource "azurerm_dev_test_global_vm_shutdown_schedule" "worker" {
+  count              = length(local.indices)
+  virtual_machine_id = azurerm_linux_virtual_machine.onprem_worker[count.index].id
+  location           = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  enabled            = true
+
+  daily_recurrence_time = "1800"
+  timezone              = "W. Europe Standard Time"
+
+  notification_settings {
+    enabled = false
+  }
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
+  }
+}
+
+# Auto-shutdown schedule for K3s Worker2 VMs
+resource "azurerm_dev_test_global_vm_shutdown_schedule" "worker2" {
+  count              = length(local.indices)
+  virtual_machine_id = azurerm_linux_virtual_machine.onprem_worker2[count.index].id
+  location           = azurerm_resource_group.mh_k8s_onprem[count.index].location
+  enabled            = true
+
+  daily_recurrence_time = "1800"
+  timezone              = "W. Europe Standard Time"
+
+  notification_settings {
+    enabled = false
+  }
+
+  tags = {
+    Project = "simulated onprem k8s cluster for microhack"
   }
 }
 

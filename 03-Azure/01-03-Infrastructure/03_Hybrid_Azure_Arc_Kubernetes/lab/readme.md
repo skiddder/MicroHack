@@ -44,14 +44,14 @@ subscription
 * Sufficient quota limits to support creation of K3s VMs per participant 
 
 ## K3s Default Configuration
-- **VM Size**: Standard_D2s_v3 (sufficient for K3s, smaller than AKS requirements)
+- **VM Size**: Standard_D4ds_v6 (sufficient for K3s, smaller than AKS requirements)
 - **OS**: Ubuntu 22.04 LTS
 - **K3s Version**: v1.33.6+k3s1
 - **Admin User**: Set via admin_user in fixtures.tfvars
 - **VMs per cluster**: 3 VMs (1 master + 2 workers)
 - **Password**: Must be set in fixtures.tfvars (no default value)
 
-If you don't change the default value of parameter "vm_size" in variables.tf, three Standard_D2s_v3 VMs per cluster are used (1 master + 2 workers). If you have many participants you need to ensure that the quota limit in your subscription is sufficient to support the required cores. The terraform code will distribute the K3s clusters to 10 different regions. This setting can be adjusted via the parameter "onprem_resources" (variables.tf) value.
+If you don't change the default value of parameter "vm_size" in variables.tf, three Standard_D4ds_v6 VMs per cluster are used (1 master + 2 workers). If you have many participants you need to ensure that the quota limit in your subscription is sufficient to support the required cores. The terraform code will distribute the K3s clusters to 10 different regions. This setting can be adjusted via the parameter "onprem_resources" (variables.tf) value.
 
 You can check this limit via Azure Portal (subscription > settings > Usage & Quotas):
 

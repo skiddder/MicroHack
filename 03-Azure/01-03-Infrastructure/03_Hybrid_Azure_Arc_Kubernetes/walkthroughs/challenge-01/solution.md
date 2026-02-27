@@ -41,7 +41,7 @@ master_pip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem
 mkdir -p ~/.kube
 
 # Copy the kubeconfig to standard location
-scp $admin_user@$master_pip:/home/$admin_user/.kube/config ~/.kube/config
+scp $admin_user@$master_pip:~/.kube/config ~/.kube/config
 
 # replace localhost address with the public ip of master node
 sed -i "s/127.0.0.1/$master_pip/g" ~/.kube/config
