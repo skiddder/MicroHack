@@ -38,25 +38,20 @@ az provider show -n Microsoft.ExtendedLocation -o table
 echo "Clear cached helm Azure Arc Helm Charts"
 rm -rf ~/.azure/AzureArcCharts
 
-# Installing Azure Arc k8s CLI extensions
 echo "Checking if you have up-to-date Azure Arc AZ CLI 'connectedk8s' extension..."
-az extension show --name "connectedk8s" &> extension_output
-if cat extension_output | grep -q "not installed"; then
-    az extension add --name "connectedk8s"
+if ! az extension show --name connectedk8s > /dev/null 2>&1; then
+    az extension add --name connectedk8s
 else
-    az extension update --name "connectedk8s"
+    az extension update --name connectedk8s
 fi
-rm extension_output
 echo ""
 
 echo "Checking if you have up-to-date Azure Arc AZ CLI 'k8s-configuration' extension..."
-az extension show --name "k8s-configuration" &> extension_output
-if cat extension_output | grep -q "not installed"; then
-    az extension add --name "k8s-configuration"
+if ! az extension show --name k8s-configuration > /dev/null 2>&1; then
+    az extension add --name k8s-configuration
 else
-    az extension update --name "k8s-configuration"
+    az extension update --name k8s-configuration
 fi
-rm extension_output
 echo ""
 
 echo "Connecting the cluster to Azure Arc"

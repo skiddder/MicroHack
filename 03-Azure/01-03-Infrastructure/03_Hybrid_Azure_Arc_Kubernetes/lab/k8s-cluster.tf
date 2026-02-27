@@ -204,6 +204,7 @@ resource "azurerm_linux_virtual_machine" "onprem_master" {
   custom_data = base64encode(templatefile("${path.module}/k3s-master-setup.sh", {
     k3s_version = var.k3s_version
     cluster_token = var.cluster_token
+    admin_user = var.admin_user
   }))
 
   tags = {
@@ -247,6 +248,7 @@ resource "azurerm_linux_virtual_machine" "onprem_worker" {
     k3s_version = var.k3s_version
     cluster_token = var.cluster_token
     master_ip = "10.${100 + local.indices[count.index]}.1.10"
+    admin_user = var.admin_user
   }))
 
   depends_on = [azurerm_linux_virtual_machine.onprem_master]
@@ -292,6 +294,7 @@ resource "azurerm_linux_virtual_machine" "onprem_worker2" {
     k3s_version = var.k3s_version
     cluster_token = var.cluster_token
     master_ip = "10.${100 + local.indices[count.index]}.1.10"
+    admin_user = var.admin_user
   }))
 
   depends_on = [azurerm_linux_virtual_machine.onprem_master]

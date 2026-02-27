@@ -17,9 +17,9 @@ apt-get update
 # Install Docker without pinning containerd.io version, continue on error
 apt-get install -y docker-ce docker-ce-cli containerd.io || echo "Docker installation failed, continuing with k3s (which includes its own container runtime)"
 
-# Add mhadmin to docker group if docker was installed successfully
+# Add admin user to docker group if docker was installed successfully
 if command -v docker &> /dev/null; then
-    usermod -aG docker mhadmin
+  usermod -aG docker ${admin_user}
 fi
 
 # Install K3s server (master node)
@@ -57,18 +57,18 @@ done
 # Install Helm
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-# Make kubectl accessible for mhadmin
-mkdir -p /home/mhadmin/.kube
-cp /etc/rancher/k3s/k3s.yaml /home/mhadmin/.kube/config
-chown mhadmin:mhadmin /home/mhadmin/.kube/config
+# Make kubectl accessible for admin user
+mkdir -p /home/${admin_user}/.kube
+cp /etc/rancher/k3s/k3s.yaml /home/${admin_user}/.kube/config
+chown ${admin_user}:${admin_user} /home/${admin_user}/.kube/config
 
 # Create a script to get the node token for workers
-cat > /home/mhadmin/get-node-token.sh << 'EOF'
+cat > /home/${admin_user}/get-node-token.sh << 'EOF'
 #!/bin/bash
 sudo cat /var/lib/rancher/k3s/server/node-token
 EOF
-chmod +x /home/mhadmin/get-node-token.sh
-chown mhadmin:mhadmin /home/mhadmin/get-node-token.sh
+chmod +x /home/${admin_user}/get-node-token.sh
+chown ${admin_user}:${admin_user} /home/${admin_user}/get-node-token.sh
 
 # Enable and start K3s
 systemctl enable k3s

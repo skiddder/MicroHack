@@ -2,8 +2,6 @@
 
 Duration: 30-45 min
 
-[Back to challenge](../../challenges/challenge-02.md) - [Next Challenge's Solution](../challenge-03/solution.md)
-
 ## Prerequisites
 * You have an arc-connected k8s cluster/finisched challenge 01.
 * You require at least Contributor access to the cluster for onboarding.
@@ -65,7 +63,7 @@ To verify the installation, navigate to your arc-enabled k8s cluster in the Azur
 
 ## Task 2 - Enable Defender for Containers Plan
 To enable the Defender for Containers plan on your subscription, 
-* Open the [Defender for Cloud | Environment settings](https://portal.azure.com/#view/Microsoft_Azure_Security/SecurityMenuBlade/~/EnvironmentSettings)
+* Open the [Defender for Cloud | Environment settings](https://portal.azure.com/#view/Microsoft_Azure_Security/SecurityMenuBlade/~/EnvironmentSettings) - if prompted for credentials, use the LabUser you were provided for the microhack.
 * At the bottom of your page find your subscription and click the elipses on the right hand side, then in the popup click "Edit settings".
 
 ![environment-settings](img/01_env_settings.png)
@@ -129,11 +127,24 @@ Optionally, check again for the existence of the defender extension as described
 Let's see whether the defender related pods are running in our k8s cluster:
 
 ```bash
-# Check Defender pods
+# Check Defender pods including example output
 kubectl get pods -n mdc
+NAME                                                     READY   STATUS    RESTARTS   AGE
+microsoft-defender-collectors-bct8t                      2/2     Running   0          10m
+microsoft-defender-collectors-h7q6l                      2/2     Running   0          10m
+microsoft-defender-collectors-htqq5                      2/2     Running   0          10m
+microsoft-defender-pod-collector-misc-65c56849bd-zq6fk   1/1     Running   0          10m
+microsoft-defender-publisher-k9lt9                       1/1     Running   0          10m
+microsoft-defender-publisher-mcq7g                       1/1     Running   0          10m
+microsoft-defender-publisher-q4bwq                       1/1     Running   0          10m
 
-# Check Azure Policy (Gatekeeper) pods
+# Check Azure Policy (Gatekeeper) pods including example output
 kubectl get pods -n gatekeeper-system
+NAME                                             READY   STATUS    RESTARTS   AGE
+gatekeeper-audit-7df994876b-jrfqt                1/1     Running   0          17m
+gatekeeper-controller-manager-7655d54c66-4d95b   1/1     Running   0          17m
+gatekeeper-controller-manager-7655d54c66-pcp26   1/1     Running   0          17m
+
 ```
 
 Check Policy recommendations in Defender for Cloud: 
@@ -209,7 +220,7 @@ Now, let's check what Azure policies are available out-of-the-box for k8s:
 
 ```bash
 # Looking for Kubernetes policy initiatives
-az policy set-definition list --query "[?contains(displayName, 'Kubernetes')].{Name:name, DisplayName:displayName}" -o table
+az policy set-definition list --query "[?contains(displayName, 'Kubernetes')].{DisplayName:displayName, ResourceId:id}" -o table
 
 Name                                  DisplayName
 ------------------------------------  -------------------------------------------------------------------------------------------------------------------------------------------
@@ -221,13 +232,22 @@ a8640138-9b0a-4a28-b8cb-1666c838647d  Kubernetes cluster pod security baseline s
 Let's assign the pod security baseline policy:
 
 ```bash
+# validate the required az cli extension "connected8s" is installed
+if ! az extension show --name connectedk8s > /dev/null 2>&1; then
+    az extension add --name connectedk8s
+else
+    az extension update --name connectedk8s
+fi
+
 cluster_resource_id=$(az connectedk8s show --name $arc_cluster_name --resource-group $arc_resource_group --query id -o tsv)
 echo "Cluster Resource ID: $cluster_resource_id"
+
+policy_id="/providers/Microsoft.Authorization/policySetDefinitions/a8640138-9b0a-4a28-b8cb-1666c838647d"
 
 # Assign the baseline pod security standards policy
 az policy assignment create \
     --name "k8s-pod-security-baseline-${user_number}" \
-    --policy-set-definition "a8640138-9b0a-4a28-b8cb-1666c838647d" \
+    --policy-set-definition $policy_id \
     --scope "$cluster_resource_id" \
     --display-name "Kubernetes Pod Security Baseline for cluster ${arc_cluster_name}" \
     --description "Enforces pod security baseline standards on Arc-enabled Kubernetes cluster"
@@ -245,6 +265,22 @@ az policy assignment create \
  [...]
   "type": "Microsoft.Authorization/policyAssignments"
 }
+```
+*PLEASE NOTE*: At the time of writing a bug in the az cli prevents the above command from execution. If you run in error for the az policy assignment create command, here is a workaround:
+```bash
+assignment_name="k8s-pod-security-baseline-${user_number}"
+policy_set_id="/providers/Microsoft.Authorization/policySetDefinitions/a8640138-9b0a-4a28-b8cb-1666c838647d"
+
+az rest \
+  --method PUT \
+  --url "https://management.azure.com${cluster_resource_id}/providers/Microsoft.Authorization/policyAssignments/${assignment_name}?api-version=2023-04-01" \
+  --body "{
+    \"properties\": {
+      \"displayName\": \"Kubernetes Pod Security Baseline for cluster ${arc_cluster_name}\",
+      \"description\": \"Enforces pod security baseline standards on Arc-enabled Kubernetes cluster\",
+      \"policyDefinitionId\": \"${policy_set_id}\"
+    }
+  }"
 ```
 
 As a result there should appear several contrainttemplates in your cluster:
@@ -329,4 +365,4 @@ kubectl describe $constraint_name
 
 You successfully completed challenge 2! 🚀🚀🚀
 
-[Next challenge](../../challenges/challenge-03.md) - [Next Challenge's Solution](../challenge-03/solution.md)
+[Back to challenge 01](../challenge-01/solution.md) - [Next challenge](../challenge-03/solution.md) - [Next Challenge's Solution](../../walkthroughs/challenge-03/solution.md)

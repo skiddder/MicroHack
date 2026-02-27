@@ -80,7 +80,7 @@ The K3s installation is **fully automated** during VM provisioning using cloud-i
 1. **k3s-master-setup.sh**: Automatically runs on the master VM during boot
    - Installs Docker and required packages
    - Downloads and installs K3s server with embedded etcd
-   - Configures kubeconfig for the mhadmin user
+  - Configures kubeconfig for the configured `admin_user`
    - Creates a script to retrieve the node token for workers
 
 2. **k3s-worker-setup.sh**: Automatically runs on worker VMs during boot
@@ -254,5 +254,5 @@ terraform destroy -var-file=fixtures.tfvars
 
 This will remove all created resources including VMs, networks, and public IPs.
 
-[Back to the challenges](../../Readme.md#challenge-1---onboarding-your-kubernetes-cluster)
+[To challenge 01](../challenges/challenge-01.md)
 

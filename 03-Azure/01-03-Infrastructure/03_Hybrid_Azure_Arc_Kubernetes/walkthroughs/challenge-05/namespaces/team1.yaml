@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    name: team1
+  annotations:
+    contoso.com/owner: "ops@contoso.com"
+  name: team1

@@ -20,9 +20,9 @@ apt-get update
 # Install Docker without pinning containerd.io version, continue on error
 apt-get install -y docker-ce docker-ce-cli containerd.io || echo "Docker installation failed, continuing with k3s (which includes its own container runtime)"
 
-# Add mhadmin to docker group if docker was installed successfully
+# Add admin user to docker group if docker was installed successfully
 if command -v docker &> /dev/null; then
-    usermod -aG docker mhadmin
+  usermod -aG docker ${admin_user}
 fi
 
 # Install K3s agent (worker node)

@@ -96,6 +96,7 @@ az deployment group create \
   --parameters dataController_metricsAndLogsDashboardPassword="$DC_PASSWORD" \
   --verbose
 ```
+*NOTE*: At the time of writing there is a bug in the az cli command to create the arc data controller. This is why we are using a workaround based on an ARM template deployment.
 
 The deployment takes 10-15 minutes. You can monitor progress with:
 
@@ -114,6 +115,8 @@ az deployment operation group list \
 ```
 
 ## Task 2 - Create SQL Managed Instance in connected cluster
+
+**IMPORTANT: 'sa' is not allowed as sql admin at managed instance level!**
 
 ```bash
 # Set SQL MI name (must start with a letter for Kubernetes naming rules)
@@ -148,19 +151,19 @@ kubectl get pods -n ${user_number}-onprem -l app.kubernetes.io/name=$sqlmi_name
 ### Get connection details
 
 ```bash
-# Get the master node public IP
-MASTER_IP=$(az vm show -g ${user_number}-onprem -n ${user_number}-onprem-master --show-details --query publicIps -o tsv)
+# Get public ip of master node via Azure cli according to user-number
+master_pip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" --output tsv)
 
 # Get the NodePort assigned to SQL MI
-NODE_PORT=$(kubectl get svc ${sqlmi_name}-external-svc -n ${user_number}-onprem -o jsonpath='{.spec.ports[0].nodePort}')
+node_port=$(kubectl get svc ${sqlmi_name}-external-svc -n ${user_number}-onprem -o jsonpath='{.spec.ports[0].nodePort}')
 
 echo "Connection details:"
-echo "Server: $MASTER_IP,$NODE_PORT"
-echo "Username: sa"
+echo "Server: $master_pip,$node_port"
+echo "Username: <your-user-name>"
 echo "Password: <your-sql-password>"
 echo ""
 echo "Connection string:"
-echo "Server=$MASTER_IP,$NODE_PORT;Database=master;User Id=sa;Password=<your-password>;TrustServerCertificate=true;"
+echo "Server=$master_pip,$node_port;Database=master;User Id=sa;Password=<your-password>;TrustServerCertificate=true;"
 ```
 
 ### Connect using VS Code SQL Server extension
