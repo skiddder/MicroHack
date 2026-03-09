@@ -18,8 +18,9 @@ In challenge 1 you will connect/onboard your existing K8s cluster to Azure Arc.
 
 ## Learning Resources
 * (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/overview)
-* (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/quickstart-connect-cluster?tabs=azure-cli)
+* (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/quickstart-connect-cluster)
 * (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/cluster-connect)
+* (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/arc-gateway-simplify-networking)
 * (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/azure-rbac)
 * (https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/kubernetes-resource-view)
 * (https://learn.microsoft.com/en-us/cli/azure/connectedk8s?view=azure-cli-latest)
