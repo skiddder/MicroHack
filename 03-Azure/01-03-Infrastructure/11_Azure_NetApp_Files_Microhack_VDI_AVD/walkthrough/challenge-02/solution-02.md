@@ -70,7 +70,7 @@ The participant/group number is the second octet in the network address
 
 * Subnet purpose: **Default**
 * IPv4 address range: Group Number 1 = **10.1.0.0/16, Group Number 2 = 10.2.0.0/16 ...**
-* Starting address: Group Number 1 = **10.1.1.0, Group Number 2 = 10.2.1.0 ...**
+* Starting address: Group Number 1 = **10.1.2.0, Group Number 2 = 10.2.2.0 ...**
 
 * Name: Specify **anf-subnet-hostpool{Group Number}** as the subnet name.
 * Address range: Specify **/24** the IP address range.
