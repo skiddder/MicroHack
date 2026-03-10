@@ -26,7 +26,7 @@ The participant/group number is the second octet in the network address
 4. On the Basics tab of Create virtual network, enter, or select the following information:
 
 * Subscription: **Use the default subscription**
-* Ressource Group: **rg-hostpool{Group Number}**
+* Ressource Group: **microhack-hostpool{Group Number}**
 * Virtual network name: **vnet-hostpool{Group Number}**
 * Region: **Germany West Central**
 
