@@ -250,6 +250,9 @@ When done with the microhack, call terraform destroy to clean up.
 
 ```bash
 terraform destroy -var-file=fixtures.tfvars
+
+# if there are remaining resources after terraform delete, use this script to remove the rest:
+
 ```
 
 This will remove all created resources including VMs, networks, and public IPs.
