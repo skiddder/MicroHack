@@ -62,7 +62,7 @@ Get the external IP of the openwebui
 kubectl get svc -n aimh
 
 azure_user=$(az account show --query user.name -o tsv)
-user_number=$(echo "${azure_user%@*}" | grep -oE '[0-9]+' | tail -n1 | sed 's/^0*//; s/^$/0/')
+user_number=$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')
 node_pip=$(az vm list-ip-addresses \
   --resource-group "${user_number}-k8s-onprem" \
   --name "${user_number}-k8s-master" \

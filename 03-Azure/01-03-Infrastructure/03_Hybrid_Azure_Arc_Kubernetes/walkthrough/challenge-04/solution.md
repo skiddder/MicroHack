@@ -21,9 +21,9 @@ The deployment uses ARM templates as this is the most robust way for deployment 
 ### Step 1: Gather required values
 
 ```bash
-# Get current LabUser's number
+# Get current user's number (e.g., LabUser-37@... or hackuser-067@... -> 37 or 67)
 export azure_user=$(az account show --query user.name --output tsv)
-export user_number=$(echo "${azure_user%@*}" | grep -oE '[0-9]+' | tail -n1 | sed 's/^0*//; s/^$/0/')
+export user_number=$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')
 export subscription_id=$(az account show --query id -o tsv)
 export resource_group="$user_number-k8s-arc"
 
