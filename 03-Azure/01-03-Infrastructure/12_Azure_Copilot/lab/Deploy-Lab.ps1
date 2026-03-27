@@ -96,7 +96,7 @@ $sshPublicKey = (Get-Content $sshPubKeyPath -Raw).Trim()
 Write-Host "`n[1/3] Deploying infrastructure (Bicep)..." -ForegroundColor Yellow
 $mainBicep  = Join-Path $scriptPath "..\iac\main.bicep"
 $timestamp  = Get-Date -Format "yyyyMMddHHmmss"
-$paramsFile = Join-Path $env:TEMP "copilot-workshop-params-$timestamp.json"
+$paramsFile = Join-Path ([System.IO.Path]::GetTempPath()) "copilot-workshop-params-$timestamp.json"
 
 @{
     '`$schema'     = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
@@ -127,10 +127,10 @@ Write-Host "  ✓ Infrastructure deployed" -ForegroundColor Green
 Write-Host "`n[2/3] Deploying buggy Flask app (Ch02)..." -ForegroundColor Yellow
 $webAppName = "app-copilot-buggy-$suffix"
 $appDir     = Join-Path $scriptPath "..\app"
-$zipPath    = Join-Path $env:TEMP "$webAppName.zip"
+$zipPath    = Join-Path ([System.IO.Path]::GetTempPath()) "$webAppName.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Compress-Archive -Path (Join-Path $appDir "*") -DestinationPath $zipPath -Force
-Invoke-Az webapp deploy --resource-group "rg-copilot-$suffix-ch02" --name $webAppName --src-path $zipPath --type zip --track-status false -o none
+Invoke-Az webapp deploy --resource-group "rg-copilot-$suffix-ch02" --name $webAppName --src-path $zipPath --type zip --track-status false --timeout 600 -o none
 Remove-Item $zipPath -Force
 Write-Host "  ✓ Flask app deployed to $webAppName" -ForegroundColor Green
 

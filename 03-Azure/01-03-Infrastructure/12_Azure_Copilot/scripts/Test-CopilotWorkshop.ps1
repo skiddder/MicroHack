@@ -18,6 +18,9 @@ param(
 $ErrorActionPreference = "Continue"
 Set-StrictMode -Version Latest
 
+# Ensure required CLI extensions are installed (application-insights is needed for Ch02 tests)
+az extension add --name application-insights --yes 2>$null
+
 $passed = 0
 $failed = 0
 $warnings = 0
