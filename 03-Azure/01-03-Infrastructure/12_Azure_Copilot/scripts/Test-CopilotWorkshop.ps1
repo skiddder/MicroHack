@@ -54,7 +54,12 @@ Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host " Azure Copilot Workshop - Test Suite" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan
 
-$account = az account show -o json 2>&1 | ConvertFrom-Json
+$accountJson = az account show -o json 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Not logged in to Azure CLI. Run 'az login' first." -ForegroundColor Red
+    exit 1
+}
+$account = $accountJson | ConvertFrom-Json
 Write-Host "Subscription: $($account.name)`n" -ForegroundColor Green
 
 # ──────────────────────────────────────────────

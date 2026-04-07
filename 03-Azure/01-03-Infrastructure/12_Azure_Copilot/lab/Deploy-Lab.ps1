@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     Deploys the Azure Copilot Workshop lab resources (HackboxConsole entry-point).
@@ -50,10 +51,9 @@ $Location = if ([string]::IsNullOrEmpty($PreferredLocation)) { "francecentral" }
 # Helper
 # ──────────────────────────────────────────────
 function Invoke-Az {
-    & az $args
+    & az @args
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Azure CLI command failed with exit code $LASTEXITCODE"
-        exit $LASTEXITCODE
+        throw "Azure CLI command failed with exit code $LASTEXITCODE"
     }
 }
 
@@ -154,9 +154,10 @@ if ($DeploymentType -in @('resourcegroup','resourcegroup-with-subscriptionowner'
         if ($AllowedEntraUserIds.Count -gt 0) {
             foreach ($userId in $AllowedEntraUserIds) {
                 $scope = "/subscriptions/$SubscriptionId/resourceGroups/$rg"
-                if (-not (Get-AzRoleAssignment -ObjectId $userId -RoleDefinitionName "Owner" -Scope $scope -ErrorAction SilentlyContinue)) {
+                $existing = az role assignment list --assignee $userId --role "Owner" --scope $scope -o json 2>$null | ConvertFrom-Json
+                if (-not $existing -or $existing.Count -eq 0) {
                     Write-Host "Assigning Owner role to $userId on $rg"
-                    New-AzRoleAssignment -ObjectId $userId -RoleDefinitionName "Owner" -Scope $scope -ErrorAction Stop | Out-Null
+                    Invoke-Az role assignment create --assignee $userId --role "Owner" --scope $scope -o none
                 }
             }
         }

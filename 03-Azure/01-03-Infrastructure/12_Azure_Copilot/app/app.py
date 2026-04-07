@@ -8,12 +8,14 @@ This app intentionally has issues that generate Application Insights alerts:
 - /       -> healthy endpoint (200 OK)
 - /health -> health check
 """
+import os
 import time
 import logging
 from flask import Flask, jsonify
 from azure.monitor.opentelemetry import configure_azure_monitor
 
-configure_azure_monitor()
+if os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+    configure_azure_monitor()
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)

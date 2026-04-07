@@ -1,6 +1,6 @@
 # Challenge 7 - Capstone Multi-Agent Scenario
 
-**[Home](../Readme.md)** - [Previous Challenge](challenge-06.md)
+**[Home](../Readme.md)** - [Previous Challenge](challenge-06.md) - [Finish](finish.md)
 
 ## Goal
 

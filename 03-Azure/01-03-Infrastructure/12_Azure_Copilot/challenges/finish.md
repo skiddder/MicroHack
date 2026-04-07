@@ -4,7 +4,7 @@
 
 ## Congratulations
 
-Congratulations! :partying_face: You finished the MicroHack for Azure Copilot.
+Congratulations! 🥳 You finished the MicroHack for Azure Copilot.
 
 We hope you've had the opportunity to experience Azure Copilot and its five specialized agents — Deployment, Observability, Optimization, Resiliency, and Troubleshooting.
 

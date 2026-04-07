@@ -113,6 +113,9 @@ Simulate a Cosmos DB connection issue investigation:
 
 ### Task 3: Troubleshoot AKS Cluster Issues (10 min)
 
+> [!NOTE]
+> No AKS cluster is deployed as part of the lab. This task is exploratory — you can select an existing AKS cluster in your subscription, or simply follow the prompts to see what guidance Azure Copilot provides without a specific resource selected.
+
 Investigate Kubernetes cluster problems:
 
 1. Start a new conversation with agent mode enabled
