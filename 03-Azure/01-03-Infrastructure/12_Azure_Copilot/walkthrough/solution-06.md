@@ -142,6 +142,9 @@ Even when the agent can't directly access a resource (e.g., testing from your lo
 
 ## Task 3: Troubleshoot AKS Cluster Issues
 
+> [!NOTE]
+> No AKS cluster is deployed as part of the lab. The expected responses below are illustrative examples. Your actual output will vary depending on whether you select an existing AKS cluster or follow the prompts without one.
+
 ### Steps
 
 **Prompt 1:** _"Investigate the health of my pods."_

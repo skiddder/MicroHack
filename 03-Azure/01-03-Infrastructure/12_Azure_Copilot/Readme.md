@@ -75,6 +75,7 @@ In order to use the MicroHack time most effectively, the following tasks should 
 3. **Agents (Preview) access** — Your tenant must have access to Agents (preview) in Azure Copilot. Access is managed at the tenant level and rolled out gradually. Check with your tenant administrator, or [request access](https://aka.ms/azurecopilot/agents/feedbackprogram).
 4. **WebSocket connections** — Your organization must allow WebSocket connections to `https://directline.botframework.com`. Ask your network administrator to enable this if blocked.
 5. [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) installed and logged in (`az login`). **Hint:** Make sure to use the latest version available.
+6. [PowerShell 7+](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) (pwsh) — required for all deployment and test scripts. **Hint:** On macOS install via `brew install powershell/tap/powershell`.
 
 In summary:
 
@@ -82,6 +83,7 @@ In summary:
 - Azure Copilot enabled for your tenant
 - Agents (Preview) enabled for your tenant
 - Azure CLI installed
+- PowerShell 7+ (pwsh) installed
 - WebSocket connectivity to `directline.botframework.com`
 
 Permissions for the deployment:
@@ -145,4 +147,4 @@ Running all resources for one day costs approximately **$11.50–14**. For a 2-d
 
 ## Contributors
 
-- Dmitriy Nekrasov [GitHub](https://github.com/nekdima); [LinkedIn](https://www.linkedin.com/in/inthedark/)
+- Dmitriy Nekrasov [GitHub](https://github.com/nekdima); [LinkedIn](https://www.linkedin.com/in/dmne/)
