@@ -84,8 +84,7 @@ if (-not (Test-Path $sshPubKeyPath)) {
     $sshKeyPath = Join-Path $HOME ".ssh" "id_rsa"
     ssh-keygen -t rsa -b 4096 -f $sshKeyPath -q -N ""
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Failed to generate SSH key pair."
-        exit 1
+        throw "Failed to generate SSH key pair. ssh-keygen exited with code $LASTEXITCODE"
     }
 }
 $sshPublicKey = (Get-Content $sshPubKeyPath -Raw).Trim()
