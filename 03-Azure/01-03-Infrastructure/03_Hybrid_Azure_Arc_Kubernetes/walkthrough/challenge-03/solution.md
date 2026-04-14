@@ -56,7 +56,7 @@ helm install openwebui open-webui/open-webui \
   --set persistence.enabled=true \
   --set persistence.size=5Gi
 ```
-
+# validate whether hostname is correct or it needs to be pointing to: --set ollamaUrls[0]="http://ollama.aimh.svc.cluster.local:15000" 
 Get the external IP of the openwebui
 ```bash
 kubectl get svc -n aimh

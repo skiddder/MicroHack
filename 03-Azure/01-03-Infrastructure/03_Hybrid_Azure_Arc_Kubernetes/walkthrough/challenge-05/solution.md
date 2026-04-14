@@ -1,6 +1,6 @@
 # Walkthrough Challenge 5 - Configure Gitops for cluster management
 
-[Back to challenge](../../challenges/challenge-05.md) - [Next Challenge's Solution](../challenge-06/solution.md)
+[Back to challenge](../../challenges/challenge-05.md)
 
 ### Prerequisites
 * [helm](https://helm.sh/docs/intro/install/)

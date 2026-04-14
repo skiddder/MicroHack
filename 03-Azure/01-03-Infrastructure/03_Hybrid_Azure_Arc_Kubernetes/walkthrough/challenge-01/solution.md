@@ -20,7 +20,7 @@ In case you are prompted to select a subscription, please do so. In the microhac
 
 Validate that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem". 
 Click on your onprem resource group's name (i.e. 37-k8s-onprem).
-There should be 3 VMs in this resource group. Make sure that all VMs are in state 'running'. 
+There should be 4 VMs in this resource group (master, worker1, worker2, workstation). Make sure that all VMs are in state 'running'. 
 ![img-start-vm](img/vm-start.png)
 
 To connect to your k8s cluster, we first need to merge the cluster credentials into your local ~/.kube/config file. You can use the following bash script for this:
@@ -199,4 +199,4 @@ Now, reload the resources page in the Azure portl. You should see at least the f
 
 You successfully completed challenge 1! 🚀🚀🚀
 
-[Next challenge](../challenge-02/solution.md) - [Next Challenge's Solution](../../walkthroughs/challenge-02/solution.md)
+[Next challenge](../../challenges/challenge-02.md) - [Next Challenge's Solution](../challenge-02/solution.md)
