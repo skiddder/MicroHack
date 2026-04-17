@@ -13,17 +13,22 @@ BASTION_RG="${bastion_rg}"
 PIDS_FILE="$(dirname "$0")/.bastion-tunnel-pids"
 
 if [[ "$1" == "--stop" ]]; then
+  echo "Stopping Bastion tunnels..."
+  # Kill tracked PIDs
   if [[ -f "$PIDS_FILE" ]]; then
-    echo "Stopping Bastion tunnels..."
     while read -r pid; do
       kill "$pid" 2>/dev/null && echo "  Stopped tunnel (PID $pid)" || true
     done < "$PIDS_FILE"
     rm -f "$PIDS_FILE"
-  else
-    echo "No running tunnels found."
   fi
+  # Also kill any orphaned bastion tunnel processes for this bastion
+  pkill -f "az network bastion tunnel --name $BASTION_NAME" 2>/dev/null && echo "  Cleaned up orphaned tunnel processes" || true
   exit 0
 fi
+
+# Kill any leftover tunnels before starting new ones
+pkill -f "az network bastion tunnel --name $BASTION_NAME" 2>/dev/null || true
+sleep 1
 
 echo "Opening Bastion tunnels (Bastion: $BASTION_NAME in $BASTION_RG)..."
 echo ""

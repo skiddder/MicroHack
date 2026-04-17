@@ -24,6 +24,7 @@ There should be 4 VMs in this resource group (master, worker1, worker2, workstat
 ![img-start-vm](img/vm-start.png)
 
 To connect to your k8s cluster, we first need to merge the cluster credentials into your local ~/.kube/config file. You can use the following bash script for this:
+
 ```bash
 # Set admin username (use the admin_user value provided by your coach)
 admin_user="<replace-with-admin_user-from-fixtures.tfvars>"
@@ -32,21 +33,31 @@ admin_user="<replace-with-admin_user-from-fixtures.tfvars>"
 azure_user=$(az account show --query user.name --output tsv | tr -d '\r')
 user_number=$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')
 
-# Get public ip of master node via Azure cli according to user-number
-master_pip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" --output tsv)
+# Get private IP of master node
+master_ip=$(az vm show --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --show-details --query privateIps --output tsv)
+
+# ── Optional: only if working from your LOCAL machine instead of the workstation VM ──
+# Uncomment the following lines to tunnel SSH and the K3s API through Azure Bastion:
+# master_vm_id=$(az vm show --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query id --output tsv)
+# az network bastion tunnel --name mh-bastion --resource-group mh-bastion --target-resource-id "$master_vm_id" --resource-port 22 --port 2222 &
+# az network bastion tunnel --name mh-bastion --resource-group mh-bastion --target-resource-id "$master_vm_id" --resource-port 6443 --port 6443 &
+# sleep 5 ; master_ip="127.0.0.1" ; scp_port="-P 2222"
+# ── End optional block ──
 
 # Create .kube directory if it doesn't exist
 mkdir -p ~/.kube
 
 # Copy the kubeconfig to standard location
-scp $admin_user@$master_pip:~/.kube/config ~/.kube/config
+scp ${scp_port:-} $admin_user@$master_ip:~/.kube/config ~/.kube/config
 
-# replace localhost address with the public ip of master node
-sed -i "s/127.0.0.1/$master_pip/g" ~/.kube/config
+# Replace localhost address with the master IP
+sed -i "s/127.0.0.1/$master_ip/g" ~/.kube/config
 
-# Now kubectl works directly on your local client - no need to ssh into the master node anymore
+# Now kubectl works directly — no need to ssh into the master node anymore
 kubectl get nodes
 ```
+
+💡 **How does this work?** From the workstation VM, `master_ip` is the private IP and all traffic stays on the VNet. If the optional block is uncommented, `master_ip` is overridden to `127.0.0.1` — SCP goes through the SSH tunnel (port 2222) and the sed becomes a no-op, so `kubectl` talks to `127.0.0.1:6443` through the K3s API tunnel.
 
 ## Task 2 - Connect K8s cluster using script
 
