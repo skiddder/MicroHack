@@ -29,7 +29,7 @@ To connect to your k8s cluster, we first need to merge the cluster credentials i
 admin_user="<replace-with-admin_user-from-fixtures.tfvars>"
 
 # Extract trailing number from Azure username before '@' (e.g., LabUser-37@... or hackuser-067@... -> 37 or 67)
-azure_user=$(az account show --query user.name --output tsv)
+azure_user=$(az account show --query user.name --output tsv | tr -d '\r')
 user_number=$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')
 
 # Get public ip of master node via Azure cli according to user-number
@@ -65,10 +65,16 @@ kubectl get nodes
 
 💡 *Important*: Make sure that your kubectl works and is pointing to the k8s cluster you want to onboard before executing the script!
 
+💡 *WSL users*: Clone to a native Linux path (e.g. `~`), **not** to `/mnt/c/...`. The Windows NTFS mount does not support POSIX file permissions and `git clone` will fail there.
+
 ```bash
-# Clone the repository (or copy the script content)
-git clone https://github.com/microsoft/MicroHack.git
-cd MicroHack/03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthroughs/challenge-01
+# Clone only the Arc Kubernetes microhack using sparse-checkout
+cd ~
+git clone --no-checkout --filter=blob:none https://github.com/microsoft/MicroHack.git
+cd MicroHack
+git sparse-checkout set 03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes
+git checkout
+cd 03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/challenge-01
 
 # Make the script executable and run it
 chmod +x az_connect_k8s.sh

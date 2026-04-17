@@ -80,14 +80,22 @@
       delay: 10
       until: wsl_ver.rc == 0
 
+    - name: Check if Ubuntu WSL distribution is already installed
+      ansible.windows.win_shell: (wsl -l -q) -contains 'Ubuntu'
+      register: wsl_list
+      changed_when: false
+      failed_when: false
+
     - name: Install Ubuntu WSL distribution
       ansible.windows.win_command: wsl --install -d Ubuntu --no-launch
       register: wsl_install_ubuntu
       failed_when: wsl_install_ubuntu.rc not in [0, 1]
+      when: "'True' not in wsl_list.stdout"
 
     - name: Reboot after Ubuntu install
       ansible.windows.win_reboot:
         reboot_timeout: 600
+      when: wsl_install_ubuntu is changed
 
     - name: Initialize Ubuntu distro (first launch)
       ansible.windows.win_command: >-
@@ -107,7 +115,7 @@
     - name: Install prerequisite tools in WSL Ubuntu
       ansible.windows.win_command: wsl -d Ubuntu -u root -- bash /mnt/c/Temp/setup-wsl-tools.sh
       register: wsl_tools
-      async: 600
+      async: 1200
       poll: 30
 
     - name: Show WSL tools installation output

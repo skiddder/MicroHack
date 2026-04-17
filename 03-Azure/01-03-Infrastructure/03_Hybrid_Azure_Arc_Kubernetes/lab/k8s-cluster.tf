@@ -63,6 +63,30 @@ resource "azurerm_network_security_group" "onprem" {
     destination_address_prefix = "*"
   }
 
+  security_rule {
+    name                       = "K3s-Kubelet"
+    priority                   = 1004
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "10250"
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "K3s-VXLAN"
+    priority                   = 1005
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Udp"
+    source_port_range          = "*"
+    destination_port_range     = "8472"
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "*"
+  }
+
   tags = {
     Project = "simulated onprem k8s cluster for microhack"
   }

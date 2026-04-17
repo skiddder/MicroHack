@@ -6,7 +6,7 @@ set -e
 echo "Exporting environment variables"
 
 # Extract user number from Azure username (e.g., LabUser-37 -> 37)
-azure_user=$(az account show --query user.name --output tsv)
+azure_user=$(az account show --query user.name --output tsv | tr -d '\r')
 user_number=$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')
 
 if [ -z "$user_number" ]; then
