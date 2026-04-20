@@ -171,13 +171,13 @@ For background and conceptual reference, review the article [What is SSH Posture
 💥 **Basic settings:**
 
 1. **Subscription**: Select your subscription (e.g. **Micro-Hack-1**)
-2. **Resource group**: Select the same resource group as the Azure Local instance (e.g. **rg-localbox**)
+2. **Resource group**: `labuser-XX` (replace XX with your own suffix)
 3. **Virtual machine name**: `labuserXX-vm-01` (replace XX with your own suffix)
 4. **Security type**: Select **Standard**
 
 ![Azure Local](./images/localbox_02.jpg)
 
-5. **Image**: Select an available gallery image (e.g., Windows Server 2025)
+5. **Image**: Select the available gallery image **2025-datacenter-azure-edition-smalldisk-01** (Windows Server 2025)
 6. **Virtual processor count**: 2
 7. **Memory (MB)**: 4096
 
