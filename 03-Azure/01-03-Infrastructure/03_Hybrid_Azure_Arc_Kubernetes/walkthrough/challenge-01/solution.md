@@ -20,33 +20,44 @@ In case you are prompted to select a subscription, please do so. In the microhac
 
 Validate that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem". 
 Click on your onprem resource group's name (i.e. 37-k8s-onprem).
-There should be 3 VMs in this resource group. Make sure that all VMs are in state 'running'. 
+There should be 4 VMs in this resource group (master, worker1, worker2, workstation). Make sure that all VMs are in state 'running'. 
 ![img-start-vm](img/vm-start.png)
 
 To connect to your k8s cluster, we first need to merge the cluster credentials into your local ~/.kube/config file. You can use the following bash script for this:
+
 ```bash
 # Set admin username (use the admin_user value provided by your coach)
 admin_user="<replace-with-admin_user-from-fixtures.tfvars>"
 
 # Extract trailing number from Azure username before '@' (e.g., LabUser-37@... or hackuser-067@... -> 37 or 67)
-azure_user=$(az account show --query user.name --output tsv)
-user_number=$(echo "${azure_user%@*}" | grep -oE '[0-9]+' | tail -n1 | sed 's/^0*//; s/^$/0/')
+azure_user=$(az account show --query user.name --output tsv | tr -d '\r')
+user_number=$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')
 
-# Get public ip of master node via Azure cli according to user-number
-master_pip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" --output tsv)
+# Get private IP of master node
+master_ip=$(az vm show --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --show-details --query privateIps --output tsv)
+
+# ── Optional: only if working from your LOCAL machine instead of the workstation VM ──
+# Uncomment the following lines to tunnel SSH and the K3s API through Azure Bastion:
+# master_vm_id=$(az vm show --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query id --output tsv)
+# az network bastion tunnel --name mh-bastion --resource-group mh-bastion --target-resource-id "$master_vm_id" --resource-port 22 --port 2222 &
+# az network bastion tunnel --name mh-bastion --resource-group mh-bastion --target-resource-id "$master_vm_id" --resource-port 6443 --port 6443 &
+# sleep 5 ; master_ip="127.0.0.1" ; scp_port="-P 2222"
+# ── End optional block ──
 
 # Create .kube directory if it doesn't exist
 mkdir -p ~/.kube
 
 # Copy the kubeconfig to standard location
-scp $admin_user@$master_pip:~/.kube/config ~/.kube/config
+scp ${scp_port:-} $admin_user@$master_ip:~/.kube/config ~/.kube/config
 
-# replace localhost address with the public ip of master node
-sed -i "s/127.0.0.1/$master_pip/g" ~/.kube/config
+# Replace localhost address with the master IP
+sed -i "s/127.0.0.1/$master_ip/g" ~/.kube/config
 
-# Now kubectl works directly on your local client - no need to ssh into the master node anymore
+# Now kubectl works directly — no need to ssh into the master node anymore
 kubectl get nodes
 ```
+
+💡 **How does this work?** From the workstation VM, `master_ip` is the private IP and all traffic stays on the VNet. If the optional block is uncommented, `master_ip` is overridden to `127.0.0.1` — SCP goes through the SSH tunnel (port 2222) and the sed becomes a no-op, so `kubectl` talks to `127.0.0.1:6443` through the K3s API tunnel.
 
 ## Task 2 - Connect K8s cluster using script
 
@@ -65,10 +76,16 @@ kubectl get nodes
 
 💡 *Important*: Make sure that your kubectl works and is pointing to the k8s cluster you want to onboard before executing the script!
 
+💡 *WSL users*: Clone to a native Linux path (e.g. `~`), **not** to `/mnt/c/...`. The Windows NTFS mount does not support POSIX file permissions and `git clone` will fail there.
+
 ```bash
-# Clone the repository (or copy the script content)
-git clone https://github.com/microsoft/MicroHack.git
-cd MicroHack/03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthroughs/challenge-01
+# Clone only the Arc Kubernetes microhack using sparse-checkout
+cd ~
+git clone --no-checkout --filter=blob:none https://github.com/microsoft/MicroHack.git
+cd MicroHack
+git sparse-checkout set 03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes
+git checkout
+cd 03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/challenge-01
 
 # Make the script executable and run it
 chmod +x az_connect_k8s.sh
@@ -199,4 +216,4 @@ Now, reload the resources page in the Azure portl. You should see at least the f
 
 You successfully completed challenge 1! 🚀🚀🚀
 
-[Next challenge](../challenge-02/solution.md) - [Next Challenge's Solution](../../walkthroughs/challenge-02/solution.md)
+[Next challenge](../../challenges/challenge-02.md) - [Next Challenge's Solution](../challenge-02/solution.md)

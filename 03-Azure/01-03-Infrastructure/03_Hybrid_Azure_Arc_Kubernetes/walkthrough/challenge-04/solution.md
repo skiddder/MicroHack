@@ -21,9 +21,9 @@ The deployment uses ARM templates as this is the most robust way for deployment 
 ### Step 1: Gather required values
 
 ```bash
-# Get current LabUser's number
+# Get current user's number (e.g., LabUser-37@... or hackuser-067@... -> 37 or 67)
 export azure_user=$(az account show --query user.name --output tsv)
-export user_number=$(echo "${azure_user%@*}" | grep -oE '[0-9]+' | tail -n1 | sed 's/^0*//; s/^$/0/')
+export user_number=$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')
 export subscription_id=$(az account show --query id -o tsv)
 export resource_group="$user_number-k8s-arc"
 
@@ -48,7 +48,7 @@ echo "GUID 2: $guid2"
 Copy the template file and replace placeholders:
 
 ```bash
-cd walkthroughs/challenge-04/templates
+cd walkthrough/challenge-04/templates
 
 # Remove the old one and start fresh
 rm parameters-my.json
@@ -145,25 +145,25 @@ kubectl get pods -n ${user_number}-onprem -l app.kubernetes.io/name=$sqlmi_name
 ## Task 3 - Connect to your SQL Managed Instance
 
 ### Prerequisites
-
-**Network Security Group (NSG)**: The Terraform deployment has already configured the NSG to allow external access to the NodePort range (30000-32767) required for SQL MI connectivity. No additional NSG configuration is needed.
+* In this microhack the K3s cluster is configured to expose services on the private IP address of the master node per default. So you should use the Windows workstation in your lab environment to connect to the SQL MI.
+* **Network Security Group (NSG)**: The Terraform deployment has already configured the NSG to allow external access to the NodePort range (30000-32767) required for SQL MI connectivity. No additional NSG configuration is needed.
 
 ### Get connection details
 
 ```bash
 # Get public ip of master node via Azure cli according to user-number
-master_pip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" --output tsv)
+master_ip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.privateIpAddresses[0]" --output tsv)
 
 # Get the NodePort assigned to SQL MI
 node_port=$(kubectl get svc ${sqlmi_name}-external-svc -n ${user_number}-onprem -o jsonpath='{.spec.ports[0].nodePort}')
 
 echo "Connection details:"
-echo "Server: $master_pip,$node_port"
+echo "Server: $master_ip,$node_port"
 echo "Username: <your-user-name>"
 echo "Password: <your-sql-password>"
 echo ""
 echo "Connection string:"
-echo "Server=$master_pip,$node_port;Database=master;User Id=sa;Password=<your-password>;TrustServerCertificate=true;"
+echo "Server=$master_ip,$node_port;Database=master;User Id=sa;Password=<your-password>;TrustServerCertificate=true;"
 ```
 
 ### Connect using VS Code SQL Server extension
@@ -172,14 +172,14 @@ echo "Server=$master_pip,$node_port;Database=master;User Id=sa;Password=<your-pa
 
 ![SQL PlugIn installation](img/01-sql-plugin-install.png)
 
-#### 2. After installation completed, in the SQL PlutIn click **Add Connection**:
+#### 2. After installation completed, in the SQL PlugIn click **Add Connection**:
 
 ![Connect to SQL MI](img/02-connect.sqlmi.png)
 
 #### 3. Enter connection details:
 **💡Note: In this lab we are using the public ip to connect to the service.**
    - **Input type**: Parameters
-   - **Server:** `<Public-IP-Master-Node>,<NODE_PORT>` (e.g., `20.123.45.67,31433`, optionally, use the following command: ```echo "$master_pip,$(kubectl get svc ${sqlmi_name}-external-svc -n ${custom_location} -o jsonpath='{.spec.ports[0].nodePort}')"```
+   - **Server:** `<Public-IP-Master-Node>,<NODE_PORT>` (e.g., `20.123.45.67,31433`, optionally, use the following command: ```echo "$master_ip,$(kubectl get svc ${sqlmi_name}-external-svc -n ${custom_location} -o jsonpath='{.spec.ports[0].nodePort}')"```
    - **Trust Server Certificate:** Yes
    - **Authentication Type:** SQL Login
    - **User name:** (the admin account you entered during SQL MI creation)

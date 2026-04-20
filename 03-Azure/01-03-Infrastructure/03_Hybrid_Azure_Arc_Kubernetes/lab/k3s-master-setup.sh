@@ -26,27 +26,14 @@ fi
 export INSTALL_K3S_VERSION=${k3s_version}
 export K3S_TOKEN=${cluster_token}
 
-# Get external IP reliably
-EXTERNAL_IP=$(curl -s --max-time 10 https://ipinfo.io/ip 2>/dev/null || curl -s --max-time 10 http://checkip.amazonaws.com 2>/dev/null || echo "")
-
 # Install K3s with embedded etcd and disable traefik (we might want to use nginx-ingress)
-if [ -n "$EXTERNAL_IP" ] && [[ "$EXTERNAL_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    curl -sfL https://get.k3s.io | sh -s - server \
-      --cluster-init \
-      --disable traefik \
-      --disable servicelb \
-      --write-kubeconfig-mode 644 \
-      --node-external-ip "$EXTERNAL_IP" \
-      --token $${K3S_TOKEN}
-else
-    # Fallback without external IP if detection fails
-    curl -sfL https://get.k3s.io | sh -s - server \
-      --cluster-init \
-      --disable traefik \
-      --disable servicelb \
-      --write-kubeconfig-mode 644 \
-      --token $${K3S_TOKEN}
-fi
+# All cluster communication uses private IPs (workstations access via VNet, external via Bastion)
+curl -sfL https://get.k3s.io | sh -s - server \
+  --cluster-init \
+  --disable traefik \
+  --disable servicelb \
+  --write-kubeconfig-mode 644 \
+  --token $${K3S_TOKEN}
 
 # Wait for K3s to be ready
 while ! kubectl get nodes > /dev/null 2>&1; do

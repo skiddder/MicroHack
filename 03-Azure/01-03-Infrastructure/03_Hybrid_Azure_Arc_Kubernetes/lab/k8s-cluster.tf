@@ -28,14 +28,14 @@ resource "azurerm_network_security_group" "onprem" {
   resource_group_name = azurerm_resource_group.mh_k8s_onprem[count.index].name
 
   security_rule {
-    name                       = "SSH"
+    name                       = "SSH-from-Workstation"
     priority                   = 1001
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "22"
-    source_address_prefix      = "*"
+    source_address_prefix      = "VirtualNetwork"
     destination_address_prefix = "*"
   }
 
@@ -47,7 +47,7 @@ resource "azurerm_network_security_group" "onprem" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "6443"
-    source_address_prefix      = "*"
+    source_address_prefix      = "VirtualNetwork"
     destination_address_prefix = "*"
   }
 
@@ -59,7 +59,31 @@ resource "azurerm_network_security_group" "onprem" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "30000-32767"
-    source_address_prefix      = "*"
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "K3s-Kubelet"
+    priority                   = 1004
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "10250"
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "K3s-VXLAN"
+    priority                   = 1005
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Udp"
+    source_port_range          = "*"
+    destination_port_range     = "8472"
+    source_address_prefix      = "VirtualNetwork"
     destination_address_prefix = "*"
   }
 
