@@ -1,6 +1,6 @@
 ![image](./Images/Preview.png)
 
-# Microsoft Migrate & Modernize MicroHack Day - Ask Analyze Act - Talk to Your Data in the Era of AI
+# Ask Analyze Act - Talk to Your Data in the Era of AI
 - [**MicroHack introduction**](#MicroHack-introduction)
 - [**MicroHack context**](#microhack-context)
 - [**Objectives**](#objectives)

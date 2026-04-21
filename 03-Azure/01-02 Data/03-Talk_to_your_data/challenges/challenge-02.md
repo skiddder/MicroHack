@@ -4,21 +4,23 @@
 
 ## Goal 
 
-The goal of this exercise is to build a unified, analytics‑ and AI‑ready data foundation in Microsoft Fabric that enables governed reporting, natural language querying, and intelligent data interaction through a Data Agent.
+The goal of this exercise is to build a report-ready and AI-ready semantic layer in Microsoft Fabric by creating and optimizing a Semantic Model, refining a Power BI report, and preparing model metadata for natural language analysis with Copilot.
 
 
 ## Actions
 
-* Combine mirrored Azure SQL Managed Instance databases and external CSV files into a single Lakehouse using shortcuts
-* Create and optimize a Semantic Model from the Lakehouse tables, including relationships and time‑based logic 
-* Prepare the data for AI by simplifying the schema and providing AI instructions for business context 
-* Set up a Data Agent using the prepared Lakehouse and Semantic Model as trusted data sources 
+* Enable the required Power BI / Fabric trial to unlock reporting and AI capabilities
+* Create and optimize a Semantic Model from the Lakehouse tables, including key relationships and cross-filter behavior
+* Auto-create and refine a Power BI report using Copilot prompts and manual adjustments
+* Prepare the semantic model for AI by simplifying the schema, reviewing verified answers, and adding AI instructions
+* Explore Power BI Copilot with the prepared model to validate business-friendly responses
 
 ## Success criteria
 
-* You have successfully unified operational and external data in a single Lakehouse that is accessible via Microsoft Fabric  
-* You have successfully created and optimized a Semantic Model that supports reliable reporting and efficient query performance  
-* You have successfully prepared the data schema and AI instructions to enable accurate natural language queries  
-* You have successfully validated that the Data Agent returns relevant, context‑aware answers based on trusted analytics data
+* You have successfully enabled the Power BI / Fabric trial and can access reporting and Copilot features  
+* You have successfully created and optimized a Semantic Model that supports reliable reporting and efficient analysis  
+* You have successfully generated and refined a report that reflects key business insights  
+* You have successfully prepared the model for AI by simplifying schema exposure and adding business-focused AI instructions  
+* You have successfully validated Power BI Copilot responses against the prepared semantic model
 
 [Open the step-by-step solution for Challenge 2](../walkthrough/challenge-02/solution-02.md)
