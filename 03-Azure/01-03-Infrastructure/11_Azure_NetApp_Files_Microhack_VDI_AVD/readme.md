@@ -79,11 +79,11 @@ No prior Azure NetApp Files experience is required, but a general understanding 
 
 * [Solution 1 - Get to know and Register](./walkthrough/challenge-01/solution-01.md)
 * [Solution 2 - Setup Network Configuration](./walkthrough/challenge-02/solution-02.md)
-* [Solution 3 - Setting Up Azure NetApp Files](./walkthrough/challenge-02/solution-03.md)
-* [Solution 4 - Setting Up Azure NetApp Files for VDI/AVD](./walkthrough/challenge-02/solution-04.md)
-* [Solution 5 - Managing and Monitoring Azure NetApp Files](./walkthrough/challenge-02/solution-05.md)
-* [Solution 6 - Setting Up Azure NetApp Files Backup](./walkthrough/challenge-02/solution-06.md)
-* [Solution 7 - Best Practices and Use Cases](./walkthrough/challenge-02/solution-07.md)
+* [Solution 3 - Setting Up Azure NetApp Files](./walkthrough/challenge-03/solution-03.md)
+* [Solution 4 - Setting Up Azure NetApp Files for VDI/AVD](./walkthrough/challenge-04/solution-04.md)
+* [Solution 5 - Managing and Monitoring Azure NetApp Files](./walkthrough/challenge-05/solution-05.md)
+* [Solution 6 - Setting Up Azure NetApp Files Backup](./walkthrough/challenge-06/solution-06.md)
+* [Solution 7 - Best Practices and Use Cases](./walkthrough/challenge-07/solution-07.md)
 
 ## Contributors
 
