@@ -33,11 +33,7 @@ Throughout this MicroHack, you've gained hands-on experience with the complete m
 
 **Skills Acquired:**
 
-- Azure Migrate configuration and management
-- Business case development and financial analysis
 - AI-powered code modernization with GitHub Copilot
-- Migration strategy selection (Rehost, Replatform, Refactor)
-- Cloud readiness assessment and remediation
 - Azure App Service deployment
 - AppCAT assessment for Java applications
 - Automated validation and testing workflows
@@ -45,7 +41,6 @@ Throughout this MicroHack, you've gained hands-on experience with the complete m
 **Key Takeaways:**
 
 This workshop demonstrated the complete migration lifecycle from discovery to deployment:
-- **Assessment First**: Azure Migrate provides comprehensive discovery and financial justification before migration
 - **AI-Powered Modernization**: GitHub Copilot dramatically accelerates code modernization while maintaining quality
 - **Platform Migration**: Successfully migrated dependencies (S3 to Blob Storage, Windows AD to Entra ID) alongside application code
 - **Validation at Every Step**: Automated testing ensures functionality is preserved throughout modernization
@@ -57,38 +52,13 @@ This workshop demonstrated the complete migration lifecycle from discovery to de
 
 **Continue Your Azure Journey:**
 
-- [Azure Migrate Documentation](https://learn.microsoft.com/azure/migrate/) - Deep dive into migration tools and strategies
 - [Azure Well-Architected Framework](https://learn.microsoft.com/azure/well-architected/) - Learn enterprise architecture best practices
 - [GitHub Copilot for Azure](https://learn.microsoft.com/azure/developer/github-copilot/) - Explore AI-powered development tools
-
-**Hands-On Labs:**
-
 - [Azure Migration Center](https://azure.microsoft.com/migration/) - Additional migration resources and tools
 - [Azure Architecture Center](https://learn.microsoft.com/azure/architecture/) - Reference architectures and patterns
 - [Microsoft Learn - Azure Migration Path](https://learn.microsoft.com/training/paths/migrate-modernize-innovate-azure/) - Structured learning modules
-
-**Continue Modernization:**
-
-- Explore additional migration scenarios in your own environments
-- Practice with other workload types (containers, databases, etc.)
-- Experiment with GitHub Copilot for other modernization tasks
-- Continue with other migration tasks identified in the assessment reports
-- Explore containerization options for deploying to AKS or Azure Container Apps
-- Implement additional Azure services like Azure Service Bus (replacing RabbitMQ)
-- Apply Java runtime upgrades using the identified opportunities
-- Configure managed identities for passwordless authentication
 
 If you want to give feedback, please don't hesitate to open an issue on the repository or get in touch with one of us directly.
 
 Thank you for investing the time and see you next time!
 
----
-
-## Additional Resources
-
-- [Azure Migrate Documentation](https://learn.microsoft.com/azure/migrate/)
-- [Azure Migration Center](https://azure.microsoft.com/migration/)
-- [GitHub Copilot Documentation](https://docs.github.com/copilot)
-- [Azure Well-Architected Framework](https://learn.microsoft.com/azure/well-architected/)
-- [Cloud Adoption Framework](https://learn.microsoft.com/azure/cloud-adoption-framework/)
-- [Microsoft Learn - Azure Migration Path](https://learn.microsoft.com/training/paths/migrate-modernize-innovate-azure/)
