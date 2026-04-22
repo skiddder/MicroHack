@@ -37,21 +37,10 @@ while ! curl -k -s $${K3S_URL}/ping > /dev/null 2>&1; do
   sleep 10
 done
 
-# Get external IP reliably
-EXTERNAL_IP=$(curl -s --max-time 10 https://ipinfo.io/ip 2>/dev/null || curl -s --max-time 10 http://checkip.amazonaws.com 2>/dev/null || echo "")
-
-# Install K3s agent
-if [ -n "$EXTERNAL_IP" ] && [[ "$EXTERNAL_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    curl -sfL https://get.k3s.io | sh -s - agent \
-      --server $${K3S_URL} \
-      --token $${K3S_TOKEN} \
-      --node-external-ip "$EXTERNAL_IP"
-else
-    # Fallback without external IP if detection fails
-    curl -sfL https://get.k3s.io | sh -s - agent \
-      --server $${K3S_URL} \
-      --token $${K3S_TOKEN}
-fi
+# Install K3s agent — all cluster communication uses private IPs
+curl -sfL https://get.k3s.io | sh -s - agent \
+  --server $${K3S_URL} \
+  --token $${K3S_TOKEN}
 
 # Enable and start K3s agent
 systemctl enable k3s-agent

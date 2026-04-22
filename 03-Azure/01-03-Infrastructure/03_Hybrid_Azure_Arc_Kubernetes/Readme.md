@@ -8,7 +8,7 @@
 * [**Objectives**](#objectives)
 * [**General Prerequisites**](#general-prerequisites)
 * [**MicroHack Challenges**](#microhack-challenges)
-  * [Challenge 01 - Onboarding your Kubernetes Cluster](challenges/challenge-01.md))
+  * [Challenge 01 - Onboarding your Kubernetes Cluster](challenges/challenge-01.md)
   * [Challenge 02 - Enable Azure Monitor for Containers](challenges/challenge-02.md)
   * [Challenge 03 - Deploy CPU based Large & Small Language Models (LLM/SLM) on Azure Arc-enabled Kubernetes](challenges/challenge-03.md)
   * [Challenge 04 - Deploy SQL Managed Instance](challenges/challenge-04.md)

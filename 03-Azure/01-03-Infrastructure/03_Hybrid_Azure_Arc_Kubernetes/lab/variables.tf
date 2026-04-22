@@ -62,6 +62,21 @@ variable "vm_size" {
   default     = "Standard_D4ds_v6" # For arc-enabled Managed SQL Instances, ARM cores not supported
 }
 
+variable "workstation_vm_size" {
+  description = "The Azure VM size for Windows 11 workstation VMs"
+  default     = "Standard_D4ds_v6"
+}
+
+variable "bastion_location" {
+  description = "The Azure Region for the central Bastion host"
+  default     = "francecentral"
+}
+
+variable "bastion_vnet_address_space" {
+  description = "Address space for the Bastion VNet (must not overlap with participant VNets 10.1xx.0.0/16)"
+  default     = "10.200.0.0/16"
+}
+
 # container reguistry variables for gitops challenge
 variable "acr_name" {
     description = "The name of the Azure Container Registry"

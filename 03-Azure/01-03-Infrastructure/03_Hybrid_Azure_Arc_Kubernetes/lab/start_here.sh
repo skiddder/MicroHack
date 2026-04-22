@@ -14,6 +14,11 @@ echo "Using subcription ID: $subscription_id"
 # sed -i "s|client_id=\".*\"|client_id=\"$client_id\"|" fixtures.tfvars
 # sed -i "s|client_secret=\".*\"|client_secret=\"$client_secret\"|" fixtures.tfvars
 
+if [ ! -f provider.tf ]; then
+  echo "provider.tf not found — creating from provider-template.txt..."
+  cp provider-template.txt provider.tf
+fi
+
 echo "replacing subscription_id in provider.tf..."
 # replace the subscription id in provider.tf
 sed -i "s|subscription_id = \".*\"|subscription_id = \"$subscription_id\"|" provider.tf
