@@ -37,7 +37,7 @@ By the end of this challenge, you will be able to:
 1. Open Azure Copilot with **agent mode enabled**
 2. Describe the full workload:
 
-   > _"I need to deploy an e-commerce platform with the following components: a React frontend on App Service, a Node.js backend API on App Service, Azure Cosmos DB for the product catalog, Azure Cache for Redis for session management, Azure CDN for static assets, Application Insights for monitoring, and Azure Key Vault for secrets. All resources should be in East US 2 with a Virtual Network."_
+   > _"Using the Deployment Agent, plan a 3-tier web application in East US 2 that includes: App Service (Standard S1) for the frontend, Azure Cosmos DB (NoSQL API, serverless) for the product catalog, Azure Cache for Redis (Basic C0), Application Insights, Key Vault, and a Virtual Network with separate subnets for App, Data, and Cache tiers. After the plan is shown, open the plan canvas (look for a button such as View plan / Open plan canvas / View workload)."_
 
 3. **Review** the workload plan Azure Copilot generates:
    - Does it include all requested components?
@@ -69,7 +69,7 @@ By the end of this challenge, you will be able to:
 
 1. In the **same or new conversation** (agent mode), ask about monitoring setup:
 
-   > _"What alerts should I configure for my e-commerce platform? I need to monitor the App Service, Cosmos DB, Redis Cache, and CDN."_
+   > _"Recommend the key metrics and alert rules I should configure for a 3-tier web app (App Service + Cosmos DB + Redis + Front Door). For each, specify the metric, suggested threshold, severity, and scope."_
 
 2. Review the suggested alert rules:
    - Response time thresholds
@@ -88,7 +88,7 @@ By the end of this challenge, you will be able to:
 
 4. Understand the investigation workflow:
 
-   > _"Walk me through your complete investigation process for a slow response time alert on my App Service."_
+   > _"For a production web app alert (HTTP 5xx spike), walk me through the incident response flow using Azure Copilot: (1) triage the alert, (2) investigate root cause, (3) apply remediation, (4) create a support request if needed. Include the exact prompts I would use at each step."_
 
 **Checkpoint:**
 
@@ -104,7 +104,7 @@ By the end of this challenge, you will be able to:
 
 1. Ask for a cost assessment:
 
-   > _"Show me cost-saving opportunities across my subscription. Focus on compute and database resources."_
+   > _"Using Azure Advisor, list the top reserved instance / savings plan recommendations for this subscription. Include resource type, commitment term, estimated monthly savings, and upfront vs monthly payment options."_
 
 2. Explore specific recommendations:
 
@@ -137,7 +137,7 @@ By the end of this challenge, you will be able to:
 
 1. Assess the resiliency posture:
 
-   > _"Which of my e-commerce platform resources aren't zone-resilient?"_
+   > _"Assess the resiliency posture for the e-commerce platform design you just planned (App Service + Cosmos DB + Redis + Front Door + Key Vault). Cover: zone resiliency, backup coverage, vault security, and multi-region DR. Give me a prioritized (Critical/High/Medium) improvement plan with one action per item."_
 
 2. Configure backup:
 
@@ -204,7 +204,7 @@ By the end of this challenge, you will be able to:
 
 1. Ask Azure Copilot to help create a runbook:
 
-   > _"Based on everything we've discussed about our e-commerce platform, help me create a daily operational runbook that covers monitoring, cost management, resiliency checks, and incident response."_
+   > _"Draft a daily/weekly/monthly operational runbook for a 3-tier web app in Azure. For each cadence, list 3–5 specific Copilot prompts I should run, covering deployment, monitoring, cost, resiliency, and incident response. Format as markdown."_
 
 2. Review and refine the runbook with follow-up questions:
 

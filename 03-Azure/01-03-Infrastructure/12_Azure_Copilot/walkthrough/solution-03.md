@@ -129,9 +129,12 @@ Azure Copilot **correctly identifies the alert** from the portal context. The co
 
 ### Follow-Up Questions
 
-**Prompt:** _"Can you explain more about finding #1?"_
+**Prompt:** _"For the alert we just discussed (or for a typical App Insights alert if none exist), tell me what data you analyze, what findings you look for, and what remediation steps you would recommend."_
 
-> **Expected:** Azure Copilot expands on the specific finding with more detailed data, such as exact metric values, log entries, or dependency traces.
+> - Azure Copilot lists the major evidence sources it uses, such as metrics, traces, exceptions, dependency failures, and logs.
+> - The response explains how those signals map to likely causes like code regression, dependency failure, capacity pressure, or bad deployments.
+> - Copilot provides ordered remediation suggestions that are helpful even when no live alert data is available.
+> - Participants should expect workflow guidance and likely findings, not always a telemetry-rich postmortem.
 
 **Prompt:** _"What would happen if I don't address this issue?"_
 
@@ -191,7 +194,7 @@ Azure Monitor issues provide a **holistic view** across multiple alerts:
 ### Quick Investigation Workflow
 
 ```text
-Step 1: "What are the key alerts raised since the past 24 hours?"
+Step 1: "Summarize any Application Insights alerts raised in the past 24 hours. If none are present, say so clearly and tell me what traffic or failure signal I should generate for this lab."
          → Get a list of recent alerts
 
 Step 2: "Investigate alert [select from list or paste ID]"
@@ -212,7 +215,7 @@ Step 6: "Verify this alert hasn't recurred in the last hour"
 
 | Time               | Action                  | Copilot Prompt                                                      |
 | ------------------ | ----------------------- | ------------------------------------------------------------------- |
-| Start of shift     | Review overnight alerts | _"What are the key alerts raised since the past 24 hours?"_         |
+| Start of shift     | Review overnight alerts | _"Summarize any Application Insights alerts raised in the past 24 hours. If none are present, say so clearly and tell me what traffic or failure signal I should generate for this lab."_         |
 | Alert received     | Investigate immediately | _"Start an investigation for this alert"_                           |
 | Post-investigation | Document findings       | Copy the investigation summary to your incident management tool     |
 | After remediation  | Verify fix              | _"Have there been any new alerts for [resource] in the past hour?"_ |

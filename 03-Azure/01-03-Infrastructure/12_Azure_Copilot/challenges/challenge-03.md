@@ -99,7 +99,7 @@ You must have one of these roles on the Azure Monitor Workspace:
 3. Copy the alert's **resource ID** (found in the alert's properties/essentials section)
 4. Use this prompt (replace the ID with your actual alert ID):
 
-   > _"Start an investigation for my alert: `/subscriptions/{SUB_ID}/resourcegroups/{RG}/providers/microsoft.insights/components/{COMPONENT}/providers/Microsoft.AlertsManagement/alerts/{ALERT_ID}`"_
+   > _"If there are active Application Insights alerts in this subscription, investigate the most recent one and summarize the likely root cause. If there are no active alerts, explain how you would investigate one in this lab and what data you would analyze."_
 
 5. Click **"Show activity"** to watch the investigation progress in real time
 6. Review the investigation summary when complete
@@ -135,7 +135,7 @@ After the investigation completes, carefully review the results:
 4. **Follow the link** to the Azure Monitor issue for the full investigation details
 5. Ask follow-up questions:
 
-   > _"Can you explain more about finding #1?"_
+   > _"For the alert we just discussed (or for a typical App Insights alert if none exist), tell me what data you analyze, what findings you look for, and what remediation steps you would recommend."_
    > _"What would happen if I don't address this issue?"_
    > _"Are there any related alerts I should be aware of?"_
 
@@ -159,10 +159,11 @@ After the investigation completes, carefully review the results:
 
 Run through the complete workflow one more time with a different alert or a hypothetical scenario:
 
-1. Ask: _"What are the key alerts raised since the past 24 hours?"_
-2. Pick an alert from the list and ask for an investigation
-3. Review the results concisely
-4. Identify the remediation steps
+1. Ask: _"Summarize any Application Insights alerts raised in the past 24 hours. If none are present, say so clearly and tell me what traffic or failure signal I should generate for this lab."_
+2. Ask: _"Investigate the most important recent Application Insights alert. If there are no recent alerts, walk me through how I would investigate the next one and what remediation evidence I should capture."_  (if the first prompt returned no alerts, use this follow-up)
+3. Pick an alert from the list and ask for an investigation
+4. Review the results concisely
+5. Identify the remediation steps
 
 **Question to answer:** How would you integrate this investigation workflow into your daily on-call routine?
 

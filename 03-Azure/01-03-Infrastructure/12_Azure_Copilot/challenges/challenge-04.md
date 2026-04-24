@@ -63,7 +63,7 @@ If you already have VMs or VMSS in your subscription:
 1. Open Azure Copilot and **enable agent mode**
 2. Ask for a subscription-wide overview:
 
-   > _"Show me the top five cost-saving opportunities for subscription `{YOUR_SUBSCRIPTION_ID}`"_
+   > _"Show me my top Azure Advisor cost recommendations for this subscription."_
 
 3. Review the list of recommendations. For each one, note:
    - The resource affected
@@ -71,7 +71,7 @@ If you already have VMs or VMSS in your subscription:
    - The estimated monthly savings
 4. Try a broader query:
 
-   > _"Summarize total potential cost and carbon reduction from all active recommendations."_
+   > _"Summarize total potential monthly savings from all active Azure Advisor cost recommendations, grouped by category (VM rightsizing, reserved instances, idle resources)."_
 
 **Question to answer:** What categories of cost savings does the Optimization Agent identify? How significant are the potential savings?
 
@@ -81,7 +81,7 @@ Pick one recommendation from Task 1 and explore it in detail:
 
 1. Ask for more details:
 
-   > _"Explain the recommendation for `vm-copilot-oversized`."_
+   > _"Give me detailed rightsizing analysis for VM `vm-copilot-oversized` in resource group `rg-copilot-<suffix>-ch03`: current SKU, recommended SKU, average CPU and memory utilization, estimated monthly savings, and performance impact."_
 
 2. Understand the reasoning:
    - What metrics indicate the resource is underutilized?
@@ -90,7 +90,7 @@ Pick one recommendation from Task 1 and explore it in detail:
 
 3. Request an alternative:
 
-   > _"Is there an alternate recommendation for `vm-copilot-oversized`?"_
+   > _"Explain why Azure Advisor recommends resizing `vm-copilot-oversized` from its current SKU to the smaller SKU. Include the utilization data and the threshold rules Advisor uses."_
 
 4. Compare the options:
    - Original recommendation vs. alternative
@@ -102,14 +102,14 @@ Pick one recommendation from Task 1 and explore it in detail:
 
 1. Ask Azure Copilot to show you the expected impact visually:
 
-   > _"Show me a chart of the expected results of applying the recommendation for `vm-copilot-oversized`."_
+   > _"Generate a bar chart comparing the current monthly cost and the recommended monthly cost for `vm-copilot-oversized` after applying the Advisor rightsizing recommendation, and show the % savings."_
 
 2. Review the generated chart:
    - What metrics are shown (CPU, memory, cost)?
    - How does current usage compare to the recommended tier?
 3. Ask for a subscription-level summary:
 
-   > _"Can you show me a breakdown of potential savings by resource type for my subscription?"_
+   > _"Give me a subscription-level optimization summary: total potential monthly savings, breakdown by resource type (VMs, storage, databases), and the top 3 recommendations by impact."_
 
 **Question to answer:** How do the visual charts help you communicate optimization plans to management or stakeholders?
 
@@ -119,7 +119,7 @@ Generate scripts to implement the recommended changes:
 
 1. Ask for a PowerShell script:
 
-   > _"Generate a PowerShell script to apply the recommended optimizations for `vm-copilot-oversized`."_
+   > _"Generate a PowerShell script to resize VM `vm-copilot-oversized` in resource group `rg-copilot-<suffix>-ch03` from Standard_D4s_v3 to Standard_D2s_v3. Include stop, resize, and start steps."_
 
 2. Review the generated script:
    - Does it resize the VM?
@@ -128,7 +128,7 @@ Generate scripts to implement the recommended changes:
 
 3. Ask for a CLI version:
 
-   > _"Can you provide a CLI script to apply those optimizations?"_
+   > _"Now generate the equivalent Azure CLI (bash) script to resize `vm-copilot-oversized` in `rg-copilot-<suffix>-ch03` from Standard_D4s_v3 to Standard_D2s_v3 (deallocate, resize, start)."_
 
 4. Compare the two scripts — note the differences in syntax and approach
 

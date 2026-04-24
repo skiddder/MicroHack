@@ -11,7 +11,8 @@ param sshPublicKey string
 param adminUsername string = 'azureuser'
 
 var vmName = 'vm-copilot-noresilience'
-var vmSize = 'Standard_B2s'
+// D-series avoids B-series burst credit behavior that can make Copilot recommendations nondeterministic.
+var vmSize = 'Standard_D2s_v3'
 
 var tags = {
   CostControl: 'Ignore'

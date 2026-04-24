@@ -64,9 +64,9 @@ Use Azure Copilot to answer the following questions. Write your prompts and note
 Use Azure Copilot to navigate to different services and pages in the portal:
 
 1. Ask: _"Take me to the Virtual Machines page"_
-2. Ask: _"Open Azure Monitor"_
+2. Ask: _"Take me to the Azure Monitor overview page in the Azure portal."_
 3. Ask: _"Navigate to Cost Management"_
-4. Ask: _"Show me the Advisor recommendations page"_
+4. Ask: _"Take me to the Azure Advisor recommendations page in the Azure portal."_
 
 **Question to answer:** What happens when you ask Azure Copilot to navigate? Does it open the page directly or provide a link?
 
@@ -75,8 +75,8 @@ Use Azure Copilot to navigate to different services and pages in the portal:
 Ask Azure Copilot to generate scripts for common tasks:
 
 1. Ask: _"Generate an Azure CLI script to create a storage account named 'stcopilotworkshop' in the resource group 'rg-copilot-<suffix>-ch00' in East US 2"_
-2. Ask: _"Can you convert that to PowerShell?"_
-3. Ask: _"Generate a Bicep template to create a virtual network with two subnets"_
+2. Ask: _"Convert the following Azure CLI command to PowerShell, keeping the same storage account name, resource group, and region: az storage account create --name stcopilotworkshop<suffix> --resource-group rg-copilot-<suffix>-ch00 --location eastus2 --sku Standard_LRS"_
+3. Ask: _"Generate a Bicep template that creates a Virtual Network named `vnet-copilot-workshop` with address space `10.0.0.0/16` and two subnets: `subnet-app` (`10.0.1.0/24`) and `subnet-data` (`10.0.2.0/24`). Include parameters for the VNet name and location."_
 
 **Question to answer:** How does Azure Copilot handle multi-turn conversations? Does it remember context from your previous prompts?
 
@@ -84,10 +84,10 @@ Ask Azure Copilot to generate scripts for common tasks:
 
 Explore Azure Advisor integration:
 
-1. Ask: _"Show me my top cost recommendations"_
-2. Ask: _"What are my security recommendations?"_
-3. Ask: _"Show me my reliability recommendations"_
-4. Ask: _"What services do you recommend for building a web application with a database backend?"_
+1. Ask: _"List my top Azure Advisor cost recommendations for this subscription."_
+2. Ask: _"List my top Azure Advisor security recommendations for this subscription."_
+3. Ask: _"List my top Azure Advisor reliability recommendations for this subscription."_
+4. Ask: _"What Azure services do you recommend for building a web application with a relational database backend? Compare App Service + Azure SQL Database vs App Service + Azure Database for PostgreSQL Flexible Server, and summarize when each is appropriate."_
 
 **Question to answer:** Does Azure Copilot provide generic recommendations or ones tailored to your actual Azure environment?
 
