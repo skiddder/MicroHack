@@ -15,21 +15,14 @@
 1. **Enable agent mode** in Azure Copilot
 2. **Enter the full workload description:**
 
-   > _"I need to deploy an e-commerce platform with the following components: a React frontend on App Service, a Node.js backend API on App Service, Azure Cosmos DB for the product catalog, Azure Cache for Redis for session management, Azure CDN for static assets, Application Insights for monitoring, and Azure Key Vault for secrets. All resources should be in East US 2 with a Virtual Network."_
+   > _"Using the Deployment Agent, plan a 3-tier web application in East US 2 that includes: App Service (Standard S1) for the frontend, Azure Cosmos DB (NoSQL API, serverless) for the product catalog, Azure Cache for Redis (Basic C0), Application Insights, Key Vault, and a Virtual Network with separate subnets for App, Data, and Cache tiers. After the plan is shown, open the plan canvas (look for a button such as View plan / Open plan canvas / View workload)."_
 
 ### Expected Infrastructure Plan
 
-| Component           | Azure Service                       | SKU/Tier                  | Purpose                      |
-| ------------------- | ----------------------------------- | ------------------------- | ---------------------------- |
-| Frontend            | App Service (Linux)                 | Standard S1               | Host React SPA               |
-| Backend API         | App Service (Linux)                 | Standard S2               | Host Node.js API             |
-| Database            | Azure Cosmos DB (NoSQL API)         | Serverless or Provisioned | Product catalog              |
-| Cache               | Azure Cache for Redis               | Standard C1               | Session management           |
-| CDN / Load Balancer | Azure Front Door (after refinement) | Standard                  | Global distribution + WAF    |
-| Monitoring          | Application Insights                | Per-GB                    | APM                          |
-| Secrets             | Azure Key Vault                     | Standard                  | Connection strings, API keys |
-| Networking          | Virtual Network                     | /16 address space         | Network isolation            |
-| Subnets             | 3 subnets                           | App, Data, Cache          | Segmentation                 |
+- Azure Copilot proposes a greenfield 3-tier architecture with the requested core services and supporting platform components.
+- The answer should call out security, networking, monitoring, and cost-conscious defaults at a high level.
+- Optional enhancements such as Key Vault, Front Door, Application Insights, or private networking may be suggested.
+- This phase is successful if participants get a coherent architecture blueprint rather than a deployed or fully optimized design package.
 
 ### Plan Approval
 

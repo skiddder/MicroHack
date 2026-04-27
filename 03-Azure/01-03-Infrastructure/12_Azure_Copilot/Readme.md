@@ -35,6 +35,8 @@ This MicroHack scenario walks through the use of Azure Copilot and its five spec
 
 Participants start by mastering Azure Copilot fundamentals (navigation, prompt writing, context management) and then progress through each agent's specialty before tackling a capstone challenge that combines all five agents in an end-to-end e-commerce platform scenario.
 
+The prompts in this lab are intentionally explicit so all participants get comparable Azure Copilot results. In real use, you can start with more conversational prompts and refine through follow-up questions; if Copilot asks for missing context such as region, time range, or resource selection, answer it and continue the workflow.
+
 ## Objectives
 
 After completing this MicroHack you will:
@@ -135,12 +137,12 @@ This creates five resource groups with pre-configured resources:
 
 The main cost drivers for this MicroHack are virtual machines and App Service:
 
-- **Challenge 4 (Optimization):** One Standard_D4s_v3 VM — approximately **$8/day**
-- **Challenge 5 (Resiliency):** One Standard_B2s VM — approximately **$1.50/day**
-- **Challenge 6 (Troubleshooting):** One Standard_B1s VM + Cosmos DB (Serverless) — approximately **$1.50/day**
-- **Challenge 3 (Observability):** App Service B1 plan — approximately **$0.50/day**
+- **Challenge 4 (Optimization):** One Standard_D4s_v3 Linux VM — approximately **$5–6/day**
+- **Challenge 5 (Resiliency):** One Standard_D2s_v3 Linux VM — approximately **$2.50–3/day**
+- **Challenge 6 (Troubleshooting):** One Standard_D2s_v3 Linux VM + Cosmos DB (Serverless) — approximately **$2.50–3.50/day**
+- **Challenge 3 (Observability):** App Service B1 plan — approximately **$0.50–2/day**
 
-Running all resources for one day costs approximately **$11.50–14**. For a 2-day workshop this would be approximately **$23–28 total**.
+The Challenge 5 and 6 VMs use D-series sizes rather than B-series sizes so the agent scenarios are not affected by burst-credit behavior. Costs vary by region, OS image, and actual usage. Running all resources for one day costs approximately **$11–15**. For a 2-day workshop this would be approximately **$22–30 total**.
 
 > [!TIP]
 > Delete all resources immediately after the workshop using `.\scripts\Remove-CopilotWorkshop.ps1 -Suffix "<suffix>"` to minimize costs.

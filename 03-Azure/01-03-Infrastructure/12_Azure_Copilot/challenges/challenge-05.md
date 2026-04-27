@@ -39,7 +39,7 @@ Resources in **`rg-copilot-<suffix>-ch04`** (in your chosen deployment region):
 
 | Resource        | Name                      | SKU          | Resiliency Gaps                                |
 | --------------- | ------------------------- | ------------ | ---------------------------------------------- |
-| Virtual Machine | `vm-copilot-noresilience` | Standard_B2s | No zone redundancy, no Azure Backup configured |
+| Virtual Machine | `vm-copilot-noresilience` | Standard_D2s_v3 | No zone redundancy, no Azure Backup configured |
 
 > **Why these gaps?** The VM is intentionally deployed **without** availability zone configuration and **without** backup protection, so the Resiliency Agent will flag both issues and guide you through remediation.
 
@@ -67,7 +67,7 @@ Ensure you have resources deployed that can be evaluated for resiliency. Ideal r
 
 3. Then check at the service group level:
 
-   > _"Which service groups are currently not zone-resilient?"_
+   > _"Group any non-zone-resilient resources by service type and summarize the biggest resiliency gaps."_
 
 4. For a specific resource, ask for details:
 
@@ -86,7 +86,7 @@ Pick a non-zone-resilient resource and configure it:
 
 1. Ask Azure Copilot to help configure zone resiliency:
 
-   > _"Configure zone resiliency for my VM `vm-copilot-noresilience`."_
+   > _"For VM `vm-copilot-noresilience`, explain what would be required to improve resiliency and generate a starter script or command sequence if the service supports it. If not, give the manual steps."_
 
 2. Review the generated script:
    - What changes will it make?
@@ -95,7 +95,7 @@ Pick a non-zone-resilient resource and configure it:
 
 3. For resources where scripts aren't auto-generated, ask for guidance:
 
-   > _"How do I configure zone resiliency for my Azure Cache for Redis?"_
+   > _"What are the cost implications of enabling zone redundancy for a Standard_D2s_v3 VM, an App Service Standard S1 plan, and a Standard C1 Redis cache? Include any tier upgrades required."_
    > _"What are the steps to make my App Service zone-redundant?"_
 
 4. Understand the cost implications:
@@ -120,7 +120,7 @@ Pick a non-zone-resilient resource and configure it:
 
 4. Identify unprotected resources:
 
-   > _"Which VMs don't have Azure Backup configured?"_
+   > _"List virtual machines in this subscription that don't have an Azure Backup policy configured."_
 
 5. For any identified gaps, ask for remediation:
 
@@ -134,11 +134,13 @@ Use the Resiliency Agent to manage backup infrastructure:
 
 1. **Create a vault:**
 
-   > _"Help me create a Recovery Services vault named `rsv-copilot-workshop` in my resource group `rg-copilot-<suffix>-ch04`."_
+   > _"Create a Recovery Services vault named `rsv-copilot-workshop` in resource group `rg-copilot-<suffix>-ch04` with soft delete enabled. Show me the CLI or PowerShell commands."_
+   >
+   > Then, as a follow-up prompt: _"Now show me how to enable immutability on that vault (separate configuration step after creation)."_
 
 2. **Enhance vault security:**
 
-   > _"Increase the security level of this vault."_
+   > _"Outline a disaster recovery plan for the resources in rg-copilot-<suffix>-ch04: primary region, secondary region, RTO/RPO targets, and services needed (ASR, geo-backup, multi-region writes)."_
 
 3. **Explore vault operations:**
 
@@ -162,7 +164,7 @@ Bring it all together with a comprehensive assessment:
 
 2. Request a prioritized improvement plan:
 
-   > _"What are the top resiliency improvements I should make, prioritized by risk?"_
+   > _"Generate a prioritized resiliency improvement plan for rg-copilot-<suffix>-ch04. Order the items by risk (Critical, High, Medium, Low), cover zone resiliency, backup coverage, vault security, and DR, and include one concrete action per item."_
 
 3. Document the findings in a format suitable for the compliance audit:
 

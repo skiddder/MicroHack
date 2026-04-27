@@ -51,13 +51,12 @@ Top 5 Cost-Saving Opportunities for Subscription "Contoso Production"
 
 ### Broader Summary
 
-**Prompt:** _"Summarize total potential cost and carbon reduction from all active recommendations."_
+**Prompt:** _"Summarize total potential monthly savings from all active Azure Advisor cost recommendations, grouped by category (VM rightsizing, reserved instances, idle resources)."_
 
-> **Expected:** Azure Copilot aggregates all recommendations and shows:
->
-> - Total monthly/annual cost savings
-> - Carbon emission reduction estimates
-> - Breakdown by recommendation category (rightsizing, shutdown, reserved instances)
+> - Azure Copilot typically highlights the biggest areas to inspect first, such as oversized compute, idle resources, reservations, or storage lifecycle opportunities.
+> - The response may be based on spend patterns rather than explicit Azure Advisor items.
+> - A short prioritized list of savings themes is sufficient for this step.
+> - Treat the answer as triage guidance rather than a finalized optimization plan.
 
 ### Answer
 
@@ -75,6 +74,8 @@ The Optimization Agent identifies savings in categories like:
 ### Steps
 
 **Prompt 1:** _"Explain the recommendation for vm-copilot-oversized."_
+
+> 💡 **Multi-turn note:** Copilot may first ask a clarifying question such as _"Which time range should I analyze?"_. If so, reply with **"Use the last 30 days."** and Copilot will continue with the full recommendation.
 
 > **Expected response:**
 >
@@ -160,14 +161,12 @@ Azure Copilot generates a visual chart showing:
 
 ### Subscription Summary
 
-**Prompt:** _"Can you show me a breakdown of potential savings by resource type for my subscription?"_
+**Prompt:** _"Give me a subscription-level optimization summary: total potential monthly savings, breakdown by resource type (VMs, storage, databases), and the top 3 recommendations by impact."_
 
-> **Expected:** A chart or table breaking down savings by:
->
-> - VMs (rightsizing)
-> - VMSS (scaling)
-> - Shutdown recommendations
-> - Total potential savings
+> - Azure Copilot summarizes spend or optimization opportunities by service family such as compute, storage, or databases.
+> - The answer highlights likely savings themes and top cost drivers, even if it does not quantify every action precisely.
+> - A concise executive summary is enough; the response does not need to enumerate every recommendation in the subscription.
+> - Participants should use this as a briefing view before drilling into one specific optimization area.
 
 ### Answer
 
@@ -219,40 +218,12 @@ Visual charts are **highly valuable for stakeholder communication**:
 
 ### Azure CLI Script
 
-**Prompt:** _"Can you provide a CLI script to apply those optimizations?"_
+**Prompt:** _"Now generate the equivalent Azure CLI (bash) script to resize `vm-copilot-oversized` in `rg-copilot-<suffix>-ch03` from Standard_D4s_v3 to Standard_D2s_v3 (deallocate, resize, start)."_
 
-> **Expected response:**
->
-> ```bash
-> #!/bin/bash
-> # Resize VM: vm-copilot-oversized
-> # From: Standard_D4s_v3 → To: Standard_D2s_v3
->
-> RESOURCE_GROUP="rg-copilot-<suffix>-ch03"
-> VM_NAME="vm-copilot-oversized"
-> NEW_SIZE="Standard_D2s_v3"
->
-> # Step 1: Deallocate the VM
-> echo "Deallocating VM $VM_NAME..."
-> az vm deallocate \
->   --resource-group $RESOURCE_GROUP \
->   --name $VM_NAME
->
-> # Step 2: Resize the VM
-> echo "Resizing VM to $NEW_SIZE..."
-> az vm resize \
->   --resource-group $RESOURCE_GROUP \
->   --name $VM_NAME \
->   --size $NEW_SIZE
->
-> # Step 3: Start the VM
-> echo "Starting VM $VM_NAME..."
-> az vm start \
->   --resource-group $RESOURCE_GROUP \
->   --name $VM_NAME
->
-> echo "VM resized successfully to $NEW_SIZE"
-> ```
+> - Azure Copilot returns an Azure CLI template for deallocating, resizing, and restarting a VM.
+> - The response includes placeholders rather than assuming a live recommendation context was preserved.
+> - Copilot may also include subscription-selection or authentication commands at the top.
+> - Participants should expect a starter template that still needs final SKU and resource validation.
 
 ### Answer
 

@@ -17,24 +17,17 @@
 
 **Prompt 1:** _"Which resources aren't zone-resilient?"_
 
-> **Expected response:**
->
-> ```text
-> Non-Zone-Resilient Resources in your environment:
->
-> 1. vm-copilot-noresilience (Virtual Machine)
->    Region: France Central (or your chosen deployment region)
->    Current: No availability zone configured
->    Risk: Single point of failure in one datacenter
->
-> 📊 Summary: 1 of 1 resources lack zone resiliency in rg-copilot-<suffix>-ch04
-> ```
->
-> **Note:** Your actual results will vary based on the resources in your subscription. The workshop VM `vm-copilot-noresilience` in `rg-copilot-<suffix>-ch04` is the key resource to focus on.
+> - Azure Copilot identifies candidate resources that appear not to use zone-resilient configurations, often using query-backed results.
+> - The response may be a short resource list rather than a fully summarized resiliency posture report.
+> - Sparse output is acceptable if the subscription contains only a few eligible resources.
+> - Participants should use the result as a starting inventory for follow-up questions rather than expecting a percentage-based score.
 
-**Prompt 2:** _"Which service groups are currently not zone-resilient?"_
+**Prompt 2:** _"Group any non-zone-resilient resources by service type and summarize the biggest resiliency gaps."_
 
-> **Expected:** A higher-level view grouping resources by service type and showing which service groups have gaps.
+> - Azure Copilot groups identified gaps by service or resource type rather than listing only individual resources.
+> - The summary highlights which service categories appear least resilient in the current environment.
+> - The answer may still be lightweight if there are few resources to analyze.
+> - This is sufficient for a management-style review of major resiliency gaps.
 
 **Prompt 3:** _"Is my VM vm-copilot-noresilience zone-resilient? If not, what steps are needed?"_
 
@@ -144,30 +137,23 @@ Automated scripts are available for **7 resource types**. For others, Azure Copi
 > ⚠️ These resources are at risk of data loss in a failure scenario.
 > ```
 
-**Prompt 2:** _"How many backup jobs failed in the last 24 hours?"_
+**Prompt 2:** _"In the last 24 hours, list any backup **job** failures in this subscription."_
 
-> **Expected:**
->
-> ```text
-> Backup Job Summary (Last 24 hours):
->
-> ✅ Successful: 15 jobs
-> ❌ Failed: 2 jobs
->   - vm-dev-server: VSS snapshot failed (Error: VMSnapshotProviderFailed)
->   - sqldb-reports: Connection timeout during backup
->
-> Recommendations:
-> 1. For vm-dev-server: Restart the VSS service and retry the backup
-> 2. For sqldb-reports: Check network connectivity and retry
-> ```
+> - Azure Copilot tells you whether recent backup-job failures are visible and may include vault, workload, or timing details.
+> - If no failures are found, a clear negative result is acceptable.
+> - The response may be brief and does not need to include a full root cause breakdown for each failed job.
+> - Use this as a quick operational check before deeper vault-specific investigation.
 
 **Prompt 3:** _"What are the key alerts raised since the past 24 hours?"_
 
 > **Expected:** A list of alerts with severity, resource, and brief description.
 
-**Prompt 4:** _"Which VMs don't have Azure Backup configured?"_
+**Prompt 4:** _"List virtual machines in this subscription that don't have an Azure Backup policy configured."_
 
-> **Expected:** A list of unprotected VMs with recommendations to enable backup.
+> - Azure Copilot identifies resources that appear to lack backup protection or recent recovery points, when that metadata is available.
+> - The result may be a candidate list rather than a full authoritative inventory of every protected and unprotected resource.
+> - Participants should expect to follow up on high-risk items rather than rely on a perfect one-shot compliance report.
+> - This still supports the learning objective of spotting backup gaps quickly.
 
 **Prompt 5:** _"How do I configure backup for my unprotected VMs?"_
 
@@ -192,9 +178,11 @@ These gaps directly impact business continuity — even one unprotected VM with 
 
 ## Task 4: Manage Backup Vaults
 
+> 💡 **Context tip:** prefix vault-management prompts with the subscription ID (e.g., `"Using subscription db467d04-…, …"`) so Copilot's skills have the scope they need without asking.
+
 ### Steps
 
-**Prompt 1:** _"Help me create a Recovery Services vault named rsv-copilot-workshop in my resource group rg-copilot-<suffix>-ch04."_
+**Prompt 1:** _"Using subscription `<your-subscription-id>`, help me create a Recovery Services vault named rsv-copilot-workshop in my resource group rg-copilot-<suffix>-ch04."_
 
 > **Expected:** Azure Copilot guides you through vault creation:
 >
@@ -202,29 +190,12 @@ These gaps directly impact business continuity — even one unprotected VM with 
 > 2. Creates the vault with default settings
 > 3. Confirms creation with vault details
 
-**Prompt 2:** _"Increase the security level of this vault."_
+**Prompt 2:** _"Outline a disaster recovery plan for the resources in rg-copilot-<suffix>-ch04: primary region, secondary region, RTO/RPO targets, and services needed (ASR, geo-backup, multi-region writes)."_
 
-> **Expected recommendations:**
->
-> ```text
-> Security Enhancements for rsv-copilot-workshop:
->
-> 1. ✅ Enable Soft Delete (14+ day retention for deleted backups)
->    Status: Enabled by default — verify it's not disabled
->
-> 2. ✅ Enable Multi-User Authorization (MUA)
->    Prevents any single admin from disabling security features
->    Requires: Azure Resource Guard setup
->
-> 3. ✅ Enable Immutable Vaults
->    Prevents backup data from being deleted before expiry
->
-> 4. ✅ Enable Cross-Region Restore
->    Allows restoration in the paired region during regional outages
->
-> 5. ✅ Configure Private Endpoints
->    Restricts vault access to your virtual network only
-> ```
+> - Azure Copilot outlines a disaster recovery planning approach covering backup, failover assumptions, and operational drills.
+> - The answer is usually general and process-oriented rather than tied to every deployed resource in the subscription.
+> - Participants should expect a planning checklist they can adapt into a real DR runbook.
+> - This step teaches DR thinking, not one-click DR automation.
 
 **Prompt 3:** _"How can I set up a backup policy for daily backups with 30-day retention?"_
 
@@ -280,27 +251,12 @@ These features are critical for **ransomware protection** and **compliance requi
 > Overall Score: ⚠️ Moderate Risk
 > ```
 
-**Prompt:** _"What are the top resiliency improvements I should make, prioritized by risk?"_
+**Prompt:** _"Generate a prioritized resiliency improvement plan for rg-copilot-<suffix>-ch04. Order the items by risk (Critical, High, Medium, Low), cover zone resiliency, backup coverage, vault security, and DR, and include one concrete action per item."_
 
-> **Expected prioritized plan:**
->
-> ```text
-> Priority 1 (Critical):
->   - Enable backup for unprotected VMs
->   - Configure zone resiliency for production VMs
->
-> Priority 2 (High):
->   - Enable vault security features (MUA, immutability)
->   - Configure Azure Site Recovery for critical workloads
->
-> Priority 3 (Medium):
->   - Enable zone redundancy for App Service and database
->   - Set up cross-region restore
->
-> Priority 4 (Low):
->   - Configure DR drills schedule
->   - Document recovery procedures
-> ```
+> - Azure Copilot returns a short prioritized list of resiliency improvements instead of a vague narrative.
+> - The actions are ordered by business risk and operational importance, even if some recommendations are based on best practices rather than deep telemetry.
+> - The answer should be suitable for sharing with management or auditors as a first-pass improvement plan.
+> - A concise prioritized output is more realistic than a comprehensive automatically generated strategy document.
 
 ### Answer
 

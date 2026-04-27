@@ -62,32 +62,34 @@ The plan aligns with the **Well-Architected Framework** pillars:
 
 ### Steps and Expected Responses
 
-**Prompt 1:** _"Can you add a Virtual Network with subnets for the App Service and the database?"_
+**Prompt 1:** _"In the Deployment Agent plan canvas for the Flask+PostgreSQL workload, add a Virtual Network `10.0.0.0/16` with an App Service subnet `10.0.1.0/24` and a database subnet `10.0.2.0/24` delegated to PostgreSQL Flexible Server."_
 
-> **Expected:** Azure Copilot updates the plan to include:
->
-> - A VNet (e.g., `10.0.0.0/16`)
-> - App Service subnet (e.g., `10.0.1.0/24`) with VNet integration
-> - Database subnet (e.g., `10.0.2.0/24`) with delegated subnet for PostgreSQL
+> - Azure Copilot returns an updated architecture narrative that includes a VNet and separate subnet roles for app and database connectivity.
+> - The response may mention VNet integration, subnet separation, private access patterns, or DNS considerations.
+> - A conceptual update is sufficient; Copilot does not need to produce deployed resources or exact CIDR blocks at this step.
+> - The important behavior is that Copilot revises the proposed design instead of asking the user to pick existing portal resources.
 
-**Prompt 2:** _"I want the PostgreSQL server to use private endpoints instead of public access."_
+**Prompt 2:** _"Revise the same NEW-workload design so PostgreSQL uses private access or private endpoints, and include the supporting DNS and networking considerations. Do not ask me to select existing resources."_
 
-> **Expected:** Azure Copilot adjusts the plan to:
->
-> - Disable public access on the PostgreSQL Flexible Server
-> - Add a Private Endpoint in the database subnet
-> - Configure a Private DNS Zone for `privatelink.postgres.database.azure.com`
+> - Azure Copilot updates the architecture to describe private database access patterns for PostgreSQL.
+> - The answer should mention supporting elements such as private DNS, VNet integration, or endpoint-related networking dependencies.
+> - Copilot may discuss the operational trade-off of stronger isolation versus higher complexity and cost.
+> - A design explanation is acceptable; the participant should not expect Copilot to open a resource picker for an existing private endpoint.
 
-**Prompt 3:** _"Add a Network Security Group to restrict traffic to the App Service subnet."_
+**Prompt 3:** _"Update the same NEW-workload design to include an NSG strategy for the application subnet. Describe the intended inbound and outbound restrictions rather than querying existing resources."_
 
-> **Expected:** Azure Copilot adds:
->
-> - An NSG with rules allowing only HTTP/HTTPS inbound
-> - Association of the NSG to the App Service subnet
+> - Azure Copilot explains an NSG approach that supports least-privilege traffic patterns around the application's network path.
+> - The response may clarify that App Service itself has special networking behavior and that subnet or adjacent-resource controls are part of the design story.
+> - Participants should expect guidance on rule intent and architecture impact, not necessarily a full numbered NSG rule set.
+> - The key success signal is a sensible security design update rather than a portal-side change.
 
-**Prompt 4:** _"What would be the estimated monthly cost for this setup at a basic tier?"_
+**Prompt 4:** _"Provide a rough monthly cost estimate for the planned infrastructure (App Service Basic, PostgreSQL Flexible Server Standard_B1ms in the Burstable tier, Key Vault Standard, Application Insights, VNet) assuming East US 2 list prices."_
 
-> **Expected:** Azure Copilot provides a cost estimate breakdown by resource. Note that these estimates are approximate and may vary.
+> - Copilot may respond in one of two ways:
+> - (a) Returns the SUBSCRIPTION spend forecast (historical/actual), not a plan estimate — this is the current Deployment Agent behavior
+> - (b) Returns a per-service estimate table for the planned SKUs at list price
+> - If you get (a), use the Azure Pricing Calculator for a plan-based estimate — link: https://azure.microsoft.com/pricing/calculator/
+> - Document the limitation; cost-for-plan in the Deployment Agent is an active roadmap item
 
 ### Answer
 
@@ -105,11 +107,11 @@ Before Terraform code is generated, you must explicitly approve the infrastructu
 2. **Click "I approve the plan"** to proceed to Terraform generation, **or** click **"Review the plan and make edits"** to return to the refinement conversation and request further changes
 3. Azure Copilot will **not** generate Terraform configurations until you approve the plan
 
-> **Note:** If you are iterating via prompts rather than buttons, you can also explicitly ask: _"Generate the Terraform configurations for this plan."_ — this serves as implicit approval.
+> **Note:** If you are iterating via prompts rather than buttons, you can also explicitly ask: _"Generate starter Terraform for a NEW Azure deployment of a Flask web app on App Service with PostgreSQL Flexible Server, Key Vault, and Application Insights. Include the main resources even if I still need to customize variables and networking details."_ — this serves as implicit approval.
 
 ### Steps
 
-1. **Approve the plan** by clicking **"I approve the plan"**, or enter the prompt: _"Generate the Terraform configurations for this plan."_
+1. **Approve the plan** by clicking **"I approve the plan"**, or enter the prompt: _"Generate starter Terraform for a NEW Azure deployment of a Flask web app on App Service with PostgreSQL Flexible Server, Key Vault, and Application Insights. Include the main resources even if I still need to customize variables and networking details."_
 2. **Wait for generation** — Azure Copilot will show a progress indicator
 3. **Click the maximize icon** on the artifact pane to see the full files
 4. Note that the artifact pane is **read-only** — you can review the generated files but cannot edit them directly. To make edits, export the files first using one of the deployment options in Task 4
@@ -246,19 +248,14 @@ For **production environments**, the GitHub Pull Request method is recommended b
 1. Start a **new conversation** (click the new chat icon)
 2. **Enable agent mode** again
 3. Enter the AKS prompt:
-   > _"Set up a multitenant SaaS application on AKS using Kubernetes namespaces for isolation, integrate Microsoft Entra for authentication, and centralize logs in Azure Log Analytics."_
+   > _"Design a NEW workload plan for a multitenant SaaS application on AKS using Kubernetes namespaces for tenant isolation, Microsoft Entra ID for authentication, and Azure Log Analytics for centralized logging. Do not select an existing cluster — this is a greenfield design."_
 
 ### Expected Plan Components
 
-| Component               | Azure Service                                | Purpose                   |
-| ----------------------- | -------------------------------------------- | ------------------------- |
-| Container Orchestration | Azure Kubernetes Service (AKS)               | Run the SaaS application  |
-| Tenant Isolation        | Kubernetes Namespaces + Network Policies     | Separate tenant workloads |
-| Identity                | Microsoft Entra ID                           | Authentication and RBAC   |
-| Logging                 | Log Analytics Workspace + Container Insights | Centralized monitoring    |
-| Networking              | Azure Virtual Network + Azure CNI            | AKS networking            |
-| DNS                     | Azure DNS Zone                               | Service discovery         |
-| Container Registry      | Azure Container Registry                     | Store container images    |
+- Azure Copilot proposes a new AKS-based SaaS architecture with tenant-isolation, identity, and logging components.
+- The answer should discuss trade-offs such as namespace isolation vs. stronger tenant isolation models, ingress, secrets, and observability.
+- A conceptual architecture summary is sufficient; the prompt should not require an existing AKS resource picker.
+- This step is successful if Copilot behaves like a solution architect for a new workload rather than a troubleshooter for an existing cluster.
 
 ### Answer
 

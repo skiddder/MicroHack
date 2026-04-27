@@ -14,7 +14,7 @@ The Troubleshooting Agent helps you **resolve issues faster** by running diagnos
 
 Use the Troubleshooting Agent in Azure Copilot to diagnose resource issues, run root cause analysis, apply one-click fixes, and create support requests when needed.
 
-**Scenario:** You are the platform engineer at Contoso Ltd. Your team's Monday morning starts with several reports: a developer can't connect to a VM, the Cosmos DB (NoSQL API) is returning connection timeouts, and an AKS cluster is showing pod health issues. You need to quickly diagnose and resolve these issues before the business day starts.
+**Scenario:** You are the platform engineer at Contoso Ltd. Your team's Monday morning starts with several reports: a developer can't connect to a VM, the Cosmos DB (NoSQL API) is returning connection timeouts, and another team asks how to diagnose an AKS cluster that is showing pod health issues. You need to quickly diagnose, resolve, or advise on these issues before the business day starts.
 
 By the end of this challenge, you will be able to:
 
@@ -23,7 +23,7 @@ By the end of this challenge, you will be able to:
 - Apply one-click fixes offered by Azure Copilot
 - Follow step-by-step remediation instructions
 - Create support requests through Azure Copilot when needed
-- Troubleshoot across different resource types (VMs, Cosmos DB, AKS)
+- Troubleshoot across different resource types (VMs, Cosmos DB, and optional AKS guidance)
 
 ## Actions
 
@@ -93,7 +93,7 @@ Simulate a Cosmos DB connection issue investigation:
 1. Start a new conversation with agent mode enabled
 2. Describe the scenario:
 
-   > _"I'm trying to connect to my Azure Cosmos DB (NoSQL API) from my local development machine, but I keep getting a timeout. What should I do?"_
+   > _"I'm connecting to Azure Cosmos DB (NoSQL API) and getting connection failures. Give me a troubleshooting checklist covering firewall or IP allow-list, private endpoint/DNS, auth keys, TLS, and service health. If you need a resource, tell me what to select."_
 
 3. If you have a Cosmos DB account, select it when prompted. Otherwise, observe the general guidance provided
 4. Review the diagnostic steps:
@@ -111,17 +111,17 @@ Simulate a Cosmos DB connection issue investigation:
 
 **Question to answer:** How does the Troubleshooting Agent handle issues where it can't access the resource directly? Does it still provide useful guidance?
 
-### Task 3: Troubleshoot AKS Cluster Issues (10 min)
+### Task 3: Explore AKS Troubleshooting Guidance (No Cluster Required) (10 min)
 
 > [!NOTE]
 > No AKS cluster is deployed as part of the lab. This task is exploratory — you can select an existing AKS cluster in your subscription, or simply follow the prompts to see what guidance Azure Copilot provides without a specific resource selected.
 
-Investigate Kubernetes cluster problems:
+Walk through a Kubernetes cluster troubleshooting playbook:
 
 1. Start a new conversation with agent mode enabled
 2. Try these troubleshooting prompts (select your AKS cluster when prompted, or get general guidance):
 
-   > _"Investigate the health of my pods."_
+   > _"Explain how you would diagnose an AKS cluster that is not scheduling pods. List the checks you would run (node status, taints, resource quotas, pending pods) and the kubectl commands required. No cluster needs to be deployed."_
 
    > _"Investigate networking issues causing pod connectivity failures."_
 
@@ -148,7 +148,7 @@ The Troubleshooting Agent can sometimes provide one-click fixes:
 
 2. Ask Azure Copilot for help:
 
-   > _"My VM `vm-copilot-broken` isn't responding. Help me troubleshoot."_
+   > _"I have a VM `vm-copilot-broken` that won't start. Diagnose the likely causes first, and if Azure Copilot supports it, offer the exact one-click fix or portal action to use."_
 
 3. If Azure Copilot identifies a simple fix (e.g., the VM is stopped):
    - It will offer a **one-click fix** button
@@ -168,7 +168,7 @@ When the Troubleshooting Agent can't resolve an issue, it can create a support r
 
 1. Present a complex problem:
 
-   > _"My application is experiencing intermittent failures that I can't diagnose. Can you create a support request?"_
+   > _"Create a support request for a persistent VM boot issue on `vm-copilot-broken`. Include the symptoms, business impact, and the diagnostics I should attach before submitting."_
 
    Or more directly:
 
@@ -193,7 +193,7 @@ When the Troubleshooting Agent can't resolve an issue, it can create a support r
 
 - You used the Troubleshooting Agent to diagnose at least one VM issue
 - You investigated a database or application connectivity issue
-- You explored AKS or another resource type troubleshooting
+- You explored AKS troubleshooting guidance or another resource type troubleshooting
 - You experienced or understood the one-click fix capability
 - You explored the support request creation flow
 - You understand when the agent escalates from self-service to support
@@ -204,7 +204,7 @@ When the Troubleshooting Agent can't resolve an issue, it can create a support r
 - **Root cause diagnostics** are environment-specific — the agent analyzes your actual resource configuration and metrics
 - **One-click fixes** are available for common, well-understood issues — they require your confirmation before applying
 - When self-service resolution isn't possible, **support request creation** is seamless with pre-populated diagnostic data
-- The agent is especially effective for **Cosmos DB, VMs, and AKS** but works with all resource types
+- The agent is especially effective for **Cosmos DB and VMs** in this lab, and can also guide **AKS** troubleshooting when a cluster is available
 - [Troubleshooting Agent documentation](https://learn.microsoft.com/en-us/azure/copilot/troubleshooting-agent)
 
 **Limitations to Note:**
