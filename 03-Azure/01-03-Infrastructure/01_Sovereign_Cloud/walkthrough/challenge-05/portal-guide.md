@@ -9,7 +9,7 @@
 
 ## Prerequisites
 
-Please ensure that you successfully verified the [General prerequisites](../../README.md#general-prerequisites) before continuing with this challenge.
+Please ensure that you successfully verified the [General prerequisites](../../Readme.md#general-prerequisites) before continuing with this challenge.
 
 - Access to Azure Portal (https://portal.azure.com)
 - Azure subscription with permissions to create AKS clusters, node pools, and register preview features

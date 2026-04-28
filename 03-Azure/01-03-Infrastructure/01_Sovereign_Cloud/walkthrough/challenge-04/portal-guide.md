@@ -7,7 +7,7 @@
 
 ## Prerequisites
 
-Please ensure that you successfully verified the [General prerequisites](../../README.md#general-prerequisites) before continuing with this challenge.
+Please ensure that you successfully verified the [General prerequisites](../../Readme.md#general-prerequisites) before continuing with this challenge.
 
 - Azure Portal access (https://portal.azure.com)
 - Azure subscription with permissions to create VMs, Key Vault, and Attestation Providers
@@ -314,20 +314,20 @@ In a production scenario, your application would implement attestation checks be
 def process_sensitive_data(customer_data):
     # Step 1: Perform attestation
     attestation_token = get_attestation_token()
-    
+
     # Step 2: Validate token with relying party
     if not validate_attestation(attestation_token):
         log_error("Attestation failed - not running in confidential environment")
         raise SecurityException("Execution environment not trusted")
-    
+
     # Step 3: Verify specific claims
     claims = parse_jwt_claims(attestation_token)
     if claims['x-ms-isolation-tee.x-ms-attestation-type'] != 'sevsnpvm':
         raise SecurityException("Not running on AMD SEV-SNP hardware")
-    
+
     if claims['x-ms-isolation-tee.x-ms-sevsnpvm-is-debuggable'] == 'true':
         raise SecurityException("VM debugging is enabled - security risk")
-    
+
     # Step 4: Only now proceed with sensitive operations
     encrypted_results = process_pii_data(customer_data)
     return encrypted_results

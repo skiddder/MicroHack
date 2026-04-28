@@ -4,7 +4,7 @@
 
 **Estimated Duration:** 30 minutes
 
-> 💡 **Objective:** Understand encryption in transit considerations for sovereign scenarios. Configure Azure Storage accounts to require secure transfer (HTTPS only) and enforce TLS 1.2 as the minimum protocol version. Apply Azure Policy to block weaker TLS versions and monitor client protocol usage through Log Analytics.
+> 💡 **Objective:** Understand encryption in transit considerations for sovereign scenarios. Verify that Azure Storage accounts require secure transfer (HTTPS only), confirm the TLS 1.2+ baseline, apply Azure Policy for governance, and monitor client protocol usage through Log Analytics.
 
 ## Prerequisites
 
@@ -46,16 +46,16 @@ STORAGEACCOUNT_NAME="yourStorageAccountName"  # Replace with the name of your st
 
 💡Encryption in transit protects data as it travels between clients and Azure services, ensuring confidentiality, integrity, and mutual authentication. Transport Layer Security (TLS) establishes a cryptographic handshake that negotiates protocol versions, cipher suites, and validates certificates before any payload flows. In Azure, enforcing TLS aligns with service-specific capabilities (e.g., Storage, Key Vault, App Service) and underpins sovereign cloud controls by preventing downgrade attacks and plaintext exposures. Azure's encryption guidance emphasizes pairing secure transport with encryption at rest to meet regulatory requirements and Zero Trust principles.
 
-## Task 2: Understand TLS versions & recommendation
+## Task 2: Understand TLS versions and current Azure Storage defaults
 
 | TLS version | Azure Storage public HTTPS endpoint support | Recommendation |
 |-------------|----------------------------------------------|----------------|
-| TLS 1.0     | Supported for backward compatibility (legacy only) | Not recommended; scheduled for retirement across Azure services |
-| TLS 1.1     | Supported for limited scenarios | Not recommended; migrate clients to TLS 1.2+ |
-| TLS 1.2     | Fully supported | **Recommended minimum**; enforce for Storage accounts |
-| TLS 1.3     | Supported on public endpoints but cannot be enforced as account minimum | Use when available; falls back to TLS 1.2 if client lacks support |
+| TLS 1.0     | Retired for Azure Blob Storage as of February 3, 2026 | Do not use; update legacy clients |
+| TLS 1.1     | Retired for Azure Blob Storage as of February 3, 2026 | Do not use; update legacy clients |
+| TLS 1.2     | Supported | **Required minimum baseline** for Azure Storage |
+| TLS 1.3     | Supported on public endpoints but cannot be enforced as the account minimum | Use when available; clients can negotiate TLS 1.3 automatically |
 
-Azure Storage currently allows setting **Minimum TLS Version = TLS 1.0, 1.1, or 1.2**, with **TLS 1.2** as the recommended baseline; enforcing TLS 1.3 is not yet available at account-scope ([learn.microsoft.com](https://learn.microsoft.com/en-us/azure/storage/common/transport-layer-security-configure-minimum-version)). Azure Resource Manager will drop support for protocols older than TLS 1.2 on **March 1, 2025**, so modernize SDKs, runtimes, and appliances ahead of that date ([learn.microsoft.com](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/tls-support)).
+When you create a storage account in the Azure Portal, the minimum TLS version is set to **TLS 1.2** by default. The Portal no longer provides a useful hands-on exercise for configuring TLS 1.0 or TLS 1.1 on new storage accounts. In this challenge, you will verify the TLS setting, keep secure transfer enabled, and use Azure Policy to govern any storage accounts created through CLI, templates, automation, or older deployments where the setting may not be explicit ([learn.microsoft.com](https://learn.microsoft.com/azure/storage/common/transport-layer-security-configure-minimum-version)). Azure Resource Manager requires TLS 1.2 or later, so modernize SDKs, runtimes, and appliances that still pin older protocols ([learn.microsoft.com](https://learn.microsoft.com/azure/azure-resource-manager/management/tls-support)).
 
 ## Task 3: Hands-on: Azure Blob Storage - require secure transfer (HTTPS only) in Azure Portal
 
@@ -88,11 +88,18 @@ az storage account update -g $RESOURCE_GROUP -n $STORAGEACCOUNT_NAME --https-onl
 
 > **Tip:** Combine secure transfer with private endpoints so client traffic stays on Microsoft's backbone while still enforcing TLS at the service boundary.
 
-## Task 4: Hands-on: Enforce minimum TLS version with Azure Policy
+## Task 4: Hands-on: Verify and govern minimum TLS version with Azure Policy
 
-Goal: ensure all storage accounts enforce **Minimum TLS Version = TLS 1.2**.
+Goal: verify the storage account uses **Minimum TLS Version = TLS 1.2** and apply policy governance so future deployments cannot drift to weaker settings.
 
-### Azure Portal steps
+### Verify the storage account in the Azure Portal
+
+1. In the Azure Portal, open the storage account created in Challenge 2.
+2. In the storage account menu pane, under **Settings**, select **Configuration**.
+3. Confirm **Minimum TLS version** is set to **Version 1.2**.
+4. If you are reviewing an older or automation-created storage account that does not show TLS 1.2, update it to **Version 1.2** and select **Save**.
+
+### Assign Azure Policy for governance
 
 1. In the Azure Portal, navigate to **Policy**
 2. Select **Definitions**, search for **"Storage accounts should have the specified minimum TLS version"** (Policy ID `fe83a0eb-a853-422d-aac2-1bffd182c5d0`).
@@ -106,6 +113,27 @@ Goal: ensure all storage accounts enforce **Minimum TLS Version = TLS 1.2**.
 
 ### CLI alternative
 
+Verify the current TLS configuration:
+
+```bash
+az storage account show \
+  --resource-group $RESOURCE_GROUP \
+  --name $STORAGEACCOUNT_NAME \
+  --query "{name:name, minimumTlsVersion:minimumTlsVersion, enableHttpsTrafficOnly:enableHttpsTrafficOnly}" \
+  --output table
+```
+
+If an older or automation-created storage account is not explicitly set to TLS 1.2, remediate it:
+
+```bash
+az storage account update \
+  --resource-group $RESOURCE_GROUP \
+  --name $STORAGEACCOUNT_NAME \
+  --min-tls-version TLS1_2
+```
+
+Assign the policy to govern future changes in your lab resource group:
+
 ```bash
 az policy assignment create \
   --name "${ATTENDEE_ID}-enforce-storage-min-tls12" \
@@ -115,7 +143,7 @@ az policy assignment create \
   --params '{ "effect": { "value": "Deny" }, "minimumTlsVersion": { "value": "TLS1_2" } }'
 ```
 
-> **Note:** Use the policy's `effect = Audit` when you need discovery before enforcement. Switching to `Deny` blocks new or updated storage accounts that attempt to set weaker TLS versions ([learn.microsoft.com](https://learn.microsoft.com/en-us/azure/storage/common/transport-layer-security-configure-minimum-version); [azadvertizer.net](https://www.azadvertizer.net/azpolicyadvertizer/fe83a0eb-a853-422d-aac2-1bffd182c5d0.html)).
+> **Note:** Use the policy's `effect = Audit` when you need discovery before enforcement. Switching to `Deny` blocks new or updated storage accounts that attempt to set weaker TLS versions through supported deployment paths ([learn.microsoft.com](https://learn.microsoft.com/azure/storage/common/transport-layer-security-configure-minimum-version); [azadvertizer.net](https://www.azadvertizer.net/azpolicyadvertizer/fe83a0eb-a853-422d-aac2-1bffd182c5d0.html)).
 
 ## Task 5: Validation: detect TLS versions used by clients (Log Analytics/KQL)
 
@@ -232,15 +260,15 @@ StorageBlobLogs
 
 ![Log Analytics](./images/log_analytics_02.png)
 
-Look for TLS 1.0/1.1 usage.
+Confirm that requests use TLS 1.2 or TLS 1.3.
 
-> **Tip:** If you observe TLS 1.0/1.1 usage, upgrade client frameworks (e.g., .NET, Java, Python SDKs), avoid hardcoded protocol versions, and rely on OS defaults that negotiate TLS 1.2+ ([learn.microsoft.com](https://learn.microsoft.com/azure/storage/common/transport-layer-security-configure-minimum-version)).
+> **Tip:** If older TLS usage appears in historical logs, upgrade client frameworks (e.g., .NET, Java, Python SDKs), avoid hardcoded protocol versions, and rely on OS defaults that negotiate TLS 1.2+ ([learn.microsoft.com](https://learn.microsoft.com/azure/storage/common/transport-layer-security-configure-minimum-version)).
 
 ## Results & acceptance criteria
 
 - ✅ Storage accounts reject HTTP requests and enforce HTTPS (secure transfer required) ([learn.microsoft.com](https://learn.microsoft.com/en-us/azure/storage/common/storage-require-secure-transfer)).
-- ✅ Policy compliance shows all storage accounts with **Minimum TLS Version = TLS 1.2** ([learn.microsoft.com](https://learn.microsoft.com/en-us/azure/storage/common/transport-layer-security-configure-minimum-version?toc=%2Fazure%2Fstorage%2Fblobs%2Ftoc.json&tabs=portal#use-azure-policy-to-audit-for-compliance)).
-- ✅ Log Analytics reports no requests using TLS 1.0/1.1 in the past 7 days (or policy denies/blocks them) ([learn.microsoft.com](https://learn.microsoft.com/en-us/azure/storage/common/transport-layer-security-configure-minimum-version?toc=%2Fazure%2Fstorage%2Fblobs%2Ftoc.json&tabs=portal#detect-the-tls-version-used-by-client-applications)).
+- ✅ Policy compliance shows all storage accounts governed with **Minimum TLS Version = TLS 1.2** ([learn.microsoft.com](https://learn.microsoft.com/azure/storage/common/transport-layer-security-configure-minimum-version?toc=%2Fazure%2Fstorage%2Fblobs%2Ftoc.json&tabs=portal#use-azure-policy-to-audit-for-compliance)).
+- ✅ Log Analytics reports only TLS 1.2 or TLS 1.3 requests in the past 7 days ([learn.microsoft.com](https://learn.microsoft.com/azure/storage/common/transport-layer-security-configure-minimum-version?toc=%2Fazure%2Fstorage%2Fblobs%2Ftoc.json&tabs=portal#detect-the-tls-version-used-by-client-applications)).
 
 ## References
 

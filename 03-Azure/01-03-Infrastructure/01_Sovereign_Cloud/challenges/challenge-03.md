@@ -4,21 +4,21 @@
 
 ## Goal
 
-Understand encryption in transit considerations for sovereign scenarios. Configure Azure Storage accounts to require secure transfer (HTTPS only) and enforce TLS 1.2 as the minimum protocol version. Apply Azure Policy to block weaker TLS versions and monitor client protocol usage through Log Analytics.
+Understand encryption in transit considerations for sovereign scenarios. Verify that Azure Storage accounts require secure transfer (HTTPS only), confirm the TLS 1.2+ baseline, apply Azure Policy for governance, and monitor client protocol usage through Log Analytics.
 
 ## Actions
 
 * Understand Encryption in transit
-* Understand TLS versions & recommendation
+* Understand TLS versions and current Azure Storage defaults
 * Hands-on: Azure Blob Storage - require secure transfer (HTTPS only) in Azure Portal
-* Hands-on: Enforce minimum TLS version with Azure Policy
+* Hands-on: Verify and govern minimum TLS version with Azure Policy
 * Validation: detect TLS versions used by clients (Log Analytics/KQL)
 
 ## Success criteria
 
 * Storage accounts reject HTTP requests and enforce HTTPS (secure transfer required).
-* Policy compliance shows all storage accounts with Minimum TLS Version = TLS 1.2.
-* Log Analytics reports no requests using TLS 1.0/1.1 in the past 7 days (or policy denies/blocks them).
+* Storage accounts created through the Azure Portal use Minimum TLS Version = TLS 1.2, and policy governance is in place to prevent weaker configurations from CLI, template, or legacy deployments.
+* Log Analytics reports only TLS 1.2 or TLS 1.3 requests in the past 7 days.
 
 ## Learning resources
 
