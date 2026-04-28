@@ -26,7 +26,7 @@ Understand Customer-Managed Keys in Azure Key Vault. Configure an Azure Storage 
 * [Azure Key Vault basic concepts](https://learn.microsoft.com/azure/key-vault/general/basic-concepts)
 * [What is Azure Key Vault Managed HSM?](https://learn.microsoft.com/azure/key-vault/managed-hsm/overview)
 * [Azure Key & Certificate Management](https://learn.microsoft.com/azure/key-vault/general/overview)
-* [Services that support CMKs with Key Vault & Managed HSM](https://learn.microsoft.com/azure/key-vault/general/key-vault-integrate-sdks)
+* [Services that support CMKs with Key Vault & Managed HSM](https://learn.microsoft.com/azure/security/fundamentals/encryption-customer-managed-keys-support)
 
 ## Solution
 
