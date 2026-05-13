@@ -136,7 +136,8 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
   tags: tags
   properties: {
     hardwareProfile: {
-      vmSize: 'Standard_B1s'
+      // D-series avoids B-series burst credit behavior that can make Copilot recommendations nondeterministic.
+      vmSize: 'Standard_D2s_v3'
     }
     osProfile: {
       computerName: vmName

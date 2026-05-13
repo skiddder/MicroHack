@@ -74,7 +74,7 @@ The automatic diagnostic checks mirror what an experienced engineer would do man
 ### Steps
 
 1. **Start a new conversation** with agent mode enabled
-2. **Enter:** _"I'm trying to connect to my Azure Cosmos DB (NoSQL API) from my local development machine, but I keep getting a timeout. What should I do?"_
+2. **Enter:** _"I'm connecting to Azure Cosmos DB (NoSQL API) and getting connection failures. Give me a troubleshooting checklist covering firewall or IP allow-list, private endpoint/DNS, auth keys, TLS, and service health. If you need a resource, tell me what to select."_
 3. **Select the Cosmos DB account** if prompted, or work with guidance
 
 ### Expected Diagnostic Flow
@@ -147,37 +147,13 @@ Even when the agent can't directly access a resource (e.g., testing from your lo
 
 ### Steps
 
-**Prompt 1:** _"Investigate the health of my pods."_
+**Prompt 1:** _"Explain how you would diagnose an AKS cluster that is not scheduling pods. List the checks you would run (node status, taints, resource quotas, pending pods) and the kubectl commands required. No cluster needs to be deployed."_
 
-> **Expected response:**
->
-> ```text
-> 🔍 Pod Health Investigation for aks-contoso
->
-> Cluster Status: Running
-> Node Pool: agentpool (3 nodes)
->
-> Pod Status Summary:
-> ✅ Running: 12
-> ⚠️ Pending: 2
-> ❌ CrashLoopBackOff: 1
-> ❌ ImagePullBackOff: 1
->
-> Issues Found:
->
-> 1. Pod 'api-service-7d8f9' — CrashLoopBackOff
->    Container exits with code 1 after 3 seconds
->    Last log: "Error: Cannot connect to database at postgres:5432"
->    → Root Cause: Database connection string misconfigured
->    → Fix: Update the configmap or secret with correct DB connection details
->
-> 2. Pod 'frontend-abc12' — ImagePullBackOff
->    Image: contoso.azurecr.io/frontend:v2.1
->    Error: "unauthorized: authentication required"
->    → Root Cause: AKS doesn't have pull access to the ACR
->    → Fix: Attach ACR to AKS cluster using:
->       az aks update -n aks-contoso -g rg-copilot-<suffix>-ch05 --attach-acr contosoacr
-> ```
+> - Copilot returns a diagnostic playbook (no live execution)
+> - Checks: node status (`kubectl get nodes`), node conditions (`kubectl describe node`), pending pod events (`kubectl describe pod`), resource quotas (`kubectl get resourcequota`), taints/tolerations
+> - Common root causes: insufficient cluster capacity, node taints, PVC provisioning delay, resource quota exhaustion
+> - If a live cluster is selected, Copilot runs the checks directly and returns results
+> - Note: solution-06 Task 3 NOTE confirms no AKS cluster is deployed; this prompt is illustrative
 
 **Prompt 2:** _"Investigate networking issues causing pod connectivity failures."_
 
@@ -285,7 +261,7 @@ One-click fixes are available for **common, well-understood issues** with clear,
 
    Or with more context:
 
-   > _"My application is experiencing intermittent failures that I can't diagnose. Can you create a support request?"_
+   > _"Create a support request for a persistent VM boot issue on `vm-copilot-broken`. Include the symptoms, business impact, and the diagnostics I should attach before submitting."_
 
 2. **Azure Copilot gathers information:**
 

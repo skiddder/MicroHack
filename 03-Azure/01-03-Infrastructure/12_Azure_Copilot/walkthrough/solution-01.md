@@ -56,23 +56,31 @@ Azure Copilot provides **Azure-specific, contextual guidance** that is grounded 
 
 ## Task 3: Navigate Using Azure Copilot
 
+> 💡 **Tip — reset between prompts:** before each navigation prompt, click the **Microsoft Azure** banner in the top-left to return to the portal home blade. Copilot replies with "you are already on that page" when the portal is already there, which is a valid outcome but harder to recognize as a navigation success.
+
 ### Steps
 
 **Prompt 1:** _"Take me to the Virtual Machines page"_
 
-> **Expected:** Azure Copilot provides a direct link to the Virtual Machines blade in the portal. Clicking the link navigates you there.
+> **Expected:** Azure Copilot either (a) provides a direct link to the Virtual Machines blade (clicking navigates you there), or (b) — if you are already on that blade — confirms you are already on the Virtual Machines page. Both are acceptable outcomes.
 
-**Prompt 2:** _"Open Azure Monitor"_
+**Prompt 2:** _"Take me to the Azure Monitor overview page in the Azure portal."_
 
-> **Expected:** Azure Copilot provides a link or directly navigates to the Azure Monitor overview page.
+> - Azure Copilot navigates directly to Azure Monitor or returns a clickable portal link to the Azure Monitor overview page.
+> - The Copilot pane may close or lose focus after navigation; participants may need to reopen it for the next step.
+> - If direct navigation is not available in that moment, Copilot should still provide a clear portal link rather than a generic service explainer.
+> - The key success signal is reaching the Azure Monitor blade, not receiving a long descriptive answer.
 
 **Prompt 3:** _"Navigate to Cost Management"_
 
 > **Expected:** Azure Copilot opens or links to the Cost Management + Billing blade.
 
-**Prompt 4:** _"Show me the Advisor recommendations page"_
+**Prompt 4:** _"Take me to the Azure Advisor recommendations page in the Azure portal."_
 
-> **Expected:** Azure Copilot provides a link to the Azure Advisor recommendations overview.
+> - Azure Copilot navigates to Azure Advisor recommendations or returns a direct portal link to that page.
+> - The response should clearly target Azure Advisor, not Metrics Advisor or a generic recommendation explanation.
+> - The Copilot pane may close or shift context after navigation, so reopening Copilot is acceptable for the next task.
+> - The successful outcome is that the participant reaches the Advisor recommendations experience in the portal.
 
 ### Answer
 
@@ -97,22 +105,19 @@ When you ask Azure Copilot to navigate, it typically **provides a clickable link
 >   --kind StorageV2
 > ```
 
-**Prompt 2:** _"Can you convert that to PowerShell?"_
+**Prompt 2:** _"Convert the following Azure CLI command to PowerShell, keeping the same storage account name, resource group, and region: az storage account create --name stcopilotworkshop<suffix> --resource-group rg-copilot-<suffix>-ch00 --location eastus2 --sku Standard_LRS"_
 
-> **Expected response (similar to):**
->
-> ```powershell
-> New-AzStorageAccount `
->   -ResourceGroupName "rg-copilot-<suffix>-ch00" `
->   -Name "stcopilotworkshop" `
->   -Location "eastus2" `
->   -SkuName "Standard_LRS" `
->   -Kind "StorageV2"
-> ```
+> - Azure Copilot returns a starter PowerShell example using `New-AzStorageAccount` or an equivalent Azure PowerShell workflow.
+> - The response keeps the same storage account name, resource group, and region from the restated command.
+> - The answer may include prerequisite notes such as signing in with `Connect-AzAccount` or selecting the correct subscription.
+> - Participants should expect better reliability when they restate critical context instead of relying on multi-turn memory alone.
 
-**Prompt 3:** _"Generate a Bicep template to create a virtual network with two subnets"_
+**Prompt 3:** _"Generate a Bicep template that creates a Virtual Network named `vnet-copilot-workshop` with address space `10.0.0.0/16` and two subnets: `subnet-app` (`10.0.1.0/24`) and `subnet-data` (`10.0.2.0/24`). Include parameters for the VNet name and location."_
 
-> **Expected:** Azure Copilot generates a complete Bicep template with a VNet and two subnet resources, including parameters for names and address prefixes.
+> - Azure Copilot returns a starter Bicep snippet for a VNet and two subnets in a single file or code block.
+> - The template may be minimal and may require the participant to adjust address ranges, parameterization, or naming before deployment.
+> - A concise example is acceptable; the response does not need to be a production-ready module set.
+> - The main success criterion is that Copilot produces recognizable Bicep syntax for the requested network structure.
 
 ### Answer
 
@@ -124,21 +129,30 @@ Azure Copilot **retains context** across a conversation. When you ask "convert t
 
 ### Steps
 
-**Prompt 1:** _"Show me my top cost recommendations"_
+**Prompt 1:** _"List my top Azure Advisor cost recommendations for this subscription."_
 
-> **Expected:** Azure Copilot returns a list of Azure Advisor cost recommendations for your subscriptions, including links to each recommendation.
+> - Azure Copilot often starts by summarizing the highest-cost services or current spend drivers in your subscription.
+> - If Azure Advisor cost recommendations are available, Copilot may surface some of them, but that is not guaranteed for every subscription.
+> - A spend-oriented answer is still useful because it highlights where to investigate savings first.
+> - Participants should treat this step as an entry point into cost analysis, not a guaranteed list of actionable Advisor recommendations.
 
-**Prompt 2:** _"What are my security recommendations?"_
+**Prompt 2:** _"List my top Azure Advisor security recommendations for this subscription."_
 
-> **Expected:** Azure Copilot lists security-related Advisor recommendations.
+> **Expected:** Azure Copilot lists security-related Advisor recommendations scoped to the current subscription — impacted resource, impact (High/Medium/Low), and a link to details for each item.
 
-**Prompt 3:** _"Show me my reliability recommendations"_
+**Prompt 3:** _"List my top Azure Advisor reliability recommendations for this subscription."_
 
-> **Expected:** Azure Copilot shows reliability-focused recommendations from Azure Advisor.
+> - Copilot either lists Azure Advisor reliability recommendations inline, OR
+> - Provides a link / navigates to the Advisor Reliability blade where recommendations are shown
+> - If inline, each item shows impacted resource, impact, and a link to details
+> - If the subscription has no qualifying workloads, Copilot may say "no reliability recommendations" — this is still a pass.
 
-**Prompt 4:** _"What services do you recommend for building a web application with a database backend?"_
+**Prompt 4:** _"What Azure services do you recommend for building a web application with a relational database backend? Compare App Service + Azure SQL Database vs App Service + Azure Database for PostgreSQL Flexible Server, and summarize when each is appropriate."_
 
-> **Expected:** Azure Copilot provides a recommended architecture, such as App Service + Azure SQL Database or App Service + Cosmos DB, with explanations for when each option is appropriate.
+> - Azure Copilot recommends a starter Azure web architecture such as App Service paired with Azure SQL Database, PostgreSQL, or Cosmos DB depending on workload needs.
+> - The response explains trade-offs such as relational vs. NoSQL data models, managed hosting, and operational simplicity.
+> - Copilot may also mention supporting services like Key Vault, Application Insights, Front Door, or networking controls.
+> - The answer is conceptual guidance, not an environment-specific deployment plan.
 
 ### Answer
 

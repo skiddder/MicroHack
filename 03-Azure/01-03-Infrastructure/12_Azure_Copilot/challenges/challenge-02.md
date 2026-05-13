@@ -48,10 +48,10 @@ By the end of this challenge, you will be able to:
 
 The initial plan is good, but as the architect, you want to refine it. Use follow-up prompts to adjust:
 
-1. Ask: _"Can you add a Virtual Network with subnets for the App Service and the database?"_
-2. Ask: _"I want the PostgreSQL server to use private endpoints instead of public access."_
-3. Ask: _"Add a Network Security Group to restrict traffic to the App Service subnet."_
-4. Ask: _"What would be the estimated monthly cost for this setup at a basic tier?"_
+1. Ask: _"In the Deployment Agent plan canvas for the Flask+PostgreSQL workload, add a Virtual Network `10.0.0.0/16` with an App Service subnet `10.0.1.0/24` and a database subnet `10.0.2.0/24` delegated to PostgreSQL Flexible Server."_
+2. Ask: _"Revise the same NEW-workload design so PostgreSQL uses private access or private endpoints, and include the supporting DNS and networking considerations. Do not ask me to select existing resources."_
+3. Ask: _"Update the same NEW-workload design to include an NSG strategy for the application subnet. Describe the intended inbound and outbound restrictions rather than querying existing resources."_
+4. Ask: _"Provide a rough monthly cost estimate for the planned infrastructure (App Service Basic, PostgreSQL Flexible Server Standard_B1ms in the Burstable tier, Key Vault Standard, Application Insights, VNet) assuming East US 2 list prices."_
 
 **Question to answer:** How does the Deployment Agent handle these incremental refinements? Does it update the plan or start over?
 
@@ -84,7 +84,7 @@ When the plan is ready, Azure Copilot presents it as a summary with components, 
 
 1. After reviewing the infrastructure plan, click **"I approve the plan"** to proceed (or, if you described the workload via a prompt, ask Azure Copilot to generate the Terraform code):
 
-   > _"Generate the Terraform configurations for this plan."_
+   > _"Generate starter Terraform for a NEW Azure deployment of a Flask web app on App Service with PostgreSQL Flexible Server, Key Vault, and Application Insights. Include the main resources even if I still need to customize variables and networking details."_
 
 2. **Review the generated files** in the artifact pane:
    - Click the **maximize icon** to open the artifact pane
@@ -124,7 +124,7 @@ After reviewing the configurations, explore the available deployment methods:
 
 Start a **new conversation** and try a completely different deployment scenario:
 
-> _"Set up a multitenant SaaS application on AKS using Kubernetes namespaces for isolation, integrate Microsoft Entra for authentication, and centralize logs in Azure Log Analytics."_
+> _"Design a NEW workload plan for a multitenant SaaS application on AKS using Kubernetes namespaces for tenant isolation, Microsoft Entra ID for authentication, and Azure Log Analytics for centralized logging. Do not select an existing cluster — this is a greenfield design."_
 
 Compare the approach, plan, and generated configurations with your first scenario.
 
