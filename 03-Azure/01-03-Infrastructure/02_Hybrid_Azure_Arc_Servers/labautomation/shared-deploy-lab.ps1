@@ -28,7 +28,7 @@ $providers = @(
     'Microsoft.GuestConfiguration', 'Microsoft.HybridConnectivity', 'Microsoft.AzureArcData',
     'Microsoft.OperationsManagement', 'Microsoft.OperationalInsights', 'Microsoft.Insights',
     'Microsoft.KeyVault', 'Microsoft.Security', 'Microsoft.PolicyInsights',
-    'Microsoft.Storage', 'Microsoft.Automation', 'Microsoft.Maintenance', 'Microsoft.Quota'
+    'Microsoft.Storage', 'Microsoft.Automation', 'Microsoft.Maintenance'
 )
 foreach ($provider in $providers) {
     $state = Invoke-ArcAz -Arguments @('provider', 'show', '--namespace', $provider)

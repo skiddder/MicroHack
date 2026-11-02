@@ -95,68 +95,19 @@ function Assert-ArcQuota {
     if ($usage.Count -ne 1) {
         throw "Cannot verify quota '$Name' in $Location."
     }
-    $needed = [int]$usage[0].currentValue + $Additional
-    if ($needed -gt [int]$usage[0].limit) {
-        throw "Insufficient quota '$Name' in ${Location}: current=$($usage[0].currentValue), additional=$Additional, limit=$($usage[0].limit). Ask the coach to resolve the quota; no SKU or region will be substituted."
-    }
-    Write-Host "Quota $Location/$Name verified: $needed / $($usage[0].limit)."
-}
-
-function Write-ArcQuotaDiagnostics {
-    param([string]$Location)
-
-    Write-Host "[quota-diagnostics] Reading network usage counters for $Location."
-    $network = @(Invoke-ArcAz -Arguments @(
-        'network', 'list-usages', '--location', $Location,
-        '--query', '[].{name:name.value,label:name.localizedValue,current:currentValue,limit:limit}'
-    ))
-    Write-Host "[quota-diagnostics] network-usages: $(ConvertTo-Json -InputObject $network -Depth 10 -Compress)"
-    $scope = "/subscriptions/$SubscriptionId/providers/Microsoft.Network/locations/$Location/providers/Microsoft.Quota"
-    foreach ($endpoint in @('quotas', 'usages')) {
-        $valuePath = if ($endpoint -eq 'quotas') { 'limit' } else { 'usages' }
-        Write-Host "[quota-diagnostics] Reading Microsoft.Quota/$endpoint catalog for $Location."
-        $catalog = Invoke-ArcAz -Arguments @(
-            'rest', '--method', 'get', '--url', "$scope/${endpoint}?api-version=2025-09-01",
-            '--query', "{nextLink:nextLink,entries:value[].{name:name,label:properties.name.localizedValue,resourceType:properties.resourceType,value:properties.${valuePath}.value}}"
-        )
-        Write-Host "[quota-diagnostics] ${endpoint}: $(ConvertTo-Json -InputObject $catalog -Depth 10 -Compress)"
-    }
-}
-
-function Get-ArcStandardPublicIpUsage {
-    param([string]$Location)
-
-    $name = 'StandardSkuPublicIpAddresses'
-    $scope = "/subscriptions/$SubscriptionId/providers/Microsoft.Network/locations/$Location/providers/Microsoft.Quota"
-    try {
-        $quota = Invoke-ArcAz -Arguments @(
-            'rest', '--method', 'get', '--url', "$scope/quotas/${name}?api-version=2025-09-01",
-            '--query', '{name:name,value:properties.limit.value}'
-        )
-        $usage = Invoke-ArcAz -Arguments @(
-            'rest', '--method', 'get', '--url', "$scope/usages/${name}?api-version=2025-09-01",
-            '--query', '{name:name,value:properties.usages.value}'
-        )
-    } catch [System.Management.Automation.RuntimeException] {
-        if ($_.Exception.Message -notmatch '\bInvalidResourceName\b') {
-            throw
-        }
-        Write-Warning "[quota-diagnostics] Quota resource name rejected in ${Location}. Original error: $($_.Exception.Message)"
-        Write-ArcQuotaDiagnostics -Location $Location
-        throw
-    }
     $limit = 0
     $current = 0
-    if (-not $quota -or -not $usage -or $quota.name -ne $name -or $usage.name -ne $name -or
-        -not [int]::TryParse([string]$quota.value, [ref]$limit) -or $limit -lt 0 -or
-        -not [int]::TryParse([string]$usage.value, [ref]$current) -or $current -lt 0) {
-        throw "Cannot verify quota '$name' in ${Location}: Microsoft.Quota returned missing or invalid limit/usage data."
+    if (-not $usage[0].PSObject.Properties['limit'] -or
+        -not $usage[0].PSObject.Properties['currentValue'] -or
+        -not [int]::TryParse([string]$usage[0].limit, [ref]$limit) -or $limit -lt 0 -or
+        -not [int]::TryParse([string]$usage[0].currentValue, [ref]$current) -or $current -lt 0) {
+        throw "Cannot verify quota '$Name' in ${Location}: missing or invalid limit/usage data."
     }
-    [pscustomobject]@{
-        name = [pscustomobject]@{ value = $name }
-        currentValue = $current
-        limit = $limit
+    $needed = [long]$current + $Additional
+    if ($needed -gt $limit) {
+        throw "Insufficient quota '$Name' in ${Location}: current=$current, additional=$Additional, limit=$limit. Ask the coach to resolve the quota; no SKU or region will be substituted."
     }
+    Write-Host "Quota $Location/$Name verified: $needed / $limit."
 }
 
 function Test-ArcCapacity {
@@ -238,10 +189,11 @@ function Test-ArcCapacity {
         foreach ($family in $familyCores.Keys) {
             Assert-ArcQuota -Usages $usages -Name $family -Additional $familyCores[$family] -Location $location
         }
-        $publicIpUsage = Get-ArcStandardPublicIpUsage -Location $location
+        $networkUsages = @(Invoke-ArcAz -Arguments @('network', 'list-usages', '--location', $location))
         $ipCount = 0
         if ($remainingIps.ContainsKey($location)) { $ipCount = $remainingIps[$location] }
-        Assert-ArcQuota -Usages @($publicIpUsage) -Name 'StandardSkuPublicIpAddresses' -Additional $ipCount -Location $location
+        Assert-ArcQuota -Usages $networkUsages -Name 'PublicIPAddresses' -Additional $ipCount -Location $location
+        Assert-ArcQuota -Usages $networkUsages -Name 'IPv4StandardSkuPublicIpAddresses' -Additional $ipCount -Location $location
     }
 }
 

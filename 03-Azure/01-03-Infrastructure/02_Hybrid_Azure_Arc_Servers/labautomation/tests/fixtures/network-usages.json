@@ -1,0 +1,27 @@
+[
+  {
+    "name": { "value": "PublicIPAddresses", "localizedValue": "Public IP Addresses" },
+    "currentValue": "0",
+    "limit": "1000"
+  },
+  {
+    "name": { "value": "IPv4BasicSkuPublicIpAddresses", "localizedValue": "Public IPv4 Addresses - Basic" },
+    "currentValue": "0",
+    "limit": "0"
+  },
+  {
+    "name": { "value": "IPv6BasicSkuPublicIpAddresses", "localizedValue": "Public IPv6 Addresses - Basic" },
+    "currentValue": "0",
+    "limit": "0"
+  },
+  {
+    "name": { "value": "IPv4StandardSkuPublicIpAddresses", "localizedValue": "Public IPv4 Addresses - Standard" },
+    "currentValue": "0",
+    "limit": "1000"
+  },
+  {
+    "name": { "value": "IPv6StandardSkuPublicIpAddresses", "localizedValue": "Public IPv6 Addresses - Standard" },
+    "currentValue": "0",
+    "limit": "1000"
+  }
+]

@@ -32,11 +32,13 @@ function Reset-Mock {
         availableRegions = @($regions) + @('westeurope')
         quota = 100
         used = 0
-        networkQuota = 100
-        networkUsed = 0
-        networkQuotaName = 'StandardSkuPublicIpAddresses'
-        networkUsageName = 'StandardSkuPublicIpAddresses'
-        rejectQuotaResource = $false
+        networkQuota = '1000'
+        networkUsed = '0'
+        totalNetworkQuota = '1000'
+        totalNetworkUsed = '0'
+        missingNetworkQuota = $false
+        duplicateNetworkQuota = $false
+        networkUsages = @(Get-Content (Join-Path $PSScriptRoot 'fixtures\network-usages.json') -Raw | ConvertFrom-Json)
         partialIps = @()
         restricted = $false
         missingSku = $false
@@ -178,45 +180,21 @@ function global:az {
             )
         }
         'network list-usages' {
-            if ((Get-MockArgument $arguments '--query') -ne '[].{name:name.value,label:name.localizedValue,current:currentValue,limit:limit}') {
-                throw 'Incorrect network diagnostics projection.'
-            }
-            @(@{ name = 'PublicIPAddresses'; label = 'Public IP Addresses'; current = 0; limit = 1000 })
-        }
-        'rest --method' {
-            $url = Get-MockArgument $arguments '--url'
-            $query = Get-MockArgument $arguments '--query'
-            $scope = "/subscriptions/$subscription/providers/Microsoft.Network/locations/"
-            if ((Get-MockArgument $arguments '--method') -ne 'get' -or
-                -not $url.StartsWith($scope) -or
-                $url -notmatch '/providers/Microsoft\.Quota/(quotas|usages)(/StandardSkuPublicIpAddresses)?\?api-version=2025-09-01$' -or
-                -not $global:ArcMock.registrations.ContainsKey('Microsoft.Quota')) {
-                throw "Unexpected or unprepared quota REST request: $url"
-            }
-            if ($url -match '/(quotas|usages)\?api-version=') {
-                $valuePath = if ($url.Contains('/quotas?')) { 'limit' } else { 'usages' }
-                if ($query -ne "{nextLink:nextLink,entries:value[].{name:name,label:properties.name.localizedValue,resourceType:properties.resourceType,value:properties.${valuePath}.value}}") {
-                    throw 'Incorrect quota catalog diagnostics projection.'
+            @(
+                foreach ($counter in $global:ArcMock.networkUsages) {
+                    if ($counter.name.value -eq 'PublicIPAddresses') {
+                        $counter.currentValue = $global:ArcMock.totalNetworkUsed
+                        $counter.limit = $global:ArcMock.totalNetworkQuota
+                    }
+                    if ($counter.name.value -eq 'IPv4StandardSkuPublicIpAddresses') {
+                        if ($global:ArcMock.missingNetworkQuota) { continue }
+                        $counter.currentValue = $global:ArcMock.networkUsed
+                        $counter.limit = $global:ArcMock.networkQuota
+                        if ($global:ArcMock.duplicateNetworkQuota) { $counter }
+                    }
+                    $counter
                 }
-                @{
-                    nextLink = $null
-                    entries = @(@{
-                        name = 'DiagnosticFixturePublicIpQuota'
-                        label = 'Fixture public IP quota'
-                        resourceType = 'PublicIpAddresses'
-                        value = 1000
-                    })
-                }
-            } elseif ($global:ArcMock.rejectQuotaResource) {
-                $global:LASTEXITCODE = 1
-                return 'ERROR: Bad Request({"error":{"code":"InvalidResourceName","message":"Name StandardSkuPublicIpAddresses is not valid resource name."}})'
-            } elseif ($url.Contains('/quotas/')) {
-                if ($query -ne '{name:name,value:properties.limit.value}') { throw 'Incorrect quota projection.' }
-                @{ name = $global:ArcMock.networkQuotaName; value = $global:ArcMock.networkQuota }
-            } else {
-                if ($query -ne '{name:name,value:properties.usages.value}') { throw 'Incorrect usage projection.' }
-                @{ name = $global:ArcMock.networkUsageName; value = $global:ArcMock.networkUsed }
-            }
+            )
         }
         'vm show' {
             $name = Get-MockArgument $arguments '--name'
@@ -301,14 +279,15 @@ Reset-Mock
 Invoke-Shared
 Assert-Test ($global:ArcMock.placement.Count -eq 7) 'All Console participants mapped'
 Assert-Test ($global:ArcMock.placement[5].location -eq $regions[0]) 'Round-robin wraps'
-Assert-Test ($global:ArcMock.registrations.Count -eq 16) 'Providers registered once'
-Assert-Test ($global:ArcMock.registrations.ContainsKey('Microsoft.Quota')) 'Quota provider is prepared before Standard IP requests'
+Assert-Test ($global:ArcMock.registrations.Count -eq 15) 'Providers registered once'
+Assert-Test (-not $global:ArcMock.registrations.ContainsKey('Microsoft.Quota')) 'No unnecessary Quota provider dependency'
 Assert-Test (@($global:ArcMock.calls | Where-Object {
-    $_[0] -eq 'rest' -and (Get-MockArgument $_ '--url') -like '*/quotas/StandardSkuPublicIpAddresses?*'
-}).Count -eq 5) 'Standard IP limits read from Microsoft.Quota for every selected deployment region'
-Assert-Test (@($global:ArcMock.calls | Where-Object {
-    $_[0] -eq 'rest' -and (Get-MockArgument $_ '--url') -like '*/usages/StandardSkuPublicIpAddresses?*'
-}).Count -eq 5) 'Standard IP usage read separately for every selected deployment region'
+    $_[0] -eq 'network' -and $_[1] -eq 'list-usages'
+}).Count -eq 5) 'Confirmed network usage counters read once per deployment region'
+Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'rest' }).Count -eq 0) 'No quota REST requests are needed'
+Assert-Test (@($global:ArcMock.networkUsages | Where-Object {
+    $_.name.value -eq 'IPv4BasicSkuPublicIpAddresses' -and $_.limit -eq '0'
+}).Count -eq 1) 'Live-shaped fixture includes Basic IPv4 quota zero without blocking Standard deployment'
 $global:ArcMock.users = @($global:ArcMock.users | Sort-Object -Descending)
 Invoke-Shared
 Assert-Test ($global:ArcMock.placement[0].userId -eq $users[0]) 'Input ordering does not affect placement'
@@ -353,7 +332,7 @@ Assert-Test ($global:ArcMock.placement.Count -eq 0) 'Insufficient Standard IP qu
 Reset-Mock -Count 1
 $global:ArcMock.networkQuota = 2
 Invoke-Shared
-Assert-Test ($global:ArcMock.placement.Count -eq 1) 'Exact Standard IP quota threshold passes without a legacy network usage entry'
+Assert-Test ($global:ArcMock.placement.Count -eq 1) 'Exact IPv4 Standard quota threshold passes with real counter names'
 Reset-Mock -Count 1
 $global:ArcMock.networkQuota = 2
 $global:ArcMock.networkUsed = 1
@@ -368,33 +347,26 @@ foreach ($invalid in @($null, 'not-a-number', -1)) {
     Assert-Throws { Invoke-Shared } 'missing or invalid limit/usage data'
 }
 Reset-Mock -Count 1
-$global:ArcMock.networkQuotaName = 'PublicIPAddresses'
-Assert-Throws { Invoke-Shared } 'missing or invalid limit/usage data'
+$global:ArcMock.missingNetworkQuota = $true
+Assert-Throws { Invoke-Shared } "Cannot verify quota 'IPv4StandardSkuPublicIpAddresses'"
 Reset-Mock -Count 1
-$global:ArcMock.networkUsageName = 'PublicIPAddresses'
-Assert-Throws { Invoke-Shared } 'missing or invalid limit/usage data'
+$global:ArcMock.duplicateNetworkQuota = $true
+Assert-Throws { Invoke-Shared } "Cannot verify quota 'IPv4StandardSkuPublicIpAddresses'"
 Reset-Mock -Count 1
-$global:ArcMock.failCommand = 'rest --method get'
-Assert-Throws { Invoke-Shared } 'Azure CLI failed'
+$global:ArcMock.totalNetworkQuota = 1
+Assert-Throws { Invoke-Shared } "Insufficient quota 'PublicIPAddresses'"
 Reset-Mock -Count 1
-$global:ArcMock.rejectQuotaResource = $true
-$script:DiagnosticError = $null
-$diagnostics = @(& {
-    try { Invoke-Shared } catch { $script:DiagnosticError = $_ }
-} 6>&1 3>&1)
-Assert-Test ($null -ne $script:DiagnosticError -and $script:DiagnosticError.ToString() -like '*InvalidResourceName*') 'Diagnostics preserve the original quota failure'
-$diagnosticText = $diagnostics -join "`n"
-Assert-Test ($diagnosticText.Contains('[quota-diagnostics] network-usages:')) 'Network usage diagnostics reach the job log'
-Assert-Test ($diagnosticText.Contains('[quota-diagnostics] quotas:')) 'Quota catalog diagnostics reach the job log'
-Assert-Test ($diagnosticText.Contains('[quota-diagnostics] usages:')) 'Usage catalog diagnostics reach the job log'
-Assert-Test ($diagnosticText.Contains('DiagnosticFixturePublicIpQuota')) 'Diagnostics log the returned names instead of assuming a replacement'
-Assert-Test ($diagnosticText.Contains('"nextLink":null')) 'Catalog diagnostics include continuation information'
-Assert-Test ($global:ArcMock.placement.Count -eq 0) 'Diagnostics cannot turn an invalid quota query into a successful shared stage'
-Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Diagnostics do not deploy participant resources'
+$global:ArcMock.totalNetworkQuota = 2
+$global:ArcMock.totalNetworkUsed = 1
+Assert-Throws { Invoke-Shared } "Insufficient quota 'PublicIPAddresses'"
 Reset-Mock -Count 1
-$global:ArcMock.rejectQuotaResource = $true
+$ipv6 = $global:ArcMock.networkUsages | Where-Object { $_.name.value -eq 'IPv6StandardSkuPublicIpAddresses' }
+$ipv6.limit = '0'
+Invoke-Shared
+Assert-Test ($global:ArcMock.placement.Count -eq 1) 'IPv6 Standard limit does not constrain IPv4 VMs'
+Reset-Mock -Count 1
 $global:ArcMock.failCommand = 'network list-usages'
-Assert-Throws { Invoke-Shared 6>$null 3>$null } 'Azure CLI failed (network list-usages)'
+Assert-Throws { Invoke-Shared } 'Azure CLI failed (network list-usages)'
 Reset-Mock -Count 1
 $global:ArcMock.networkQuota = 2
 $global:ArcMock.networkUsed = 1

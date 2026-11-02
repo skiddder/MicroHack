@@ -65,27 +65,21 @@ guest scripts is modified by this integration.
    names. Assign one region per user using `index % regionCount` in the supplied
    order. The initial defaults come from [lab-defaults.json](lab-defaults.json);
    they are not an allowlist.
-3. Register required compute, network, Arc, quota and challenge resource providers
-   (including `Microsoft.Quota`) and wait for registration to finish.
+3. Register required compute, network, Arc and challenge resource providers and
+   wait for registration to finish.
 4. Verify the subscription's SKU location restrictions and available regional,
    VM-family, VM-count and public-IP quotas for the whole planned deployment.
    Both SKUs currently consume the same VM-family quota: **6 vCPUs per user**.
    Existing automation-owned VMs are not counted as new VM/core demand.
-   Standard public IP limits and current usage are read separately using the
-   [Microsoft.Quota limit](https://learn.microsoft.com/en-us/rest/api/quota/quota/get?view=rest-quota-2025-09-01)
-   and [usage](https://learn.microsoft.com/en-us/rest/api/quota/usages/get?view=rest-quota-2025-09-01)
-   endpoints for `StandardSkuPublicIpAddresses`, scoped to the subscription's
-   `Microsoft.Network/locations/<region>`. The legacy `az network list-usages`
-   response is not required to contain this SKU-specific counter; its
-   `PublicIPAddresses` entry is not substituted for the Standard quota.
-   Missing/invalid quota data or failed API calls stop the deployment explicitly.
-   If a subscription rejects the example resource name with `InvalidResourceName`,
-   the hook logs read-only diagnostics under `[quota-diagnostics]`: network usage
-   counters and the Microsoft.Quota quota/usage catalogs, including returned
-   resource names, labels, values and any continuation links. Share these job-log
-   lines to identify the subscription's actual API contract. The original error
-   is rethrown after diagnostics; no counter is substituted or quota check skipped.
-   This diagnostic logging is not a fix for the rejected resource name.
+   Public IP limits and current usage come from `az network list-usages`: both
+   the overall `PublicIPAddresses` counter and the
+   `IPv4StandardSkuPublicIpAddresses` counter must have capacity. These names were
+   confirmed by the Console deployment's actual diagnostic response. Basic and
+   IPv6 quotas are not applied to the Standard IPv4 addresses created here.
+   Missing/duplicate counters, invalid values and failed API calls stop the
+   deployment explicitly. No `Microsoft.Quota` registration or REST calls are
+   needed. Existing public IPs, including partially deployed VM resources, are
+   not counted as new IP demand.
 5. Save the user-to-region mapping as outputs of the subscription ARM deployment
    `microhack-arc-server-placement`, containing **no Azure resources**.
 
@@ -193,6 +187,9 @@ The tests replace Azure commands and Hackbox helpers with in-process mocks. They
 check PowerShell parsing, configuration/Bash parity, the real template parameter
 sets, placement, quota thresholds, credentials, asynchronous commands, failure
 propagation and re-runs. They do **not** validate an actual Azure deployment.
+The [network quota fixture](tests/fixtures/network-usages.json) uses the counter
+names, labels and string values observed in the Console diagnostics, restored to
+the CLI's unprojected `name` / `currentValue` / `limit` response shape.
 
 No real Azure test is authorized for this implementation. If one is approved
 later, local execution needs explicit Az PowerShell **and** Azure CLI login,
