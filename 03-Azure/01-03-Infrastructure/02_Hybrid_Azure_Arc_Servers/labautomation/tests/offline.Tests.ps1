@@ -36,6 +36,7 @@ function Reset-Mock {
         networkUsed = 0
         networkQuotaName = 'StandardSkuPublicIpAddresses'
         networkUsageName = 'StandardSkuPublicIpAddresses'
+        rejectQuotaResource = $false
         partialIps = @()
         restricted = $false
         missingSku = $false
@@ -176,17 +177,40 @@ function global:az {
                 }
             )
         }
+        'network list-usages' {
+            if ((Get-MockArgument $arguments '--query') -ne '[].{name:name.value,label:name.localizedValue,current:currentValue,limit:limit}') {
+                throw 'Incorrect network diagnostics projection.'
+            }
+            @(@{ name = 'PublicIPAddresses'; label = 'Public IP Addresses'; current = 0; limit = 1000 })
+        }
         'rest --method' {
             $url = Get-MockArgument $arguments '--url'
             $query = Get-MockArgument $arguments '--query'
             $scope = "/subscriptions/$subscription/providers/Microsoft.Network/locations/"
             if ((Get-MockArgument $arguments '--method') -ne 'get' -or
                 -not $url.StartsWith($scope) -or
-                $url -notmatch '/providers/Microsoft\.Quota/(quotas|usages)/StandardSkuPublicIpAddresses\?api-version=2025-09-01$' -or
+                $url -notmatch '/providers/Microsoft\.Quota/(quotas|usages)(/StandardSkuPublicIpAddresses)?\?api-version=2025-09-01$' -or
                 -not $global:ArcMock.registrations.ContainsKey('Microsoft.Quota')) {
                 throw "Unexpected or unprepared quota REST request: $url"
             }
-            if ($url.Contains('/quotas/')) {
+            if ($url -match '/(quotas|usages)\?api-version=') {
+                $valuePath = if ($url.Contains('/quotas?')) { 'limit' } else { 'usages' }
+                if ($query -ne "{nextLink:nextLink,entries:value[].{name:name,label:properties.name.localizedValue,resourceType:properties.resourceType,value:properties.${valuePath}.value}}") {
+                    throw 'Incorrect quota catalog diagnostics projection.'
+                }
+                @{
+                    nextLink = $null
+                    entries = @(@{
+                        name = 'DiagnosticFixturePublicIpQuota'
+                        label = 'Fixture public IP quota'
+                        resourceType = 'PublicIpAddresses'
+                        value = 1000
+                    })
+                }
+            } elseif ($global:ArcMock.rejectQuotaResource) {
+                $global:LASTEXITCODE = 1
+                return 'ERROR: Bad Request({"error":{"code":"InvalidResourceName","message":"Name StandardSkuPublicIpAddresses is not valid resource name."}})'
+            } elseif ($url.Contains('/quotas/')) {
                 if ($query -ne '{name:name,value:properties.limit.value}') { throw 'Incorrect quota projection.' }
                 @{ name = $global:ArcMock.networkQuotaName; value = $global:ArcMock.networkQuota }
             } else {
@@ -267,8 +291,9 @@ Assert-Test (-not $defaults.ContainsKey('estimatedDailyCostsUsd')) 'No invented 
 $source = Get-Content (Join-Path (Split-Path $labRoot -Parent) 'resources\demo-vm-creator\create_vms.sh') -Raw
 $bashRegions = [regex]::Match($source, '(?m)^regions=\(([^)]+)\)').Groups[1].Value
 $bashRegions = @([regex]::Matches($bashRegions, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
-Assert-Test (($bashRegions -join ',') -eq ($regions -join ',')) 'Regions match verified Bash'
-Assert-Test (($defaults.preferredLocation -replace '\s', '') -eq ($regions -join ',')) 'Defaults preserve region order'
+$defaultRegions = @($defaults.preferredLocation.Split(',') | ForEach-Object { $_.Trim() })
+Assert-Test ($defaultRegions.Count -gt 0 -and '' -notin $defaultRegions) 'Defaults contain non-empty region names'
+Assert-Test (($bashRegions -join ',') -eq ($defaultRegions -join ',')) 'Default region order matches verified Bash independently of Console test fixtures'
 Assert-Test ($source -match 'virtualWinMachineSize="Standard_D4ads_v5"') 'Windows SKU matches Bash'
 Assert-Test ($source -match 'virtualLnxMachineSize="Standard_D2ads_v5"') 'Linux SKU matches Bash'
 
@@ -351,6 +376,25 @@ Assert-Throws { Invoke-Shared } 'missing or invalid limit/usage data'
 Reset-Mock -Count 1
 $global:ArcMock.failCommand = 'rest --method get'
 Assert-Throws { Invoke-Shared } 'Azure CLI failed'
+Reset-Mock -Count 1
+$global:ArcMock.rejectQuotaResource = $true
+$script:DiagnosticError = $null
+$diagnostics = @(& {
+    try { Invoke-Shared } catch { $script:DiagnosticError = $_ }
+} 6>&1 3>&1)
+Assert-Test ($null -ne $script:DiagnosticError -and $script:DiagnosticError.ToString() -like '*InvalidResourceName*') 'Diagnostics preserve the original quota failure'
+$diagnosticText = $diagnostics -join "`n"
+Assert-Test ($diagnosticText.Contains('[quota-diagnostics] network-usages:')) 'Network usage diagnostics reach the job log'
+Assert-Test ($diagnosticText.Contains('[quota-diagnostics] quotas:')) 'Quota catalog diagnostics reach the job log'
+Assert-Test ($diagnosticText.Contains('[quota-diagnostics] usages:')) 'Usage catalog diagnostics reach the job log'
+Assert-Test ($diagnosticText.Contains('DiagnosticFixturePublicIpQuota')) 'Diagnostics log the returned names instead of assuming a replacement'
+Assert-Test ($diagnosticText.Contains('"nextLink":null')) 'Catalog diagnostics include continuation information'
+Assert-Test ($global:ArcMock.placement.Count -eq 0) 'Diagnostics cannot turn an invalid quota query into a successful shared stage'
+Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Diagnostics do not deploy participant resources'
+Reset-Mock -Count 1
+$global:ArcMock.rejectQuotaResource = $true
+$global:ArcMock.failCommand = 'network list-usages'
+Assert-Throws { Invoke-Shared 6>$null 3>$null } 'Azure CLI failed (network list-usages)'
 Reset-Mock -Count 1
 $global:ArcMock.networkQuota = 2
 $global:ArcMock.networkUsed = 1

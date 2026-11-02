@@ -102,19 +102,49 @@ function Assert-ArcQuota {
     Write-Host "Quota $Location/$Name verified: $needed / $($usage[0].limit)."
 }
 
+function Write-ArcQuotaDiagnostics {
+    param([string]$Location)
+
+    Write-Host "[quota-diagnostics] Reading network usage counters for $Location."
+    $network = @(Invoke-ArcAz -Arguments @(
+        'network', 'list-usages', '--location', $Location,
+        '--query', '[].{name:name.value,label:name.localizedValue,current:currentValue,limit:limit}'
+    ))
+    Write-Host "[quota-diagnostics] network-usages: $(ConvertTo-Json -InputObject $network -Depth 10 -Compress)"
+    $scope = "/subscriptions/$SubscriptionId/providers/Microsoft.Network/locations/$Location/providers/Microsoft.Quota"
+    foreach ($endpoint in @('quotas', 'usages')) {
+        $valuePath = if ($endpoint -eq 'quotas') { 'limit' } else { 'usages' }
+        Write-Host "[quota-diagnostics] Reading Microsoft.Quota/$endpoint catalog for $Location."
+        $catalog = Invoke-ArcAz -Arguments @(
+            'rest', '--method', 'get', '--url', "$scope/${endpoint}?api-version=2025-09-01",
+            '--query', "{nextLink:nextLink,entries:value[].{name:name,label:properties.name.localizedValue,resourceType:properties.resourceType,value:properties.${valuePath}.value}}"
+        )
+        Write-Host "[quota-diagnostics] ${endpoint}: $(ConvertTo-Json -InputObject $catalog -Depth 10 -Compress)"
+    }
+}
+
 function Get-ArcStandardPublicIpUsage {
     param([string]$Location)
 
     $name = 'StandardSkuPublicIpAddresses'
     $scope = "/subscriptions/$SubscriptionId/providers/Microsoft.Network/locations/$Location/providers/Microsoft.Quota"
-    $quota = Invoke-ArcAz -Arguments @(
-        'rest', '--method', 'get', '--url', "$scope/quotas/${name}?api-version=2025-09-01",
-        '--query', '{name:name,value:properties.limit.value}'
-    )
-    $usage = Invoke-ArcAz -Arguments @(
-        'rest', '--method', 'get', '--url', "$scope/usages/${name}?api-version=2025-09-01",
-        '--query', '{name:name,value:properties.usages.value}'
-    )
+    try {
+        $quota = Invoke-ArcAz -Arguments @(
+            'rest', '--method', 'get', '--url', "$scope/quotas/${name}?api-version=2025-09-01",
+            '--query', '{name:name,value:properties.limit.value}'
+        )
+        $usage = Invoke-ArcAz -Arguments @(
+            'rest', '--method', 'get', '--url', "$scope/usages/${name}?api-version=2025-09-01",
+            '--query', '{name:name,value:properties.usages.value}'
+        )
+    } catch [System.Management.Automation.RuntimeException] {
+        if ($_.Exception.Message -notmatch '\bInvalidResourceName\b') {
+            throw
+        }
+        Write-Warning "[quota-diagnostics] Quota resource name rejected in ${Location}. Original error: $($_.Exception.Message)"
+        Write-ArcQuotaDiagnostics -Location $Location
+        throw
+    }
     $limit = 0
     $current = 0
     if (-not $quota -or -not $usage -or $quota.name -ne $name -or $usage.name -ne $name -or

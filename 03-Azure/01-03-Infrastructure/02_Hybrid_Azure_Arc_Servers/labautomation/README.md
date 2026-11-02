@@ -63,8 +63,8 @@ guest scripts is modified by this integration.
 2. Validate the Console-supplied programmatic region names against the
    subscription's Azure region catalog, rejecting empty, duplicate or unknown
    names. Assign one region per user using `index % regionCount` in the supplied
-   order. The initial defaults are `swedencentral`, `australiaeast`,
-   `indiasouthcentral`, `westindia`, `westus2`; they are not an allowlist.
+   order. The initial defaults come from [lab-defaults.json](lab-defaults.json);
+   they are not an allowlist.
 3. Register required compute, network, Arc, quota and challenge resource providers
    (including `Microsoft.Quota`) and wait for registration to finish.
 4. Verify the subscription's SKU location restrictions and available regional,
@@ -79,6 +79,13 @@ guest scripts is modified by this integration.
    response is not required to contain this SKU-specific counter; its
    `PublicIPAddresses` entry is not substituted for the Standard quota.
    Missing/invalid quota data or failed API calls stop the deployment explicitly.
+   If a subscription rejects the example resource name with `InvalidResourceName`,
+   the hook logs read-only diagnostics under `[quota-diagnostics]`: network usage
+   counters and the Microsoft.Quota quota/usage catalogs, including returned
+   resource names, labels, values and any continuation links. Share these job-log
+   lines to identify the subscription's actual API contract. The original error
+   is rethrown after diagnostics; no counter is substituted or quota check skipped.
+   This diagnostic logging is not a fix for the rejected resource name.
 5. Save the user-to-region mapping as outputs of the subscription ARM deployment
    `microhack-arc-server-placement`, containing **no Azure resources**.
 
