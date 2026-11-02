@@ -65,12 +65,20 @@ guest scripts is modified by this integration.
    names. Assign one region per user using `index % regionCount` in the supplied
    order. The initial defaults are `swedencentral`, `australiaeast`,
    `indiasouthcentral`, `westindia`, `westus2`; they are not an allowlist.
-3. Register required compute, network, Arc and challenge resource providers and
-   wait for registration to finish.
+3. Register required compute, network, Arc, quota and challenge resource providers
+   (including `Microsoft.Quota`) and wait for registration to finish.
 4. Verify the subscription's SKU location restrictions and available regional,
    VM-family, VM-count and public-IP quotas for the whole planned deployment.
    Both SKUs currently consume the same VM-family quota: **6 vCPUs per user**.
    Existing automation-owned VMs are not counted as new VM/core demand.
+   Standard public IP limits and current usage are read separately using the
+   [Microsoft.Quota limit](https://learn.microsoft.com/en-us/rest/api/quota/quota/get?view=rest-quota-2025-09-01)
+   and [usage](https://learn.microsoft.com/en-us/rest/api/quota/usages/get?view=rest-quota-2025-09-01)
+   endpoints for `StandardSkuPublicIpAddresses`, scoped to the subscription's
+   `Microsoft.Network/locations/<region>`. The legacy `az network list-usages`
+   response is not required to contain this SKU-specific counter; its
+   `PublicIPAddresses` entry is not substituted for the Standard quota.
+   Missing/invalid quota data or failed API calls stop the deployment explicitly.
 5. Save the user-to-region mapping as outputs of the subscription ARM deployment
    `microhack-arc-server-placement`, containing **no Azure resources**.
 

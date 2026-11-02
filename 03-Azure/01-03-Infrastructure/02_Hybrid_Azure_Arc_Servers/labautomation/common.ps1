@@ -102,6 +102,33 @@ function Assert-ArcQuota {
     Write-Host "Quota $Location/$Name verified: $needed / $($usage[0].limit)."
 }
 
+function Get-ArcStandardPublicIpUsage {
+    param([string]$Location)
+
+    $name = 'StandardSkuPublicIpAddresses'
+    $scope = "/subscriptions/$SubscriptionId/providers/Microsoft.Network/locations/$Location/providers/Microsoft.Quota"
+    $quota = Invoke-ArcAz -Arguments @(
+        'rest', '--method', 'get', '--url', "$scope/quotas/${name}?api-version=2025-09-01",
+        '--query', '{name:name,value:properties.limit.value}'
+    )
+    $usage = Invoke-ArcAz -Arguments @(
+        'rest', '--method', 'get', '--url', "$scope/usages/${name}?api-version=2025-09-01",
+        '--query', '{name:name,value:properties.usages.value}'
+    )
+    $limit = 0
+    $current = 0
+    if (-not $quota -or -not $usage -or $quota.name -ne $name -or $usage.name -ne $name -or
+        -not [int]::TryParse([string]$quota.value, [ref]$limit) -or $limit -lt 0 -or
+        -not [int]::TryParse([string]$usage.value, [ref]$current) -or $current -lt 0) {
+        throw "Cannot verify quota '$name' in ${Location}: Microsoft.Quota returned missing or invalid limit/usage data."
+    }
+    [pscustomobject]@{
+        name = [pscustomobject]@{ value = $name }
+        currentValue = $current
+        limit = $limit
+    }
+}
+
 function Test-ArcCapacity {
     param([object[]]$Placement)
 
@@ -181,11 +208,10 @@ function Test-ArcCapacity {
         foreach ($family in $familyCores.Keys) {
             Assert-ArcQuota -Usages $usages -Name $family -Additional $familyCores[$family] -Location $location
         }
-        $networkUsages = @(Invoke-ArcAz -Arguments @('network', 'list-usages', '--location', $location))
+        $publicIpUsage = Get-ArcStandardPublicIpUsage -Location $location
         $ipCount = 0
         if ($remainingIps.ContainsKey($location)) { $ipCount = $remainingIps[$location] }
-        Assert-ArcQuota -Usages $networkUsages -Name 'PublicIPAddresses' -Additional $ipCount -Location $location
-        Assert-ArcQuota -Usages $networkUsages -Name 'StandardSkuPublicIpAddresses' -Additional $ipCount -Location $location
+        Assert-ArcQuota -Usages @($publicIpUsage) -Name 'StandardSkuPublicIpAddresses' -Additional $ipCount -Location $location
     }
 }
 
