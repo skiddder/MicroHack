@@ -82,6 +82,10 @@ guest scripts is modified by this integration.
    not counted as new IP demand.
 5. Save the user-to-region mapping as outputs of the subscription ARM deployment
    `microhack-arc-server-placement`, containing **no Azure resources**.
+   The template is serialized to a unique temporary JSON file and passed through
+   `-TemplateFile`, avoiding Az.Resources dynamic-parameter serialization of
+   nested PowerShell objects. The file contains only placement metadata, no
+   credentials, and is removed in `finally` on success or failure.
 
 The user RGs and their direct `Owner` assignments must already exist, as
 guaranteed by the Console. The shared stage checks these assignments to account

@@ -50,10 +50,18 @@ $template = @{
     resources = @()
     outputs = @{ placement = @{ type = 'array'; value = $placement } }
 }
-Update-MhhToken | Out-Null
-$result = New-AzSubscriptionDeployment -Name $script:ArcPlacementDeployment `
-    -Location $regions[0] -TemplateObject $template -ErrorAction Stop
-if ($result.ProvisioningState -ne 'Succeeded') {
-    throw "Saving participant placement failed: $($result.ProvisioningState)."
+$templatePath = Join-Path ([System.IO.Path]::GetTempPath()) "microhack-arc-placement-$([guid]::NewGuid().ToString('N')).json"
+try {
+    $template | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $templatePath -Encoding utf8
+    Update-MhhToken | Out-Null
+    $result = New-AzSubscriptionDeployment -Name $script:ArcPlacementDeployment `
+        -Location $regions[0] -TemplateFile $templatePath -ErrorAction Stop
+    if ($result.ProvisioningState -ne 'Succeeded') {
+        throw "Saving participant placement failed: $($result.ProvisioningState)."
+    }
+} finally {
+    if (Test-Path -LiteralPath $templatePath) {
+        Remove-Item -LiteralPath $templatePath -Force -ErrorAction Stop
+    }
 }
 Write-Host "Prepared $($placement.Count) labs in subscription $SubscriptionId. No shared resource group was created."

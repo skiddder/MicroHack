@@ -28,6 +28,9 @@ function Reset-Mock {
         vms = @()
         calls = [System.Collections.Generic.List[object]]::new()
         deployments = [System.Collections.Generic.List[object]]::new()
+        sharedTemplatePaths = [System.Collections.Generic.List[string]]::new()
+        sharedTemplates = [System.Collections.Generic.List[object]]::new()
+        sharedFailure = ''
         registrations = @{}
         availableRegions = @($regions) + @('westeurope')
         quota = 100
@@ -62,11 +65,31 @@ function global:New-MhhStablePassword {
     'OfflineOnlyPassword123'
 }
 function global:New-AzSubscriptionDeployment {
-    param($Name, $Location, $TemplateObject, $ErrorAction)
-    if ($Name -ne 'microhack-arc-server-placement' -or $TemplateObject.resources.Count -ne 0) {
+    [CmdletBinding()]
+    param([string]$Name, [string]$Location, [Parameter(Mandatory)][string]$TemplateFile)
+
+    $global:ArcMock.sharedTemplatePaths.Add($TemplateFile)
+    if (-not (Test-Path -LiteralPath $TemplateFile) -or [System.IO.Path]::GetExtension($TemplateFile) -ne '.json') {
+        throw 'Shared deployment must receive an existing JSON template file.'
+    }
+    $template = Get-Content -LiteralPath $TemplateFile -Raw | ConvertFrom-Json -AsHashtable
+    $global:ArcMock.sharedTemplates.Add($template)
+    if ($Name -ne 'microhack-arc-server-placement' -or $template.resources.Count -ne 0) {
         throw 'Unexpected shared resources.'
     }
-    $global:ArcMock.placement = @($TemplateObject.outputs.placement.value)
+    if ($template.outputs.placement.type -ne 'array' -or $template.outputs.placement.value -isnot [array]) {
+        throw 'Placement output must be a JSON array, including for a single participant.'
+    }
+    foreach ($entry in $template.outputs.placement.value) {
+        if ($entry.userId -isnot [string] -or $entry.location -isnot [string] -or $entry.Count -ne 2) {
+            throw 'Placement entries must contain only plain userId and location strings.'
+        }
+    }
+    if ($global:ArcMock.sharedFailure -eq 'throw') { throw 'Mock shared deployment failed.' }
+    if ($global:ArcMock.sharedFailure -eq 'state') {
+        return [pscustomobject]@{ ProvisioningState = 'Failed' }
+    }
+    $global:ArcMock.placement = @($template.outputs.placement.value | ForEach-Object { [pscustomobject]$_ })
     [pscustomobject]@{ ProvisioningState = 'Succeeded' }
 }
 function global:New-AzResourceGroupDeployment {
@@ -277,6 +300,9 @@ Assert-Test ($source -match 'virtualLnxMachineSize="Standard_D2ads_v5"') 'Linux 
 
 Reset-Mock
 Invoke-Shared
+Assert-Test ($global:ArcMock.sharedTemplatePaths.Count -eq 1) 'Shared deployment receives a JSON file instead of a PowerShell TemplateObject'
+Assert-Test (-not (Test-Path -LiteralPath $global:ArcMock.sharedTemplatePaths[0])) 'Temporary shared template removed after success'
+Assert-Test ($global:ArcMock.sharedTemplates[0].outputs.placement.value.Count -eq 7) 'All participant strings survive JSON serialization'
 Assert-Test ($global:ArcMock.placement.Count -eq 7) 'All Console participants mapped'
 Assert-Test ($global:ArcMock.placement[5].location -eq $regions[0]) 'Round-robin wraps'
 Assert-Test ($global:ArcMock.registrations.Count -eq 15) 'Providers registered once'
@@ -291,6 +317,7 @@ Assert-Test (@($global:ArcMock.networkUsages | Where-Object {
 $global:ArcMock.users = @($global:ArcMock.users | Sort-Object -Descending)
 Invoke-Shared
 Assert-Test ($global:ArcMock.placement[0].userId -eq $users[0]) 'Input ordering does not affect placement'
+Assert-Test ($global:ArcMock.sharedTemplatePaths[0] -ne $global:ArcMock.sharedTemplatePaths[1]) 'Shared reruns use unique temporary paths'
 
 $credentials = @(Invoke-Lab)
 Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Exactly two VMs, no Windows 2012'
@@ -317,6 +344,16 @@ Reset-Mock -Count 1
 $global:ArcMock.quota = 6
 Invoke-Shared
 Assert-Test ($global:ArcMock.placement.Count -eq 1) 'Exact six-core family threshold passes'
+Assert-Test ($global:ArcMock.sharedTemplates[0].outputs.placement.value.Count -eq 1) 'Single-user placement remains an array in the template file'
+foreach ($failure in @('throw', 'state')) {
+    Reset-Mock -Count 1
+    $global:ArcMock.sharedFailure = $failure
+    $expected = if ($failure -eq 'throw') { 'Mock shared deployment failed' } else { 'Saving participant placement failed: Failed' }
+    Assert-Throws { Invoke-Shared } $expected
+    Assert-Test ($global:ArcMock.sharedTemplatePaths.Count -eq 1) 'Failure occurs after reading the generated template'
+    Assert-Test (-not (Test-Path -LiteralPath $global:ArcMock.sharedTemplatePaths[0])) 'Temporary template removed after a shared deployment failure'
+    Assert-Test ($global:ArcMock.placement.Count -eq 0) 'Failed shared deployment does not publish participant placement'
+}
 Reset-Mock -Count 1
 $global:ArcMock.quota = 5
 Assert-Throws { Invoke-Shared } 'Insufficient quota'
