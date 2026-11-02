@@ -6,6 +6,9 @@ Duration: 30 minutes
 
 ## Action 1: Create an Azure Policy Guest Configuration for your Azure Arc VMs
 
+> **Hackbox Console:** Replace `mh-arc-servers-rg` with your Console-provided user
+> resource group. Scope all assignments to that group.
+
 ### Setup a Policy that checks if the user "FrodoBaggins" is part of the local administrators group
 
 
@@ -71,6 +74,12 @@ As this MicroHack focuses on the Arc and Hybrid those Steps are optional and you
 Find it here [AddKey.zip](https://github.com/microsoft/MicroHack/raw/main/03-Azure/01-03-Infrastructure/02_Hybrid_Azure_Arc_Servers/resources/AddKey.zip)
 
 ### Create the Machine Configuration as Azure Policy
+
+> **Hackbox Console:** The coach must publish the custom policy definition in
+> step 3 at an authorized subscription or management-group scope. Participants
+> cannot create definitions at these scopes with subscription Reader; they can
+> assign the published definition to their own RG. Management-group operations
+> require corresponding management-group permissions, not just subscription Owner.
 
 1. You will need to upload the zip file to a Storage Account and create a SAS with read permissions.
 

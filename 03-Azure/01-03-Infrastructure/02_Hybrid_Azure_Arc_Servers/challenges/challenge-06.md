@@ -4,6 +4,10 @@
 
 ## Goal
 
+> **Hackbox Console:** Windows Server 2012 R2 is not provisioned by this lab's
+> automation. Skip this optional challenge unless the coach provides a suitable
+> server separately. Purchasing ESU also incurs charges.
+
 In this challenge, you will activate Extended Security Updates (ESU) for Windows Server 2012 R2 via Azure Arc. This will ensure that your server continues to receive critical security updates beyond the end of support date and allows you to stop paying for updates once the server gets decommissioned or upgraded.
 
 ## Actions
@@ -20,4 +24,3 @@ In this challenge, you will activate Extended Security Updates (ESU) for Windows
 
 - [Extended Security Updates for Windows Server 2012 and 2012 R2](https://learn.microsoft.com/lifecycle/faq/extended-security-updates)
 - [Deploy Extended Security Updates using Azure Arc](https://learn.microsoft.com/azure/azure-arc/servers/prepare-extended-security-updates?tabs=azure-cloud)
-

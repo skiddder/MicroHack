@@ -60,8 +60,10 @@ After completing this MicroHack you will:
 
 This MicroHack has a few but important prerequisites to be understood before starting this lab!
 
-- Your own Azure subscription with Owner RBAC rights at the subscription level
-- You need to have 3 virtual machines ready and updated. One with a Linux operating system (tested with Ubuntu Server 24.04), one with Windows Server 2025 and one with Windows Server 2012 R2 (optional). You can use machines in Azure for this following this guide: [Azure Arc Jumpstart Servers](https://jumpstart.azure.com/azure_arc_jumpstart/azure_arc_servers/azure)
+- For a self-managed deployment: your own Azure subscription with Owner RBAC rights at the subscription level.
+- For a Hackbox Console event: all users share one subscription, with one pre-created resource group per user. Participants have `Reader` on the subscription and `Owner` on their own resource group. Use that group throughout the challenges instead of creating another one or using example names such as `mh-arc-servers-rg`. Subscription-wide and Entra administration are coach tasks.
+- You need two virtual machines ready and updated: one Linux server and one Windows Server 2025. Windows Server 2012 R2 is optional and only required for challenge 6. The [Hackbox automation](labautomation/README.md) deploys Ubuntu Server **20.04** and Windows Server 2025 using the existing templates; it does not deploy Windows Server 2012 R2 or onboard either VM to Arc. The reconfiguration is submitted asynchronously and must be checked inside the guests before onboarding.
+- For a self-managed alternative, you can use machines in Azure following this guide: [Azure Arc Jumpstart Servers](https://jumpstart.azure.com/azure_arc_jumpstart/azure_arc_servers/azure)
     > **Note**
     > When using the Jumpstart the virtual machines will already be onboarded to Azure Arc and therefore "Challenge 1 - Azure Arc prerequisites & onboarding" is not needed.
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (Hint: Make sure to use the latest version)

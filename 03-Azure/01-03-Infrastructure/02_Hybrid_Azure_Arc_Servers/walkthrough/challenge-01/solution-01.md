@@ -10,6 +10,10 @@ Please ensure that you successfully verified the [General prerequisits](../../Re
 
 ### Task 1: Create Azure Resource Group
 
+> **Hackbox Console:** Skip RG creation and use your existing user resource group
+> in every task and screenshot example. You have Owner on this group, not on the
+> shared subscription.
+
 Sign in to the [Azure Portal](https://portal.azure.com/).
 
 * [Create Resource Group](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal#create-resource-groups)
@@ -18,14 +22,27 @@ Sign in to the [Azure Portal](https://portal.azure.com/).
 
 ### Task 2: Create Service Principal
 
+> **Hackbox Console:** Entra application creation may require a coach. Ask the
+> coach to supply a per-user service principal and deliver its credentials
+> securely. Its Azure Connected Machine Onboarding role must cover only your RG.
+
 * [Create Service Principal](https://learn.microsoft.com/en-us/azure/azure-arc/servers/onboard-service-principal#create-a-service-principal-for-onboarding-at-scale)
 
 ### Task 3: Enable Service providers
+
+> **Hackbox Console:** The shared deployment hook registers the providers.
+> Registration and subscription-level troubleshooting are coach tasks.
 
 * Enable Azure Resource Provider
   [Azure Arc Azure resource providers](https://learn.microsoft.com/en-us/azure/azure-arc/servers/prerequisites#azure-resource-providers)
 
 ### Task 4: Prepare on-prem Server OS
+
+> **Hackbox Console:** Ubuntu 20.04 and Windows Server 2025 are provisioned.
+> Their OS reconfiguration was only submitted asynchronously: verify guest-agent
+> shutdown, IMDS blocking and Windows reboot completion as described in the
+> [automation guide](../../labautomation/README.md#credentials-and-asynchronous-reconfiguration).
+> Do not blindly rerun guest-agent-based preparation after that agent is stopped.
 
 * Have a server, windows or linux ready, perhaps on your own laptop/notebook
 * For windows, please use Windows Server 2025 with the latest patch level. 💡 ATTENTION: Use Windows Update to apply the latest patch level!!

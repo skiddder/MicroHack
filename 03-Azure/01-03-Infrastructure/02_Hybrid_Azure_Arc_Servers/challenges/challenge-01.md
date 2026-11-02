@@ -8,6 +8,13 @@ In challenge 1 you will prepare your Azure environemnt for onboarding of existin
 
 ## Actions
 
+> **Hackbox Console:** Use your existing user resource group instead of creating
+> `mh-arc-servers-rg`. The coach supplies the Entra service principal if you lack
+> permission to create one; scope its onboarding role to your RG. Resource
+> providers are prepared by the shared deployment hook. The two VMs already have
+> asynchronous OS preparation requests, but you must verify that preparation
+> finished before onboarding. Windows Server 2012 R2 is not provisioned.
+
 - Verify all necessary Azure resources are in place
   - Resource Group (Name: mh-arc-servers-rg)
   - Service Principal (Name: mh-arc-servers-sp)
@@ -20,8 +27,8 @@ In challenge 1 you will prepare your Azure environemnt for onboarding of existin
 
 ## Success criteria
 
-- You created an Azure resource group
-- You created an service principal with the required role membership
+- You created an Azure resource group, or verified your Console-provided user resource group
+- You created a service principal with the required role membership, or received a coach-provided one scoped to your resource group
 - Successfully prepared existing servers
 - Onboarded servers which is visible in the Azure Arc machines blade in the Azure Portal
 

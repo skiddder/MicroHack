@@ -8,6 +8,10 @@ This challenge is about interacting with the client operating system. We will ha
 
 ## Actions
 
+> **Hackbox Console:** Use your existing user RG for resources and policy
+> assignments. Publishing a custom policy definition at subscription or
+> management-group scope requires the coach; RG Owner alone is insufficient.
+
 - Create all necessary Azure resources
   - Azure Storage account
 - Setup a Policy that checks if the user "FrodoBaggins" is part of the local administrators group
@@ -25,4 +29,3 @@ This challenge is about interacting with the client operating system. We will ha
 - [How to create custom machine configuration package artifacts](https://learn.microsoft.com/azure/governance/machine-configuration/machine-configuration-create)
 - [How to create custom machine configuration policy definitions](https://learn.microsoft.com/azure/governance/machine-configuration/machine-configuration-create-definition)
 - [Create SAS tokens for storage containers](https://learn.microsoft.com/azure/applied-ai-services/form-recognizer/create-sas-tokens)
-

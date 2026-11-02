@@ -8,6 +8,10 @@
 
 ## Actions
 
+> **Hackbox Console:** Enabling or changing Defender plans on the shared
+> subscription is a coach task and can incur charges. Participants inspect their
+> own Arc servers after the coach has configured the shared subscription.
+
 - Enable Microsoft Defender for Cloud on your Azure Arc-enabled machines.
 
 ## Success criteria
@@ -21,4 +25,3 @@
 - [Connect Azure Arc-enabled servers to Microsoft Defender for Cloud](https://learn.microsoft.com/azure/cloud-adoption-framework/manage/hybrid/server/best-practices/arc-security-center)
 - [Protect non-Azure resources using Azure Arc and Microsoft Defender for Cloud](https://techcommunity.microsoft.com/t5/microsoft-defender-for-cloud/protect-non-azure-resources-using-azure-arc-and-microsoft/ba-p/2277215)
 - [Deploy the Azure Monitor Agent to protect your servers with Microsoft Defender for Cloud](https://learn.microsoft.com/azure/defender-for-cloud/auto-deploy-azure-monitoring-agent)
-

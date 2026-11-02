@@ -1,5 +1,9 @@
 # Walkthrough Challenge 6 - Activate ESU for Windows Server 2012 R2
 
+> **Hackbox Console:** No Windows Server 2012 R2 VM is provisioned. Follow this
+> optional walkthrough only if a suitable server has been supplied separately
+> and the coach has approved the ESU charges. Use your existing user resource group.
+
 [Previous Challenge Solution](../challenge-05/solution-05.md) - **[Home](../../Readme.md)** - [Next Challenge Solution](../challenge-07/solution-07.md)
 
 Duration: 15 minutes
