@@ -27,6 +27,11 @@ PowerShell 7, Azure CLI, `Az.Accounts`, and `Az.Resources`. Keep the MicroHack's
 directory layout intact: templates and reconfiguration scripts are loaded from
 the sibling [VM creator directory](../resources/demo-vm-creator).
 
+Both hooks verify the Az PowerShell subscription and the active isolated CLI
+subscription before proceeding. Account-context queries use that verified current
+context without `--subscription` (`az account list-locations` does not accept it);
+resource commands explicitly include the target subscription.
+
 ## What is deployed
 
 Per participant, into their existing resource group:

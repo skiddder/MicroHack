@@ -41,6 +41,7 @@ function Reset-Mock {
         failCommand = ''
         failDeployment = $false
         wrongContext = $false
+        cliSubscription = $subscription
         refreshes = 0
     }
 }
@@ -97,15 +98,21 @@ function global:az {
     $arguments = @($args)
     $global:LASTEXITCODE = 0
     $global:ArcMock.calls.Add($arguments)
-    if ((Get-MockArgument $arguments '--subscription') -ne $subscription) {
-        throw 'Every CLI call must explicitly target the supplied subscription.'
-    }
     $command = $arguments[0..1] -join ' '
+    if ($command -in @('account show', 'account list-locations')) {
+        if ('--subscription' -in $arguments) {
+            $global:LASTEXITCODE = 1
+            return 'ERROR: unrecognized arguments: --subscription'
+        }
+    } elseif ((Get-MockArgument $arguments '--subscription') -ne $subscription) {
+        throw 'Resource CLI calls must explicitly target the supplied subscription.'
+    }
     if ($global:ArcMock.failCommand -and ($arguments -join ' ').Contains($global:ArcMock.failCommand)) {
         $global:LASTEXITCODE = 1
         return 'Mock CLI failure'
     }
     $value = switch ($command) {
+        'account show' { $global:ArcMock.cliSubscription }
         'account list-locations' { $global:ArcMock.availableRegions }
         'deployment sub' {
             # Match Azure's nested projection: one deployment containing an array.
@@ -319,6 +326,17 @@ $global:ArcMock.wrongContext = $true
 Assert-Throws { Invoke-Shared } 'already be authenticated'
 Assert-Test ($global:ArcMock.calls.Count -eq 0) 'Wrong context fails without CLI access'
 Reset-Mock -Count 1
+$global:ArcMock.cliSubscription = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+Assert-Throws { Invoke-Shared } 'Azure CLI must already have SubscriptionId selected'
+Assert-Throws { Invoke-Lab } 'Azure CLI must already have SubscriptionId selected'
+Assert-Test (@($global:ArcMock.calls | Where-Object {
+    ($_[0..1] -join ' ') -ne 'account show'
+}).Count -eq 0) 'Wrong active CLI subscription fails before region queries or subscription changes'
+Assert-Test ($global:ArcMock.registrations.Count -eq 0) 'Wrong CLI subscription cannot register providers'
+Reset-Mock -Count 1
+$global:ArcMock.failCommand = 'account show'
+Assert-Throws { Invoke-Shared } 'Azure CLI failed'
+Reset-Mock -Count 1
 $global:ArcMock.failCommand = 'provider show'
 Assert-Throws { Invoke-Shared } 'Azure CLI failed'
 Reset-Mock -Count 1
@@ -387,6 +405,11 @@ Assert-Throws { Invoke-Shared -Locations 'swedencentral,westus2' } 'remove or re
 
 Reset-Mock -Count 3
 Invoke-Shared -Locations 'westeurope'
+Assert-Test (($global:ArcMock.calls[0][0..1] -join ' ') -eq 'account show') 'Active CLI subscription is checked first'
+Assert-Test (($global:ArcMock.calls[1][0..1] -join ' ') -eq 'account list-locations') 'Region catalog query follows context verification'
+Assert-Test (@($global:ArcMock.calls | Where-Object {
+    $_[0] -eq 'account' -and '--subscription' -in $_
+}).Count -eq 0) 'Account commands use the verified current context without subscription arguments'
 Assert-Test (@($global:ArcMock.placement | Where-Object { $_.location -ne 'westeurope' }).Count -eq 0) 'Console can select a valid region absent from defaults'
 Invoke-Lab -Locations @('westeurope') | Out-Null
 Assert-Test ($global:ArcMock.deployments[1].location -eq 'westeurope') 'Single Console region works in both hooks'

@@ -11,7 +11,12 @@ function Invoke-ArcAz {
 
     Update-MhhToken | Out-Null
     $PSNativeCommandUseErrorActionPreference = $false
-    $result = & az @Arguments --subscription $SubscriptionId --only-show-errors --output json 2>&1
+    $scopeArguments = @('--subscription', $SubscriptionId)
+    if ($Arguments[0] -eq 'account' -and $Arguments[1] -in @('show', 'list-locations')) {
+        # Inspect the isolated current context; list-locations has no subscription option.
+        $scopeArguments = @()
+    }
+    $result = & az @Arguments @scopeArguments --only-show-errors --output json 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Azure CLI failed ($($Arguments[0..1] -join ' ')): $($result -join [Environment]::NewLine)"
     }
@@ -25,6 +30,10 @@ function Assert-ArcContext {
     $context = Get-AzContext
     if (-not $context -or $context.Subscription.Id -ne $SubscriptionId) {
         throw 'Az PowerShell must already be authenticated to SubscriptionId. The Hackbox Console supplies this context; this script never logs in.'
+    }
+    $cliSubscription = Invoke-ArcAz -Arguments @('account', 'show', '--query', 'id')
+    if ($cliSubscription -ne $SubscriptionId) {
+        throw 'Azure CLI must already have SubscriptionId selected in its isolated context. This script never switches subscriptions.'
     }
 }
 
