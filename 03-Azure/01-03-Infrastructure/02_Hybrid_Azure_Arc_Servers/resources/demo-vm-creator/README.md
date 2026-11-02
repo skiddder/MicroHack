@@ -1,7 +1,20 @@
 # Overview
 As a coach (or participant) you might need to have some VMs available which you can use in this microhack to onboard via Arc to Azure. This folder provides scripts and templates to quickly create such VMs. As deployment platform Azure IaaS will be used. Azure VMs need to be [reconfigured](https://learn.microsoft.com/en-us/azure/azure-arc/servers/plan-evaluate-on-azure-virtual-machine) in order to simulate on-prem VMs, so that the Azure Guest agent does not interfere with the Azure Arc agent. The scripts to reconfigure this are included in the ```create_vms.sh```. 
 
-For each participant, you will need one Windows 2012 R2, one Windows 2025 and one Linux VM. You can provide the number of participants in the script. The script will then create 1 Windows 2012 R2, 1 Windows 2025 and 1 Ubuntu 24_04-lts-gen2 VM for each participant. 
+The lab uses one Windows Server 2012 R2, one Windows Server 2025 and one Linux VM
+per participant. You can provide the number of participants in the script.
+
+The Windows Server 2012 R2 template retains its original
+`MicrosoftSQLServer:SQL2012SP4-WS2012R2:Standard:latest` image reference.
+Because this image is currently unavailable, `create_vms.sh` skips the Windows
+Server 2012 R2 iteration, including deployment and reconfiguration. It creates
+only one Linux and one Windows Server 2025 VM per participant, preserving the
+participant numbering and region distribution.
+
+Optional Challenge 6 requires a separately supplied Windows Server 2012 R2 VM.
+To re-enable its deployment after a suitable image becomes available, update the
+image reference if needed, uncomment the `type` and `virtualMachineSize`
+assignments in the Windows 2012 branch, and remove that branch's `continue`.
 
 ## Deployment instructions
 Open a bash shell and login to Azure:
@@ -27,3 +40,23 @@ Save the file. Make sure the shell script has execution permission in your direc
 ./create_vms.sh
 ```
 
+## Public IP deployment troubleshooting
+
+The templates create Azure-assigned public IP addresses, not custom addresses
+(BYOIP). Keep the public IP resource type and allocation property spelled as
+`Microsoft.Network/publicIPAddresses` and `publicIPAllocationMethod`, respectively,
+as defined in the [ARM reference](https://learn.microsoft.com/en-us/azure/templates/microsoft.network/2020-08-01/publicipaddresses).
+
+If a deployment reports `SubscriptionNotRegisteredForFeature` for
+`Microsoft.Network/AllowBringYourOwnPublicIpAddress`, inspect the failed operations
+before attempting to register that feature:
+
+```shell
+az deployment operation group list \
+  --resource-group mh-arc-onprem-demo \
+  --name vm-linux-mh0-Deploy \
+  --query "[?properties.provisioningState=='Failed'].properties.{resource:targetResource.resourceName,error:statusMessage}" \
+  --output json
+```
+
+Adjust the resource group and deployment name to match your configuration.

@@ -1,8 +1,8 @@
 # adjust parameters with your own values as needed
 resourceGroupName="mh-arc-onprem-demo"
-resourceGroupLocation="germanywestcentral"
+resourceGroupLocation="swedencentral"
 adminUsername="mhadmin"
-adminPassword="REPLACE-ME"
+adminPassword="<replace-me>"
     
 # in a sponsored subscription there is a core limit of 10 cores per VM-series per region. Therefore, the script will distribute the VMs to different regions
 # assuming you stick to the Standard_D2ads_v5 for Windows and Standard_DS1_v2 for Linux, max 4 Win and 2 Linux VMs per region can be deployed. As each participant should have two windows and one linux machine,
@@ -11,32 +11,29 @@ adminPassword="REPLACE-ME"
 
 # the script takes about 3min per VM (resulting in 9min per participant).
 
-number_of_participants=10
-regions=("germanywestcentral" "italynorth" "swedencentral" "francecentral" "polandcentral" "uksouth")
-virtualWinMachineSize="Standard_D2ds_v4" # use a vm size with only 2 cores to avoid core limit issues in sponsored subscriptions
-virtualLnxMachineSize="Standard_DS1_v2" # use a vm size with only 1 core to avoid core limit issues in sponsored subscriptions
+number_of_participants=2
+regions=("swedencentral" "australiaeast" "indiasouthcentral" "westindia" "westus2")
+virtualWinMachineSize="Standard_D4ads_v5" # use a vm size with only 2 cores to avoid core limit issues in sponsored subscriptions
+virtualLnxMachineSize="Standard_D2ads_v5" # use a vm size with only 1 core to avoid core limit issues in sponsored subscriptions
 
 # create a resource group
 az group create --name $resourceGroupName --location $resourceGroupLocation
 number_of_regions=${#regions[@]}
 echo "Number of regions: $number_of_regions"
-number_of_loops=$((number_of_participants * 3 - 1 ))
-echo "Number of loops: $number_of_loops"
+number_of_loops=$((number_of_participants * 2 - 1 ))
+echo "Number of VMs: $number_of_loops"
     
 for j in $(eval echo {0..$number_of_loops})
 do
-    # i++ for every third iteration, so we have win2012-0, win2025-0 and linux-0 in the same region
-    i=$(($j / 3))
+    # i++ for every second iteration, so we have win2025-0 and linux-0 in the same region
+    i=$(($j / 2))
     region_index=$((i % number_of_regions))
     location=${regions[($i % $number_of_regions)]}
     
-    # every loop we switch between creating a linux, windows2012 and a windows2025 VM
-    if (( $j % 3 == 0 )); then
+    # every loop we switch between creating a linux and a windows2025 VM
+    if (( $j % 2 == 0 )); then
         type="linux"   
         virtualMachineSize=$virtualLnxMachineSize
-    elif (( $j % 3 == 1 )); then
-        type="win2012"
-        virtualMachineSize=$virtualWinMachineSize
     else
         type="win2025"
         virtualMachineSize=$virtualWinMachineSize
