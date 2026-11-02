@@ -29,6 +29,7 @@ function Reset-Mock {
         calls = [System.Collections.Generic.List[object]]::new()
         deployments = [System.Collections.Generic.List[object]]::new()
         registrations = @{}
+        availableRegions = @($regions) + @('westeurope')
         quota = 100
         used = 0
         networkQuota = 100
@@ -105,6 +106,7 @@ function global:az {
         return 'Mock CLI failure'
     }
     $value = switch ($command) {
+        'account list-locations' { $global:ArcMock.availableRegions }
         'deployment sub' {
             # Match Azure's nested projection: one deployment containing an array.
             return (ConvertTo-Json -InputObject @(
@@ -213,14 +215,20 @@ function global:az {
 }
 
 function Invoke-Shared {
+    param([string]$Locations = ($regions -join ','))
     & (Join-Path $labRoot 'shared-deploy-lab.ps1') -SubscriptionId $subscription `
-        -PreferredLocation ($regions -join ',') -AllowedEntraUserIds $global:ArcMock.users
+        -PreferredLocation $Locations -AllowedEntraUserIds $global:ArcMock.users
 }
 
 function Invoke-Lab {
-    param([string]$User = $users[0], [string]$Group = 'rg-01', [string]$Type = 'resourcegroup')
+    param(
+        [string]$User = $users[0],
+        [string]$Group = 'rg-01',
+        [string]$Type = 'resourcegroup',
+        [string[]]$Locations = $regions
+    )
     & (Join-Path $labRoot 'deploy-lab.ps1') -DeploymentType $Type -SubscriptionId $subscription `
-        -ResourceGroupName $Group -PreferredLocation $regions -AllowedEntraUserIds @($User)
+        -ResourceGroupName $Group -PreferredLocation $Locations -AllowedEntraUserIds @($User)
 }
 
 foreach ($file in Get-ChildItem $labRoot -Filter '*.ps1' -Recurse) {
@@ -345,9 +353,45 @@ Assert-Throws { Invoke-Shared } 'duplicate'
 Reset-Mock -Count 0
 Assert-Throws { Invoke-Shared } 'at least one'
 Reset-Mock -Count 1
-Assert-Throws {
-    & (Join-Path $labRoot 'shared-deploy-lab.ps1') -SubscriptionId $subscription `
-        -PreferredLocation 'westus2,swedencentral' -AllowedEntraUserIds $global:ArcMock.users
-} 'verified region order'
+Assert-Throws { Invoke-Shared -Locations '' } 'empty string'
+Assert-Throws { Invoke-Shared -Locations ' ' } 'at least one non-empty'
+Assert-Throws { Invoke-Lab -Locations @() } 'at least one non-empty'
+Assert-Throws { Invoke-Shared -Locations 'swedencentral,' } 'at least one non-empty'
+Assert-Throws { Invoke-Shared -Locations 'swedencentral, SwedenCentral' } 'duplicate Azure regions'
+Assert-Throws { Invoke-Shared -Locations 'not-an-azure-region' } 'Unknown Azure region'
+Assert-Test ($global:ArcMock.registrations.Count -eq 0) 'Invalid region input fails before subscription changes'
+Assert-Test ($global:ArcMock.placement.Count -eq 0) 'Invalid regions never publish placement'
+Reset-Mock -Count 1
+$global:ArcMock.failCommand = 'account list-locations'
+Assert-Throws { Invoke-Shared } 'Azure CLI failed'
+
+Reset-Mock
+$withoutIndia = @($regions | Where-Object { $_ -ne 'indiasouthcentral' })
+Invoke-Shared -Locations ($withoutIndia -join ',')
+Assert-Test (($global:ArcMock.placement.location -join ',') -eq (
+    'swedencentral,australiaeast,westindia,westus2,swedencentral,australiaeast,westindia'
+)) 'Console removal of indiasouthcentral controls round-robin and wraparound'
+Assert-Test (@($global:ArcMock.calls | Where-Object {
+    $_[0] -eq 'vm' -and $_[1] -eq 'list-skus' -and 'indiasouthcentral' -in $_
+}).Count -eq 0) 'Removed region is not checked or selected for VM deployment'
+Invoke-Lab -User $users[2] -Group 'rg-03' -Locations $withoutIndia | Out-Null
+Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Filtered Console list deploys two participant VMs'
+Assert-Test (@($global:ArcMock.deployments | Where-Object { $_.location -ne 'westindia' }).Count -eq 0) 'Both VMs use the filtered Console mapping'
+
+Reset-Mock -Count 3
+Invoke-Shared -Locations ' WestUS2, SwedenCentral '
+Assert-Test (($global:ArcMock.placement.location -join ',') -eq 'westus2,swedencentral,westus2') 'Console order wins over defaults and names are normalized'
+Invoke-Lab -Locations @(' WestUS2 ', ' SwedenCentral ') | Out-Null
+Assert-Test ($global:ArcMock.deployments[0].location -eq 'westus2') 'Participant hook accepts Console region arrays'
+Assert-Throws { Invoke-Shared -Locations 'swedencentral,westus2' } 'remove or relocate'
+
+Reset-Mock -Count 3
+Invoke-Shared -Locations 'westeurope'
+Assert-Test (@($global:ArcMock.placement | Where-Object { $_.location -ne 'westeurope' }).Count -eq 0) 'Console can select a valid region absent from defaults'
+Invoke-Lab -Locations @('westeurope') | Out-Null
+Assert-Test ($global:ArcMock.deployments[1].location -eq 'westeurope') 'Single Console region works in both hooks'
+Reset-Mock -Count 1
+$global:ArcMock.restricted = $true
+Assert-Throws { Invoke-Shared -Locations 'westeurope' } 'restricted'
 
 Write-Host "PASS: $script:Assertions offline assertions. No Azure login or network calls were made."

@@ -31,11 +31,19 @@ function Assert-ArcContext {
 function Get-ArcRegions {
     param([string[]]$Locations)
 
-    $configured = (Get-Content (Join-Path $PSScriptRoot 'lab-defaults.json') -Raw | ConvertFrom-Json).preferredLocation
-    $regions = @($configured.Split(',') | ForEach-Object { $_.Trim() })
-    $requested = @($Locations | ForEach-Object { $_.Split(',') } | ForEach-Object { $_.Trim() })
-    if (($requested -join ',') -ne ($regions -join ',')) {
-        throw "PreferredLocation must retain the verified region order: $($regions -join ', '). No automatic region fallback is permitted."
+    $regions = @($Locations | ForEach-Object { ([string]$_).Split(',') } |
+        ForEach-Object { $_.Trim().ToLowerInvariant() })
+    if ($regions.Count -eq 0 -or '' -in $regions) {
+        throw 'The Console must supply at least one non-empty Azure region in PreferredLocation.'
+    }
+    if (@($regions | Sort-Object -Unique).Count -ne $regions.Count) {
+        throw 'PreferredLocation contains duplicate Azure regions.'
+    }
+    $available = @(Invoke-ArcAz -Arguments @('account', 'list-locations', '--query', '[].name'))
+    foreach ($region in $regions) {
+        if ($region -notin $available) {
+            throw "Unknown Azure region '$region' for this subscription. Use programmatic names from az account list-locations."
+        }
     }
     return $regions
 }

@@ -9,6 +9,12 @@ does not set `labsPerSubscription`, a default participant count, or a participan
 limit. Omitting that field does not itself enforce a single subscription: check
 the Console's reservation preview before starting.
 
+The Console's selected regions and their order are authoritative. The
+`preferredLocation` list in [lab-defaults.json](lab-defaults.json) only seeds the
+Console defaults; the coach can remove, reorder or replace regions to respond
+to subscription restrictions and capacity changes. Both hooks use exactly the
+supplied list, not a hard-coded comparison with those defaults.
+
 Each user receives one resource group with `Owner`, and only `Reader` on the
 subscription. No additional resource group is created by these hooks. No Copilot
 or Microsoft 365 licenses are requested. Cost fields are omitted; the documented
@@ -49,8 +55,11 @@ guest scripts is modified by this integration.
 [shared-deploy-lab.ps1](shared-deploy-lab.ps1) runs before the participant fan-out:
 
 1. Normalize and sort all supplied user object IDs.
-2. Assign one region per user using `index % regionCount`, in this exact order:
-   `swedencentral`, `australiaeast`, `indiasouthcentral`, `westindia`, `westus2`.
+2. Validate the Console-supplied programmatic region names against the
+   subscription's Azure region catalog, rejecting empty, duplicate or unknown
+   names. Assign one region per user using `index % regionCount` in the supplied
+   order. The initial defaults are `swedencentral`, `australiaeast`,
+   `indiasouthcentral`, `westindia`, `westus2`; they are not an allowlist.
 3. Register required compute, network, Arc and challenge resource providers and
    wait for registration to finish.
 4. Verify the subscription's SKU location restrictions and available regional,
@@ -72,10 +81,12 @@ plans, custom policies and service principals are not configured.
 supplied user owns the supplied resource group. Both VMs go into that user's
 assigned region, regardless of the resource group's metadata location.
 
-The list of regions and the two SKUs match the verified Bash script; the offline
-tests detect drift. Availability is subscription-specific and cannot be proven
-offline. The preflight does not reserve quota or guarantee live regional capacity,
-image availability, or exemption from Azure Policy.
+The default list of regions and the two SKUs match the verified Bash script; the
+offline tests detect default drift and verify Console overrides. A recognized
+Azure region name does not guarantee that its SKUs are accessible in a particular
+subscription. Availability is subscription-specific and cannot be proven offline.
+The preflight does not reserve quota or guarantee live regional capacity, image
+availability, or exemption from Azure Policy.
 
 ## Credentials and asynchronous reconfiguration
 
@@ -106,8 +117,9 @@ No guest-completion polling or automatic Arc onboarding is performed.
 
 ## Re-runs and recovery
 
-- The same participant list produces the same region mapping, VM names and
-  passwords. Input ordering does not matter.
+- The same participant list and ordered region list produce the same region
+  mapping, VM names and passwords. Participant input ordering does not matter;
+  region ordering deliberately does.
 - Successfully provisioned VMs are reused only when their region, size and
   `microhackArcUserId` tag match. Unmarked/conflicting VMs are not adopted.
 - `microhackReconfiguration=submitted` prevents submitting the scripts again to
@@ -122,9 +134,12 @@ No guest-completion polling or automatic Arc onboarding is performed.
   coach inspection of the deployment and credentials before it can be adopted.
 - An existing failed VM deployment is not silently treated as a healthy VM.
 - Removing users or changing their assigned region in an existing mapping fails
-  before VM deployment. Keep the participant list stable for re-runs. For a new
-  event, the coach must clean up the old event's resources and placement deployment
-  through the normal Console/event lifecycle before starting again.
+  before VM deployment. This guard still applies to Console region overrides:
+  no existing user is silently relocated. Keep the participant and region lists
+  stable for re-runs. A failed initial region validation has not saved a mapping,
+  so the coach can correct the Console selection and retry. For a new event, the
+  coach must clean up the old event's resources and placement deployment through
+  the normal Console/event lifecycle before starting again.
 
 The hooks do not delete resources or perform automatic cleanup.
 

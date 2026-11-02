@@ -18,7 +18,7 @@ if ($previous.Count -gt 0) {
     foreach ($entry in $previous) {
         $next = @($placement | Where-Object { $_.userId -eq $entry.userId })
         if ($next.Count -ne 1 -or $next[0].location -ne $entry.location) {
-            throw 'The participant list would remove or relocate a previously assigned user. Restore the original list or have the coach clean up the previous event first.'
+            throw 'The participant or region list would remove or relocate a previously assigned user. Restore the original participant and region lists or have the coach clean up the previous event first.'
         }
     }
 }
