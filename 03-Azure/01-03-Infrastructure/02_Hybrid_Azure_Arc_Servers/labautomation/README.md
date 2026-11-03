@@ -23,9 +23,20 @@ Console fallback is USD 25 per lab/day, an estimate rather than a spending limit
 The Console supplies authenticated Az PowerShell, an isolated Azure CLI profile,
 and the `Update-MhhToken` / `New-MhhStablePassword` helpers. The hooks do not log
 in, switch subscriptions, create users, or grant additional roles. They require
-PowerShell 7, Azure CLI, `Az.Accounts`, and `Az.Resources`. Keep the MicroHack's
-directory layout intact: templates and reconfiguration scripts are loaded from
-the sibling [VM creator directory](../resources/demo-vm-creator).
+PowerShell 7, Azure CLI, `Az.Accounts`, and `Az.Resources`. The deployment is
+self-contained: all runtime files must be imported from this `labautomation`
+folder. It does not depend on sibling repository directories or runtime downloads.
+Both hooks check the six required VM files before any Azure calls and report an
+incomplete content package explicitly.
+
+The canonical deployment assets have been moved here, not copied:
+
+- [template-linux.json](template-linux.json) and [parameters-linux.json](parameters-linux.json)
+- [template-win2025.json](template-win2025.json) and [parameters-win2025.json](parameters-win2025.json)
+- [reconfig-ubuntu.sh](reconfig-ubuntu.sh) and [reconfig-win.ps1](reconfig-win.ps1)
+
+Re-import the complete folder after updating the Console content. Importing only
+the hook scripts is insufficient.
 
 Both hooks verify the Az PowerShell subscription and the active isolated CLI
 subscription before proceeding. Account-context queries use that verified current
@@ -52,8 +63,12 @@ inbound rules. This is a disposable training environment, not a production
 network design. Do not put sensitive data on these VMs.
 
 The baseline is [create_vms.sh](../resources/demo-vm-creator/create_vms.sh), not
-the older PowerShell creator. Neither creator nor the existing ARM templates or
-guest scripts is modified by this integration.
+the older PowerShell creator. The existing ARM templates, parameter files and
+guest scripts were moved here without changing their contents. The Bash creator
+now resolves these shared files relative to its own location; its VM creation,
+region/SKU distribution and asynchronous reconfiguration logic are unchanged.
+Its separate Windows Server 2012 R2 template and parameters remain in the
+standalone creator directory and are not part of this Console deployment.
 
 ## Shared stage and region mapping
 
@@ -191,6 +206,9 @@ The tests replace Azure commands and Hackbox helpers with in-process mocks. They
 check PowerShell parsing, configuration/Bash parity, the real template parameter
 sets, placement, quota thresholds, credentials, asynchronous commands, failure
 propagation and re-runs. They do **not** validate an actual Azure deployment.
+They also deploy from an isolated copy of only the runtime `labautomation`
+files, without the original repository layout, and test that each missing asset
+fails before Azure access.
 The [network quota fixture](tests/fixtures/network-usages.json) uses the counter
 names, labels and string values observed in the Console diagnostics, restored to
 the CLI's unprojected `name` / `currentValue` / `limit` response shape.

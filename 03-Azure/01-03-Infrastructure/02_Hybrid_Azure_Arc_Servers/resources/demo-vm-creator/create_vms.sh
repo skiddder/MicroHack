@@ -1,3 +1,6 @@
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)" || exit 1
+labautomation_dir="$script_dir/../../labautomation"
+
 # adjust parameters with your own values as needed
 resourceGroupName="mh-arc-onprem-demo"
 resourceGroupLocation="germanywestcentral"
@@ -52,12 +55,17 @@ do
     virtualMachineComputerName=$vmName
     deploymentName="$vmName-Deploy"
     
+    template_directory="$labautomation_dir"
+    if [ "$type" = "win2012" ]; then
+        template_directory="$script_dir"
+    fi
+
     # Create a VM
     az deployment group create \
     --resource-group $resourceGroupName \
     --name $deploymentName \
-    --template-file ./template-$type.json \
-    --parameters @parameters-$type.json \
+    --template-file "$template_directory/template-$type.json" \
+    --parameters "@$template_directory/parameters-$type.json" \
     --parameters virtualMachineName=$vmName \
         adminUsername=$adminUsername \
         adminPassword=$adminPassword \
@@ -73,10 +81,10 @@ do
     # Run the reconfig script to disable the Azure Guest Agent
     if [ $type != "linux" ]; then
         echo "Running reconfig-win.ps1 on $vmName"
-        az vm run-command create --name reconfigWin$i --vm-name $vmName -g $resourceGroupName --location $location --script @reconfig-win.ps1 --async-execution
+        az vm run-command create --name reconfigWin$i --vm-name $vmName -g $resourceGroupName --location $location --script "@$labautomation_dir/reconfig-win.ps1" --async-execution
     else
         echo "Running reconfig-ubuntu.sh on $vmName"
-        az vm run-command invoke -g $resourceGroupName -n $vmName --command-id RunShellScript --scripts @reconfig-ubuntu.sh --no-wait
+        az vm run-command invoke -g $resourceGroupName -n $vmName --command-id RunShellScript --scripts "@$labautomation_dir/reconfig-ubuntu.sh" --no-wait
     fi
 
 done

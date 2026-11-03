@@ -1,6 +1,10 @@
 # Overview
 For Hackbox Console events, use the [lab automation integration](../../labautomation/README.md).
-It reuses the templates and reconfiguration scripts in this directory but deploys
+The shared Linux/Windows 2025 templates, parameter files and reconfiguration
+scripts now live in [labautomation](../../labautomation). The Bash creator
+resolves them relative to its own script location, so it can still be launched
+from this directory or another working directory. Windows Server 2012 R2
+templates and parameters remain here. The Console deployment creates
 only Ubuntu 20.04 and Windows Server 2025, one pair per user resource group.
 Windows Server 2012 R2 is not provisioned. The instructions below describe the
 standalone Bash creator, which still attempts three VMs per participant and
@@ -8,7 +12,7 @@ requires a usable Windows Server 2012 R2 image. The verified source of region/SK
 settings is `create_vms.sh`; its comments and this legacy parameter table may
 describe older values.
 
-As a coach (or participant) you might need to have some VMs available which you can use in this microhack to onboard via Arc to Azure. This folder provides scripts and templates to quickly create such VMs. As deployment platform Azure IaaS will be used. Azure VMs need to be [reconfigured](https://learn.microsoft.com/en-us/azure/azure-arc/servers/plan-evaluate-on-azure-virtual-machine) in order to simulate on-prem VMs, so that the Azure Guest agent does not interfere with the Azure Arc agent. The scripts to reconfigure this are included in the ```create_vms.sh```. 
+As a coach (or participant) you might need to have some VMs available which you can use in this microhack to onboard via Arc to Azure. This folder provides the standalone creator, using shared templates from [labautomation](../../labautomation). As deployment platform Azure IaaS will be used. Azure VMs need to be [reconfigured](https://learn.microsoft.com/en-us/azure/azure-arc/servers/plan-evaluate-on-azure-virtual-machine) in order to simulate on-prem VMs, so that the Azure Guest agent does not interfere with the Azure Arc agent. The reconfiguration scripts in [labautomation](../../labautomation) are invoked by ```create_vms.sh```.
 
 For each participant, you will need one Windows 2012 R2, one Windows 2025 and one Linux VM. You can provide the number of participants in the script. The script will then create 1 Windows 2012 R2, 1 Windows 2025 and 1 Ubuntu 24_04-lts-gen2 VM for each participant. 
 

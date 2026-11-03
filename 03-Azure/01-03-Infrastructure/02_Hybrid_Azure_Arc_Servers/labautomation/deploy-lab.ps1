@@ -12,6 +12,7 @@ param(
 )
 
 . (Join-Path $PSScriptRoot 'common.ps1')
+Assert-ArcAssets
 Assert-ArcContext
 if ($DeploymentType -ne 'resourcegroup' -or [string]::IsNullOrWhiteSpace($ResourceGroupName)) {
     throw 'This lab requires resourcegroup deployment into the resource group supplied by the Console.'

@@ -2,9 +2,22 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $script:ArcPlacementDeployment = 'microhack-arc-server-placement'
-$script:ArcVmSource = Join-Path (Split-Path $PSScriptRoot -Parent) 'resources\demo-vm-creator'
+$script:ArcVmSource = $PSScriptRoot
 $script:ArcVmSizes = @{ linux = 'Standard_D2ads_v5'; win2025 = 'Standard_D4ads_v5' }
 $script:ArcVmTypes = @('linux', 'win2025')
+
+function Assert-ArcAssets {
+    $files = @('reconfig-ubuntu.sh', 'reconfig-win.ps1')
+    foreach ($type in $script:ArcVmTypes) {
+        $files += "parameters-$type.json", "template-$type.json"
+    }
+    $missing = @($files | Where-Object {
+        -not (Test-Path -LiteralPath (Join-Path $script:ArcVmSource $_) -PathType Leaf)
+    })
+    if ($missing.Count -gt 0) {
+        throw "Incomplete labautomation content package. Missing required files: $($missing -join ', '). Re-import the complete labautomation folder before retrying."
+    }
+}
 
 function Invoke-ArcAz {
     param([Parameter(Mandatory)][string[]]$Arguments)

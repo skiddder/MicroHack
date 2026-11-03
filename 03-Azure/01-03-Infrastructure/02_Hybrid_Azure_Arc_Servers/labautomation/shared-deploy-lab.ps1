@@ -10,6 +10,7 @@ param(
 )
 
 . (Join-Path $PSScriptRoot 'common.ps1')
+Assert-ArcAssets
 Assert-ArcContext
 $regions = @(Get-ArcRegions -Locations $PreferredLocation)
 $placement = @(New-ArcPlacement -UserIds $AllowedEntraUserIds -Regions $regions)

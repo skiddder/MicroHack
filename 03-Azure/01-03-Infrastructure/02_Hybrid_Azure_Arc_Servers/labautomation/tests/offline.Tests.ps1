@@ -28,6 +28,7 @@ function Reset-Mock {
         vms = @()
         calls = [System.Collections.Generic.List[object]]::new()
         deployments = [System.Collections.Generic.List[object]]::new()
+        vmTemplatePaths = [System.Collections.Generic.List[string]]::new()
         sharedTemplatePaths = [System.Collections.Generic.List[string]]::new()
         sharedTemplates = [System.Collections.Generic.List[object]]::new()
         sharedFailure = ''
@@ -95,6 +96,7 @@ function global:New-AzSubscriptionDeployment {
 function global:New-AzResourceGroupDeployment {
     param($Name, $ResourceGroupName, $TemplateFile, $TemplateParameterObject, $ErrorAction)
     if ($global:ArcMock.failDeployment) { throw 'Mock ARM deployment failed.' }
+    $global:ArcMock.vmTemplatePaths.Add($TemplateFile)
     $template = Get-Content $TemplateFile -Raw | ConvertFrom-Json -AsHashtable
     foreach ($key in $template.parameters.Keys) {
         if (-not $TemplateParameterObject.ContainsKey($key)) { throw "Missing ARM parameter $key" }
@@ -262,8 +264,8 @@ function global:az {
 }
 
 function Invoke-Shared {
-    param([string]$Locations = ($regions -join ','))
-    & (Join-Path $labRoot 'shared-deploy-lab.ps1') -SubscriptionId $subscription `
+    param([string]$Locations = ($regions -join ','), [string]$LabPath = $labRoot)
+    & (Join-Path $LabPath 'shared-deploy-lab.ps1') -SubscriptionId $subscription `
         -PreferredLocation $Locations -AllowedEntraUserIds $global:ArcMock.users
 }
 
@@ -272,9 +274,10 @@ function Invoke-Lab {
         [string]$User = $users[0],
         [string]$Group = 'rg-01',
         [string]$Type = 'resourcegroup',
-        [string[]]$Locations = $regions
+        [string[]]$Locations = $regions,
+        [string]$LabPath = $labRoot
     )
-    & (Join-Path $labRoot 'deploy-lab.ps1') -DeploymentType $Type -SubscriptionId $subscription `
+    & (Join-Path $LabPath 'deploy-lab.ps1') -DeploymentType $Type -SubscriptionId $subscription `
         -ResourceGroupName $Group -PreferredLocation $Locations -AllowedEntraUserIds @($User)
 }
 
@@ -290,6 +293,7 @@ Assert-Test ($defaults.groups.Count -eq 0) 'No extra licenses'
 Assert-Test (-not $defaults.ContainsKey('labsPerSubscription')) 'Console controls subscription packing'
 Assert-Test (-not $defaults.ContainsKey('estimatedDailyCostsUsd')) 'No invented cost estimate'
 $source = Get-Content (Join-Path (Split-Path $labRoot -Parent) 'resources\demo-vm-creator\create_vms.sh') -Raw
+Assert-Test (-not $source.Contains("`r")) 'Standalone Bash creator uses Unix line endings'
 $bashRegions = [regex]::Match($source, '(?m)^regions=\(([^)]+)\)').Groups[1].Value
 $bashRegions = @([regex]::Matches($bashRegions, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
 $defaultRegions = @($defaults.preferredLocation.Split(',') | ForEach-Object { $_.Trim() })
@@ -518,5 +522,51 @@ Assert-Test ($global:ArcMock.deployments[1].location -eq 'westeurope') 'Single C
 Reset-Mock -Count 1
 $global:ArcMock.restricted = $true
 Assert-Throws { Invoke-Shared -Locations 'westeurope' } 'restricted'
+
+$assetNames = @(
+    'parameters-linux.json', 'parameters-win2025.json',
+    'template-linux.json', 'template-win2025.json',
+    'reconfig-ubuntu.sh', 'reconfig-win.ps1'
+)
+$packageRoot = Join-Path ([System.IO.Path]::GetTempPath()) "microhack-arc-package-$([guid]::NewGuid().ToString('N'))"
+try {
+    New-Item -ItemType Directory -Path $packageRoot | Out-Null
+    foreach ($name in @('common.ps1', 'deploy-lab.ps1', 'shared-deploy-lab.ps1', 'lab-defaults.json') + $assetNames) {
+        Copy-Item -LiteralPath (Join-Path $labRoot $name) -Destination (Join-Path $packageRoot $name)
+    }
+    foreach ($name in $assetNames) {
+        $original = Join-Path (Split-Path $labRoot -Parent) "resources\demo-vm-creator\$name"
+        Assert-Test (-not (Test-Path -LiteralPath $original)) "Asset $name was moved, not duplicated"
+    }
+    Reset-Mock -Count 1
+    Invoke-Shared -LabPath $packageRoot
+    $credentials = @(Invoke-Lab -LabPath $packageRoot)
+    Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Standalone labautomation package deploys both VMs without the repository layout'
+    Assert-Test ($credentials.Count -eq 5) 'Standalone package emits all dashboard credentials'
+    foreach ($path in $global:ArcMock.vmTemplatePaths) {
+        Assert-Test ((Split-Path $path -Parent) -eq $packageRoot) 'VM deployment uses a template inside the imported package'
+    }
+    $runCommands = @($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'run-command' })
+    Assert-Test ($runCommands.Count -eq 2) 'Standalone package submits both reconfiguration requests'
+    foreach ($command in $runCommands) {
+        $option = if ($command[2] -eq 'invoke') { '--scripts' } else { '--script' }
+        $path = (Get-MockArgument $command $option).Substring(1)
+        Assert-Test ((Split-Path $path -Parent) -eq $packageRoot) 'Reconfiguration uses a script inside the imported package'
+    }
+    foreach ($name in $assetNames) {
+        $path = Join-Path $packageRoot $name
+        Remove-Item -LiteralPath $path -Force
+        Reset-Mock -Count 1
+        Assert-Throws { Invoke-Shared -LabPath $packageRoot } "Missing required files: $name"
+        Assert-Throws { Invoke-Lab -LabPath $packageRoot } "Missing required files: $name"
+        Assert-Test ($global:ArcMock.calls.Count -eq 0) "Missing $name fails before any Azure CLI call"
+        Assert-Test ($global:ArcMock.deployments.Count -eq 0) "Missing $name fails before VM deployment"
+        Copy-Item -LiteralPath (Join-Path $labRoot $name) -Destination $path
+    }
+} finally {
+    if (Test-Path -LiteralPath $packageRoot) {
+        Remove-Item -LiteralPath $packageRoot -Recurse -Force -ErrorAction Stop
+    }
+}
 
 Write-Host "PASS: $script:Assertions offline assertions. No Azure login or network calls were made."
