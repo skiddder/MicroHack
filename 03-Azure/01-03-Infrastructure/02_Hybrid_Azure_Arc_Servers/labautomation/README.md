@@ -172,9 +172,15 @@ No guest-completion polling or automatic Arc onboarding is performed.
 - Removing users or changing their assigned region first triggers a read-only
   subscription resource inventory. A stale mapping can be replaced if the entire
   subscription contains no resources other than resource groups and deployment
-  metadata. This supports retrying a failed deployment that saved the mapping
+  metadata, plus the single explicitly approved governance workspace below.
+  This supports retrying a failed deployment that saved the mapping
   but never created VMs. The coach sees an explicit warning when this happens.
-- If any resource exists (including partial networks, disks or unrelated
+- The sole workspace exception is the full ARM ID
+  `/subscriptions/06dd34f3-80d4-42a0-ac31-446add752cd8/resourceGroups/McapsGovernance/providers/Microsoft.OperationalInsights/workspaces/mcaps42a0ac31446add752cd8-la`
+  with type `Microsoft.OperationalInsights/workspaces`. ARM ID comparison is
+  case-insensitive. This workspace is left untouched; no other workspace,
+  subscription or resource in `McapsGovernance` is exempt.
+- If any other resource exists (including partial networks, disks or unrelated
   resources), changed assignments still fail before VM deployment. No resources
   are deleted, moved or adopted; the previous placement remains intact. Invalid
   or failed inventory responses cannot authorize a replan. Restore the previous

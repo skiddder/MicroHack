@@ -29,14 +29,16 @@ if ($requiresReplan) {
     if (-not $inventory -or -not $inventory.PSObject.Properties['resources'] -or $inventory.resources -isnot [array]) {
         throw 'Cannot verify that the subscription is empty: Azure returned an invalid resource inventory. Previous placement was not changed.'
     }
+    $approvedWorkspaceId = '/subscriptions/06dd34f3-80d4-42a0-ac31-446add752cd8/resourceGroups/McapsGovernance/providers/Microsoft.OperationalInsights/workspaces/mcaps42a0ac31446add752cd8-la'
     $blocking = @($inventory.resources | Where-Object {
-        $_.type -notin @('Microsoft.Resources/resourceGroups', 'Microsoft.Resources/deployments')
+        $_.type -notin @('Microsoft.Resources/resourceGroups', 'Microsoft.Resources/deployments') -and
+        -not ($_.type -eq 'Microsoft.OperationalInsights/workspaces' -and $_.id -eq $approvedWorkspaceId)
     })
     if ($blocking.Count -gt 0) {
         $examples = ($blocking | Select-Object -First 3 | ForEach-Object { $_.id }) -join ', '
         throw "The participant or region list would remove or relocate a previously assigned user, but the subscription contains $($blocking.Count) resource(s). Restore the original lists or have the coach inspect and clean up first. Previous placement was not changed. Examples: $examples"
     }
-    Write-Warning 'The subscription contains only resource groups/deployment metadata. Replacing stale participant placement for the Console-selected users and regions; no Azure resources will be deleted or moved.'
+    Write-Warning "No blocking resources remain after excluding resource groups, deployment metadata and the explicitly approved workspace '$approvedWorkspaceId'. Replacing stale participant placement for the Console-selected users and regions; no Azure resources will be deleted or moved."
 }
 $deploymentLocation = $regions[0]
 if ($previous.Count -gt 0) {

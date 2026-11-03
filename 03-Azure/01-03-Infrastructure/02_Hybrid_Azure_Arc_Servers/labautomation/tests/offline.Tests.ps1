@@ -551,6 +551,37 @@ $global:ArcMock.users = @($users[1])
 Invoke-Shared
 Assert-Test ($global:ArcMock.placement.Count -eq 1) 'Only RGs and deployment metadata do not block empty-subscription replanning'
 
+$approvedWorkspaceId = '/subscriptions/06dd34f3-80d4-42a0-ac31-446add752cd8/resourceGroups/McapsGovernance/providers/Microsoft.OperationalInsights/workspaces/mcaps42a0ac31446add752cd8-la'
+Reset-Mock -Count 2
+Invoke-Shared
+$global:ArcMock.otherResources = @(@{
+    id = $approvedWorkspaceId.ToUpperInvariant()
+    type = 'Microsoft.OperationalInsights/workspaces'
+})
+$global:ArcMock.users = @($users[1])
+Invoke-Shared
+Assert-Test ($global:ArcMock.placement.Count -eq 1) 'The explicitly approved workspace permits replanning with case-insensitive ARM identity matching'
+Assert-Test ($global:ArcMock.otherResources.Count -eq 1 -and $global:ArcMock.otherResources[0].id -ceq $approvedWorkspaceId.ToUpperInvariant()) 'The approved workspace remains untouched'
+
+foreach ($resource in @(
+    @{ id = "$approvedWorkspaceId-other"; type = 'Microsoft.OperationalInsights/workspaces' },
+    @{ id = $approvedWorkspaceId.Replace('/McapsGovernance/', '/other-group/'); type = 'Microsoft.OperationalInsights/workspaces' },
+    @{ id = $approvedWorkspaceId.Replace('06dd34f3-80d4-42a0-ac31-446add752cd8', $subscription); type = 'Microsoft.OperationalInsights/workspaces' },
+    @{ id = '/subscriptions/06dd34f3-80d4-42a0-ac31-446add752cd8/resourceGroups/McapsGovernance/providers/Microsoft.Storage/storageAccounts/other'; type = 'Microsoft.Storage/storageAccounts' },
+    @{ id = $approvedWorkspaceId; type = 'Microsoft.Storage/storageAccounts' }
+)) {
+    Reset-Mock -Count 2
+    Invoke-Shared
+    $global:ArcMock.otherResources = @(
+        @{ id = $approvedWorkspaceId; type = 'Microsoft.OperationalInsights/workspaces' },
+        $resource
+    )
+    $global:ArcMock.users = @($users[1])
+    Assert-Throws { Invoke-Shared } 'contains 1 resource(s)'
+    Assert-Test ($global:ArcMock.placement.Count -eq 2) 'The workspace exemption cannot allow a different resource to authorize replanning'
+    Assert-Test ($global:ArcMock.sharedTemplatePaths.Count -eq 1) 'A blocked replan preserves the existing metadata alongside the exempt workspace'
+}
+
 foreach ($shape in @('missing', 'null', 'object')) {
     Reset-Mock -Count 2
     Invoke-Shared
