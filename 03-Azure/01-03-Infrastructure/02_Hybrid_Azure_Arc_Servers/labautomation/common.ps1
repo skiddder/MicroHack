@@ -50,6 +50,21 @@ function Assert-ArcContext {
     }
 }
 
+function Set-ArcResourceGroupSecurityTag {
+    param([Parameter(Mandatory)][string]$ResourceGroupName)
+
+    $result = Invoke-ArcAz -Arguments @(
+        'tag', 'update', '--resource-id', "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName",
+        '--operation', 'Merge', '--tags', 'SecurityControl=Ignore'
+    )
+    if (-not $result -or -not $result.PSObject.Properties['properties'] -or -not $result.properties -or
+        -not $result.properties.PSObject.Properties['tags'] -or -not $result.properties.tags -or
+        -not $result.properties.tags.PSObject.Properties['SecurityControl'] -or
+        $result.properties.tags.SecurityControl -cne 'Ignore') {
+        throw "Resource group '$ResourceGroupName' did not confirm SecurityControl=Ignore. Deployment stopped before VM creation."
+    }
+}
+
 function Get-ArcRegions {
     param([string[]]$Locations)
 
@@ -145,6 +160,7 @@ function Test-ArcCapacity {
         if (@($groups | Where-Object { $_.name -eq $groupName }).Count -ne 1) {
             throw "Participant resource group '$groupName' was not found."
         }
+        Set-ArcResourceGroupSecurityTag -ResourceGroupName $groupName
         foreach ($type in $script:ArcVmTypes) {
             $existingIp = @($publicIps | Where-Object {
                 $_.resourceGroup -eq $groupName -and $_.name -eq "vm-$type-mh-pip"

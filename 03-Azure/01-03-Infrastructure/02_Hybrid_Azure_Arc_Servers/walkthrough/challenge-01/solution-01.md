@@ -17,6 +17,10 @@ Please ensure that you successfully verified the [General prerequisits](../../Re
 Sign in to the [Azure Portal](https://portal.azure.com/).
 
 * [Create Resource Group](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal#create-resource-groups)
+* On the **Tags** tab, set **SecurityControl** to **Ignore** before creating the
+  group. For a Console-provided group, verify this tag is present. It prevents
+  MCAPS Governance from disabling the lab's public-IP access; keep it throughout
+  the exercises.
 
 *Please note: At the time of writing this solution, not all Azure Arc features are fully supported in all regions. We tested this solution in region Sweden Central.*
 

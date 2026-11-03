@@ -9,13 +9,22 @@ triggerPolicyEvaluation=true
 
 # the script takes about 1:30 min per VM
 
-# before creating azure resource group, check if it already exists
-if az group show --name $resourceGroupforArc &> /dev/null; then
-  echo "Resource group $resourceGroupforArc already exists."
-else
-  echo "Creating resource group $resourceGroupforArc in $arcRegion"
-  az group create --name $resourceGroupforArc --location $arcRegion
-fi
+# create or tag the Arc resource group before onboarding
+group_exists="$(az group exists --name "$resourceGroupforArc" --output tsv)" || exit $?
+case "$group_exists" in
+    true)
+        group_id="$(az group show --name "$resourceGroupforArc" --query id --output tsv)" || exit $?
+        if [ -z "$group_id" ]; then echo "Cannot read resource group ID for $resourceGroupforArc" >&2; exit 1; fi
+        az tag update --resource-id "$group_id" --operation Merge --tags SecurityControl=Ignore || exit $?
+        ;;
+    false)
+        az group create --name "$resourceGroupforArc" --location "$arcRegion" --tags SecurityControl=Ignore || exit $?
+        ;;
+    *)
+        echo "Cannot determine whether resource group $resourceGroupforArc exists: $group_exists" >&2
+        exit 1
+        ;;
+esac
 
 #create service principal for arc onboarding
 subscriptionId=$(az account show --query 'id' --output tsv)

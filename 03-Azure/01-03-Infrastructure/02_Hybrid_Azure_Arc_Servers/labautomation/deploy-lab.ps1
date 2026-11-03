@@ -37,6 +37,7 @@ if (@($owners | Where-Object {
     throw 'The requested resource group is not owned by this participant.'
 }
 Invoke-ArcAz -Arguments @('group', 'show', '--name', $ResourceGroupName) | Out-Null
+Set-ArcResourceGroupSecurityTag -ResourceGroupName $ResourceGroupName
 $password = New-MhhStablePassword -Purpose 'vm-admin'
 $existingVms = @(Invoke-ArcAz -Arguments @('vm', 'list', '--resource-group', $ResourceGroupName))
 $endpoints = @()

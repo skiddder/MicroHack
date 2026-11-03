@@ -39,6 +39,20 @@ subscription. No additional resource group is created by these hooks. No Copilot
 or Microsoft 365 licenses are requested. Cost fields are omitted; the documented
 Console fallback is USD 25 per lab/day, an estimate rather than a spending limit.
 
+Every lab/demo resource group must carry **`SecurityControl=Ignore`** so MCAPS
+Governance does not disable the training environment's public-IP access. The
+shared hook merges this tag into the Console-provisioned participant RGs, and
+the participant hook confirms it again before VM creation. Tag API failures or
+missing confirmation stop the deployment. Only participant RGs are tagged, not
+the `McapsGovernance` RG or unrelated subscription groups.
+
+Standalone Bash/PowerShell creators and the demo onboarder set this tag when
+creating RGs and use Merge for existing target RGs, preserving other tags. For
+manual RG creation, add it on the portal's Tags tab before creating resources.
+This is a lab-specific governance exception, not a production recommendation.
+It does not automatically restore NSG rules or public-IP access already changed
+by Governance; that requires inspecting the existing network configuration.
+
 The Console supplies authenticated Az PowerShell, an isolated Azure CLI profile,
 and the `Update-MhhToken` / `New-MhhStablePassword` helpers. The hooks do not log
 in, switch subscriptions, create users, or grant additional roles. They require
@@ -107,6 +121,8 @@ standalone creator directory and are not part of this Console deployment.
    Existing compatible VMs with the expected lab names, including unmarked VMs
    eligible for the approved reuse policy below, are not counted as new VM/core
    demand.
+   Participant RGs are tagged `SecurityControl=Ignore` before VM/core demand is
+   validated; incompatible VMs still fail validation.
    Public IP limits and current usage come from `az network list-usages`: both
    the overall `PublicIPAddresses` counter and the
    `IPv4StandardSkuPublicIpAddresses` counter must have capacity. These names were

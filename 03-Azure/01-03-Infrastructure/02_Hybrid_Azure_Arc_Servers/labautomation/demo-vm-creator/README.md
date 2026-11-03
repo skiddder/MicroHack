@@ -22,6 +22,9 @@ VM sizing and three-VM workflow are unchanged; it is not a Console hook.
 For each participant, you will need one Windows 2012 R2, one Windows 2025 and one Linux VM. You can provide the number of participants in the script. The script will then create 1 Windows 2012 R2, 1 Windows 2025 and 1 Ubuntu 24_04-lts-gen2 VM for each participant. 
 
 ## Deployment instructions
+Both creators set `SecurityControl=Ignore` on new resource groups and merge it
+into existing target groups before VM deployment, preserving unrelated tags.
+
 Open a bash shell and login to Azure:
 ```shell
 az login

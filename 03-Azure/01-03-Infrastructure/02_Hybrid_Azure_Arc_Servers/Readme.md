@@ -61,6 +61,7 @@ After completing this MicroHack you will:
 This MicroHack has a few but important prerequisites to be understood before starting this lab!
 
 - [labautomation](labautomation/README.md) is the central location for all setup assets, including Console automation, standalone demos, subscription preparation, cleanup and exercise setup packages.
+- All lab/demo resource groups must have `SecurityControl=Ignore` before deploying resources so MCAPS Governance does not disable public-IP access. Automation applies this tag; add it explicitly when creating groups manually.
 - For a self-managed deployment: your own Azure subscription with Owner RBAC rights at the subscription level.
 - For a Hackbox Console event: all users share one subscription, with one pre-created resource group per user. Participants have `Reader` on the subscription and `Owner` on their own resource group. Use that group throughout the challenges instead of creating another one or using example names such as `mh-arc-servers-rg`. Subscription-wide and Entra administration are coach tasks.
 - You need two virtual machines ready and updated: one Linux server and one Windows Server 2025. Windows Server 2012 R2 is optional and only required for challenge 6. The [Hackbox automation](labautomation/README.md) deploys Ubuntu Server **20.04** and Windows Server 2025 using the existing templates; it does not deploy Windows Server 2012 R2 or onboard either VM to Arc. The reconfiguration is submitted asynchronously and must be checked inside the guests before onboarding.

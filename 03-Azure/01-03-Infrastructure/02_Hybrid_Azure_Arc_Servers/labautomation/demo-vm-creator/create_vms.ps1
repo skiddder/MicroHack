@@ -16,13 +16,20 @@ Set-AzContext -Subscription $SubscriptionName
 
 $UPNSuffix = '@' +  ((Get-AzContext).Account.Id -split "@")[1] # Get UPN suffix from the signed-in account (@xxx.onmicrosoft.com)
 
+$existingResourceGroups = @(Get-AzResourceGroup -ErrorAction Stop)
+
 for ($i = 1; $i -le $ResourceGroupCount; $i++) {
 
     $ResourceGroupNumber = $StartIndex+$i
     $ResourceGroupName = "$ResourceGroupPrefix$ResourceGroupNumber"
     $ResourceGroupName = "$ResourceGroupPrefix{0:D2}" -f $ResourceGroupNumber
 
-    New-AzResourceGroup -Name $ResourceGroupName -Location $Location
+    $existingGroup = @($existingResourceGroups | Where-Object { $_.ResourceGroupName -eq $ResourceGroupName })
+    if ($existingGroup.Count -eq 0) {
+        New-AzResourceGroup -Name $ResourceGroupName -Location $Location -Tag @{ SecurityControl = 'Ignore' } -ErrorAction Stop
+    } else {
+        Update-AzTag -ResourceId $existingGroup[0].ResourceId -Tag @{ SecurityControl = 'Ignore' } -Operation Merge -ErrorAction Stop | Out-Null
+    }
 
     Write-Host "Updating role assignments for resource group $ResourceGroupName"
 
@@ -33,7 +40,10 @@ for ($i = 1; $i -le $ResourceGroupCount; $i++) {
 }
 
 
-$ResourceGroups = Get-AzResourceGroup -Name LabUser*
+$ResourceGroups = Get-AzResourceGroup -Name LabUser* -ErrorAction Stop
+foreach ($rg in $ResourceGroups) {
+    Update-AzTag -ResourceId $rg.ResourceId -Tag @{ SecurityControl = 'Ignore' } -Operation Merge -ErrorAction Stop | Out-Null
+}
 
 $AdminPassword = Read-Host -Prompt "Enter VM password"
 

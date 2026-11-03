@@ -29,6 +29,10 @@ sudo apt install -y ansible jq
 ```
 
 ## Deployment instructions
+The Arc target resource group receives `SecurityControl=Ignore` at creation.
+For an existing target group the tag is merged without replacing other tags
+before onboarding starts.
+
 Open a bash shell and login to Azure:
 ```shell
 az login

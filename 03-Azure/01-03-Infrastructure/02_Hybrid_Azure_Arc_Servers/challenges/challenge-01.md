@@ -16,7 +16,7 @@ In challenge 1 you will prepare your Azure environemnt for onboarding of existin
 > finished before onboarding. Windows Server 2012 R2 is not provisioned.
 
 - Verify all necessary Azure resources are in place
-  - Resource Group (Name: mh-arc-servers-rg)
+  - Resource Group (Name: mh-arc-servers-rg; Tag: `SecurityControl=Ignore`)
   - Service Principal (Name: mh-arc-servers-sp)
 - Service Principal (Name: LabUser-xx-arc-servers-sp)
 - Enable required Resource Providers (if not already enabled)
@@ -27,7 +27,7 @@ In challenge 1 you will prepare your Azure environemnt for onboarding of existin
 
 ## Success criteria
 
-- You created an Azure resource group, or verified your Console-provided user resource group
+- You created an Azure resource group, or verified your Console-provided user resource group, with `SecurityControl=Ignore`
 - You created a service principal with the required role membership, or received a coach-provided one scoped to your resource group
 - Successfully prepared existing servers
 - Onboarded servers which is visible in the Azure Arc machines blade in the Azure Portal

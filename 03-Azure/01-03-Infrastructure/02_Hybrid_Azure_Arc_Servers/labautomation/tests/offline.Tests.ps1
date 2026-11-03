@@ -26,6 +26,8 @@ function Reset-Mock {
         users = @($users | Select-Object -First $Count)
         placement = @()
         vms = @()
+        groupTags = @{}
+        invalidGroupTagResponse = $false
         calls = [System.Collections.Generic.List[object]]::new()
         deployments = [System.Collections.Generic.List[object]]::new()
         vmTemplatePaths = [System.Collections.Generic.List[string]]::new()
@@ -103,6 +105,10 @@ function global:New-AzSubscriptionDeployment {
 function global:New-AzResourceGroupDeployment {
     param($Name, $ResourceGroupName, $TemplateFile, $TemplateParameterObject, $ErrorAction)
     if ($global:ArcMock.failDeployment) { throw 'Mock ARM deployment failed.' }
+    if (-not $global:ArcMock.groupTags.ContainsKey($ResourceGroupName) -or
+        $global:ArcMock.groupTags[$ResourceGroupName].SecurityControl -cne 'Ignore') {
+        throw 'VM deployment requires SecurityControl=Ignore on its resource group first.'
+    }
     $global:ArcMock.vmTemplatePaths.Add($TemplateFile)
     $template = Get-Content $TemplateFile -Raw | ConvertFrom-Json -AsHashtable
     foreach ($key in $template.parameters.Keys) {
@@ -290,9 +296,23 @@ function global:az {
         }
         'tag update' {
             if ((Get-MockArgument $arguments '--operation') -ne 'Merge') {
-                throw 'VM tag updates must merge without replacing other tags.'
+                throw 'Tag updates must merge without replacing other tags.'
             }
             $id = Get-MockArgument $arguments '--resource-id'
+            $group = @($global:ArcMock.users | ForEach-Object {
+                "rg-$($_.Substring($_.Length - 2))"
+            } | Where-Object { $id -eq "/subscriptions/$subscription/resourceGroups/$_" })
+            if ($group.Count -eq 1) {
+                if ((Get-MockArgument $arguments '--tags') -cne 'SecurityControl=Ignore') {
+                    throw 'RG tag update must set SecurityControl=Ignore.'
+                }
+                if ($global:ArcMock.invalidGroupTagResponse) { return '{"properties":{"tags":{}}}' }
+                if (-not $global:ArcMock.groupTags.ContainsKey($group[0])) {
+                    $global:ArcMock.groupTags[$group[0]] = [pscustomobject]@{}
+                }
+                $global:ArcMock.groupTags[$group[0]] | Add-Member -NotePropertyName SecurityControl -NotePropertyValue Ignore -Force
+                return (ConvertTo-Json -InputObject @{ properties = @{ tags = $global:ArcMock.groupTags[$group[0]] } } -Depth 30 -Compress)
+            }
             $vm = @($global:ArcMock.vms | Where-Object {
                 $id -eq "/subscriptions/$subscription/resourceGroups/$($_.resourceGroup)/providers/Microsoft.Compute/virtualMachines/$($_.name)"
             })
@@ -392,6 +412,13 @@ $templatePaths = @([regex]::Matches($creatorSource, '(?m)^\$TemplateFile = Join-
 })
 Assert-Test ($templatePaths.Count -eq 3) 'Legacy PowerShell creator resolves three local templates'
 $creatorAst = [System.Management.Automation.Language.Parser]::ParseFile($creatorPath, [ref]$null, [ref]$null)
+$rgCreateCommands = @($creatorAst.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.CommandAst] -and
+    $node.GetCommandName() -eq 'New-AzResourceGroup'
+}, $true))
+Assert-Test ($rgCreateCommands.Count -eq 1) 'Legacy creator has one RG creation surface'
+Assert-Test ($rgCreateCommands[0].Extent.Text -match '-Tag @\{ SecurityControl = ''Ignore'' \}') 'Legacy creator tags new RGs at creation'
 $parameterAssignments = @($creatorAst.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
@@ -430,6 +457,8 @@ Assert-Test ($global:ArcMock.sharedTemplates[0].outputs.placement.value.Count -e
 Assert-Test ($global:ArcMock.placement.Count -eq 7) 'All Console participants mapped'
 Assert-Test ($global:ArcMock.placement[5].location -eq $regions[0]) 'Round-robin wraps'
 Assert-Test ($global:ArcMock.registrations.Count -eq 15) 'Providers registered once'
+Assert-Test ($global:ArcMock.groupTags.Count -eq 7) 'Shared hook tags all Console participant RGs'
+Assert-Test (@($global:ArcMock.groupTags.Values | Where-Object { $_.SecurityControl -cne 'Ignore' }).Count -eq 0) 'Every participant RG has exactly SecurityControl=Ignore'
 Assert-Test (-not $global:ArcMock.registrations.ContainsKey('Microsoft.Quota')) 'No unnecessary Quota provider dependency'
 Assert-Test (@($global:ArcMock.calls | Where-Object {
     $_[0] -eq 'network' -and $_[1] -eq 'list-usages'
@@ -575,7 +604,7 @@ Assert-Throws { Invoke-Lab } 'Mock ARM deployment failed'
 Assert-Test ($global:ArcMock.vms.Count -eq 0) 'Failed deployment publishes no credentials or reconfiguration'
 Reset-Mock -Count 1
 Invoke-Shared
-$global:ArcMock.failCommand = 'tag update'
+$global:ArcMock.failCommand = 'microhackArcUserId='
 Assert-Throws { Invoke-Lab } 'Azure CLI failed'
 Assert-Test ($global:ArcMock.vms.Count -eq 1) 'Tag API failure leaves the newly created VM for recovery'
 Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'run-command' }).Count -eq 0) 'Failed ownership tagging never submits reconfiguration'
@@ -584,6 +613,39 @@ Invoke-Shared
 Invoke-Lab | Out-Null
 Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Retry after ownership-tag failure reuses Linux and only creates the missing Windows VM'
 Assert-Test ($global:ArcMock.vms[0].tags.microhackArcUserId -eq $users[0]) 'Retry restores the missing ownership tag'
+
+Reset-Mock -Count 1
+$global:ArcMock.groupTags['rg-01'] = [pscustomobject]@{ keep = 'unchanged'; SecurityControl = 'Enforce' }
+Invoke-Shared
+Assert-Test ($global:ArcMock.groupTags['rg-01'].SecurityControl -ceq 'Ignore') 'Shared stage replaces a conflicting SecurityControl value with Ignore'
+Assert-Test ($global:ArcMock.groupTags['rg-01'].keep -ceq 'unchanged') 'Shared RG tagging preserves unrelated tags'
+$global:ArcMock.groupTags['rg-01'].SecurityControl = 'Enforce'
+Invoke-Lab | Out-Null
+Assert-Test ($global:ArcMock.groupTags['rg-01'].SecurityControl -ceq 'Ignore') 'Participant stage restores RG tag before VM deployment even after shared stage'
+Assert-Test ($global:ArcMock.groupTags['rg-01'].keep -ceq 'unchanged') 'Participant RG tagging preserves unrelated tags'
+Assert-Test (@($global:ArcMock.groupTags.Keys | Where-Object { $_ -ne 'rg-01' }).Count -eq 0) 'RG tagging only targets participant RGs, never governance or unrelated groups'
+
+Reset-Mock -Count 1
+$global:ArcMock.failCommand = 'tag update'
+Assert-Throws { Invoke-Shared } 'Azure CLI failed'
+Assert-Test ($global:ArcMock.sharedTemplatePaths.Count -eq 0) 'Shared tagging failure does not publish successful placement'
+Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Shared tagging failure cannot deploy VMs'
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.failCommand = 'tag update'
+Assert-Throws { Invoke-Lab } 'Azure CLI failed'
+Assert-Test ($global:ArcMock.vms.Count -eq 0) 'Participant RG tagging failure aborts before any VM creation'
+foreach ($stage in @('shared', 'participant')) {
+    Reset-Mock -Count 1
+    if ($stage -eq 'participant') { Invoke-Shared }
+    $global:ArcMock.invalidGroupTagResponse = $true
+    if ($stage -eq 'shared') {
+        Assert-Throws { Invoke-Shared } 'did not confirm SecurityControl=Ignore'
+    } else {
+        Assert-Throws { Invoke-Lab } 'did not confirm SecurityControl=Ignore'
+    }
+    Assert-Test ($global:ArcMock.vms.Count -eq 0) 'Missing RG tag confirmation aborts instead of assuming the tag was applied'
+}
 
 foreach ($tagShape in @('missing', 'null', 'empty', 'custom', 'empty-owner', 'submitted')) {
     Reset-Mock -Count 1
@@ -607,7 +669,7 @@ foreach ($tagShape in @('missing', 'null', 'empty', 'custom', 'empty-owner', 'su
     }
     $global:ArcMock.vms = @($vm)
     Invoke-Shared
-    Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'tag' }).Count -eq 0) 'Shared preflight allows unmarked expected VMs without changing tags'
+    Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'tag' -and (Get-MockArgument $_ '--resource-id') -match '/providers/Microsoft.Compute/virtualMachines/' }).Count -eq 0) 'Shared preflight allows unmarked expected VMs without changing VM tags'
     $recovered = @(Invoke-Lab)
     Assert-Test ($global:ArcMock.deployments.Count -eq 1) 'Existing unmarked Linux VM is reused rather than redeployed'
     Assert-Test ($global:ArcMock.vms[0].tags.microhackArcUserId -eq $users[0]) "Ownership tag is initialized for $tagShape tags"
@@ -679,7 +741,7 @@ foreach ($conflict in @('owner', 'location', 'size', 'state')) {
     $sharedPattern = if ($conflict -eq 'location') { 'does not match its assigned region' } else { $pattern }
     Assert-Throws { Invoke-Shared } $sharedPattern
     Assert-Throws { Invoke-Lab } $pattern
-    Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'tag' }).Count -eq 0) 'Conflicting VMs are not retagged by either deployment stage'
+    Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'tag' -and (Get-MockArgument $_ '--resource-id') -match '/providers/Microsoft.Compute/virtualMachines/' }).Count -eq 0) 'Conflicting VMs are not retagged by either deployment stage'
     Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Conflicting VMs are not redeployed'
 }
 

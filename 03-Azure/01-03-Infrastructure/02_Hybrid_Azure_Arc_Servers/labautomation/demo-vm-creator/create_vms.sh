@@ -19,8 +19,22 @@ regions=("swedencentral" "australiaeast" "westindia" "westus2")
 virtualWinMachineSize="Standard_D4ads_v5" # use a vm size with only 2 cores to avoid core limit issues in sponsored subscriptions
 virtualLnxMachineSize="Standard_D2ads_v5" # use a vm size with only 1 core to avoid core limit issues in sponsored subscriptions
 
-# create a resource group
-az group create --name $resourceGroupName --location $resourceGroupLocation
+# create or tag the resource group before deploying VMs
+group_exists="$(az group exists --name "$resourceGroupName" --output tsv)" || exit $?
+case "$group_exists" in
+    true)
+        group_id="$(az group show --name "$resourceGroupName" --query id --output tsv)" || exit $?
+        if [ -z "$group_id" ]; then echo "Cannot read resource group ID for $resourceGroupName" >&2; exit 1; fi
+        az tag update --resource-id "$group_id" --operation Merge --tags SecurityControl=Ignore || exit $?
+        ;;
+    false)
+        az group create --name "$resourceGroupName" --location "$resourceGroupLocation" --tags SecurityControl=Ignore || exit $?
+        ;;
+    *)
+        echo "Cannot determine whether resource group $resourceGroupName exists: $group_exists" >&2
+        exit 1
+        ;;
+esac
 number_of_regions=${#regions[@]}
 echo "Number of regions: $number_of_regions"
 number_of_loops=$((number_of_participants * 3 - 1 ))
