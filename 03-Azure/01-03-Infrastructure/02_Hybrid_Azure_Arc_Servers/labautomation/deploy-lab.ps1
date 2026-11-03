@@ -57,7 +57,7 @@ foreach ($type in $script:ArcVmTypes) {
         $parameters.virtualMachineRG = $ResourceGroupName
         $parameters.virtualMachineSize = $script:ArcVmSizes[$type]
         $parameters.adminUsername = 'mhadmin'
-        $parameters.adminPassword = ConvertTo-SecureString $password -AsPlainText -Force
+        $parameters.adminPassword = $password
         $parameters.networkInterfaceName = "$vmName-nic"
         $parameters.networkSecurityGroupName = "$vmName-nsg"
         $parameters.virtualNetworkName = "$vmName-vnet"

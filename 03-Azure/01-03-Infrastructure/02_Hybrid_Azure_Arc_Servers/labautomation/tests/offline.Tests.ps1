@@ -111,7 +111,20 @@ function global:New-AzResourceGroupDeployment {
     foreach ($key in $TemplateParameterObject.Keys) {
         if (-not $template.parameters.ContainsKey($key)) { throw "Unknown ARM parameter $key" }
     }
-    if ($TemplateParameterObject.adminPassword -isnot [securestring]) { throw 'Password must be secure.' }
+    if ($TemplateParameterObject.adminPassword -is [securestring]) {
+        throw 'Unable to serialize secure string value'
+    }
+    if ($TemplateParameterObject.adminPassword -isnot [string]) {
+        throw 'Password must be a serializable in-memory string.'
+    }
+    if ($template.parameters.adminPassword.type -ine 'secureString') {
+        throw 'ARM must retain the secureString password parameter type.'
+    }
+    $serializedParameters = $TemplateParameterObject | ConvertTo-Json -Depth 100 -Compress |
+        ConvertFrom-Json -AsHashtable
+    if ($serializedParameters.adminPassword -cne $TemplateParameterObject.adminPassword) {
+        throw 'Password changed during parameter serialization.'
+    }
     $global:ArcMock.deployments.Add($TemplateParameterObject)
     $global:ArcMock.vms += [pscustomobject]@{
         name = $TemplateParameterObject.virtualMachineName
@@ -370,6 +383,8 @@ Assert-Test ($global:ArcMock.deployments[1].networkSecurityGroupRules.Count -eq 
 Assert-Test ($credentials.Count -eq 5) 'Only dashboard credentials on success stream'
 Assert-Test ($credentials[-1].HackboxCredential.value -like '*NOT verified*') 'Honest asynchronous status'
 Assert-Test ($credentials[1].HackboxCredential.value -eq 'OfflineOnlyPassword123') 'Per-lab password returned after acceptance'
+Assert-Test ($global:ArcMock.deployments[0].adminPassword -ceq $credentials[1].HackboxCredential.value) 'Linux receives the dashboard password as a serializable ARM parameter value'
+Assert-Test ($global:ArcMock.deployments[1].adminPassword -ceq $credentials[1].HackboxCredential.value) 'Windows receives the same serializable dashboard password'
 $runs = @($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'run-command' }).Count
 Invoke-Lab | Out-Null
 Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Rerun skips existing VMs'

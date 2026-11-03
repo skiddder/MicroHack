@@ -127,8 +127,12 @@ availability, or exemption from Azure Policy.
 ## Credentials and asynchronous reconfiguration
 
 The local account is `mhadmin`. `New-MhhStablePassword -Purpose vm-admin` provides
-a stable, lab-scoped password for both VMs. The ARM deployment receives a
-`SecureString`; no password file or password CLI argument is created. Credentials
+a stable, lab-scoped password for both VMs. The `TemplateParameterObject`
+contains its string value in memory so Az.Resources can serialize it; a
+PowerShell `SecureString` object in that hashtable can fail serialization.
+Both ARM templates retain the `secureString` parameter type, which prevents ARM
+from recording the password value in deployment history. No password file or
+password CLI argument is created. Credentials
 and public IPs are emitted only after both VMs have deployed and both
 reconfiguration requests have been accepted.
 
