@@ -2,6 +2,8 @@
 
 # Resource group creation and role assignment, requires users to be created first (Create MH Users.ps1)
 
+$labautomationRoot = Split-Path $PSScriptRoot -Parent
+
 $SubscriptionName = "Infra-Micro-Hack"
 $Location = "Sweden Central"
 $ResourceGroupPrefix = "LabUser-"
@@ -44,10 +46,9 @@ $AdminUsername = "mhadmin"
 
 # Win 2025
 
-$TemplateUrl = 'https://raw.githubusercontent.com/microsoft/MicroHack/refs/heads/main/03-Azure/01-03-Infrastructure/02_Hybrid_Azure_Arc_Servers/resources/demo-vm-creator/template-win2025.json'
+$TemplateFile = Join-Path $labautomationRoot 'template-win2025.json'
 
 
-#$TemplateParameterFileUrl = 'https://raw.githubusercontent.com/microsoft/MicroHack/refs/heads/main/03-Azure/01-03-Infrastructure/02_Hybrid_Azure_Arc_Servers/resources/demo-vm-creator/parameters-win2025.json'
 $TemplateParameters = @{
     Location = $Location
     adminUsername = $AdminUsername
@@ -103,7 +104,7 @@ $TemplateParameters = @{
 }
 
 if (-not (Get-AzResourceGroupDeployment -ResourceGroupName $rg.ResourceGroupName | Where-Object DeploymentName -eq template-win2025)) {
-    New-AzResourceGroupDeployment -ResourceGroupName $rg.ResourceGroupName -TemplateUri $TemplateUrl -TemplateParameterObject $TemplateParameters
+    New-AzResourceGroupDeployment -ResourceGroupName $rg.ResourceGroupName -TemplateFile $TemplateFile -TemplateParameterObject $TemplateParameters
 }
 
 
@@ -111,10 +112,9 @@ if (-not (Get-AzResourceGroupDeployment -ResourceGroupName $rg.ResourceGroupName
 
 # Win 2012 R2
 
-$TemplateUrl = 'https://raw.githubusercontent.com/microsoft/MicroHack/refs/heads/main/03-Azure/01-03-Infrastructure/02_Hybrid_Azure_Arc_Servers/resources/demo-vm-creator/template-win2012.json'
+$TemplateFile = Join-Path $PSScriptRoot 'template-win2012.json'
 $VMSize = "Standard_D2s_v5"
 
-#$TemplateParameterFileUrl = 'https://raw.githubusercontent.com/microsoft/MicroHack/refs/heads/main/03-Azure/01-03-Infrastructure/02_Hybrid_Azure_Arc_Servers/resources/demo-vm-creator/parameters-win2025.json'
 $TemplateParameters = @{
     Location = $Location
     adminUsername = $AdminUsername
@@ -171,14 +171,13 @@ $TemplateParameters = @{
 }
 
 if (-not (Get-AzResourceGroupDeployment -ResourceGroupName $rg.ResourceGroupName | Where-Object DeploymentName -eq template-win2012)) {
-    New-AzResourceGroupDeployment -ResourceGroupName $rg.ResourceGroupName -TemplateUri $TemplateUrl -TemplateParameterObject $TemplateParameters
+    New-AzResourceGroupDeployment -ResourceGroupName $rg.ResourceGroupName -TemplateFile $TemplateFile -TemplateParameterObject $TemplateParameters
 }
 
 
 # Linux
 
-$TemplateUrl = 'https://raw.githubusercontent.com/janegilring/MicroHack/refs/heads/arc_mikro_hack_norway/03-Azure/01-03-Infrastructure/02_Hybrid_Azure_Arc_Servers/resources/demo-vm-creator/template-linux.json'
-#$TemplateParameterFileUrl = 'https://raw.githubusercontent.com/microsoft/MicroHack/refs/heads/main/03-Azure/01-03-Infrastructure/02_Hybrid_Azure_Arc_Servers/resources/demo-vm-creator/parameters-win2025.json'
+$TemplateFile = Join-Path $labautomationRoot 'template-linux.json'
 
 $VMSize = "Standard_D2s_v6"
 
@@ -235,7 +234,7 @@ $TemplateParameters = @{
 }
 
 if (-not (Get-AzResourceGroupDeployment -ResourceGroupName $rg.ResourceGroupName | Where-Object DeploymentName -eq template-linux)) {
-    New-AzResourceGroupDeployment -ResourceGroupName $rg.ResourceGroupName -TemplateUri $TemplateUrl -TemplateParameterObject $TemplateParameters
+    New-AzResourceGroupDeployment -ResourceGroupName $rg.ResourceGroupName -TemplateFile $TemplateFile -TemplateParameterObject $TemplateParameters
 }
 
 
@@ -264,26 +263,26 @@ Start-Sleep -Seconds 120
 
 foreach ($rg in $ResourceGroups) {
 
-    $RunCommandScriptUri = 'https://raw.githubusercontent.com/microsoft/MicroHack/refs/heads/main/03-Azure/01-03-Infrastructure/02_Hybrid_Azure_Arc_Servers/resources/demo-vm-creator/reconfig-win.ps1'
+    $RunCommandScript = Get-Content -LiteralPath (Join-Path $labautomationRoot 'reconfig-win.ps1') -Raw
 
     if (-not (Get-AzVMRunCommand -ResourceGroupName $rg.ResourceGroupName -VMName "$($rg.ResourceGroupName)-win2025-vm")) {
         Write-Host "Setting Run Command for VM: $($rg.ResourceGroupName)-win2025-vm"
-        Set-AzVMRunCommand -Location $Location -ResourceGroupName $rg.ResourceGroupName -VMName "$($rg.ResourceGroupName)-win2025-vm" -RunCommandName "LabPrep" -SourceScriptUri $RunCommandScriptUri -AsJob -AsyncExecution
+        Set-AzVMRunCommand -Location $Location -ResourceGroupName $rg.ResourceGroupName -VMName "$($rg.ResourceGroupName)-win2025-vm" -RunCommandName "LabPrep" -SourceScript $RunCommandScript -AsJob -AsyncExecution
     } else {
         Write-Host "Run Command already set for VM: $($rg.ResourceGroupName)-win2025-vm"
     }
 
     if (-not (Get-AzVMRunCommand -ResourceGroupName $rg.ResourceGroupName -VMName "$($rg.ResourceGroupName)-win2012-vm")) {
         Write-Host "Setting Run Command for VM: $($rg.ResourceGroupName)-win2012-vm"
-        Set-AzVMRunCommand -Location $Location -ResourceGroupName $rg.ResourceGroupName -VMName "$($rg.ResourceGroupName)-win2012-vm" -RunCommandName "LabPrep" -SourceScriptUri $RunCommandScriptUri -AsJob -AsyncExecution
+        Set-AzVMRunCommand -Location $Location -ResourceGroupName $rg.ResourceGroupName -VMName "$($rg.ResourceGroupName)-win2012-vm" -RunCommandName "LabPrep" -SourceScript $RunCommandScript -AsJob -AsyncExecution
     } else {
         Write-Host "Run Command already set for VM: $($rg.ResourceGroupName)-win2012-vm"
     }
 
-    $RunCommandScriptUri = 'https://raw.githubusercontent.com/microsoft/MicroHack/refs/heads/main/03-Azure/01-03-Infrastructure/02_Hybrid_Azure_Arc_Servers/resources/demo-vm-creator/reconfig-ubuntu.sh'
+    $RunCommandScript = Get-Content -LiteralPath (Join-Path $labautomationRoot 'reconfig-ubuntu.sh') -Raw
     if (-not (Get-AzVMRunCommand -ResourceGroupName $rg.ResourceGroupName -VMName "$($rg.ResourceGroupName)-linux-vm")) {
         Write-Host "Setting Run Command for VM: $($rg.ResourceGroupName)-linux-vm"
-        Set-AzVMRunCommand -Location $Location -ResourceGroupName $rg.ResourceGroupName -VMName "$($rg.ResourceGroupName)-linux-vm" -RunCommandName "LabPrep" -SourceScriptUri $RunCommandScriptUri -AsJob -AsyncExecution
+        Set-AzVMRunCommand -Location $Location -ResourceGroupName $rg.ResourceGroupName -VMName "$($rg.ResourceGroupName)-linux-vm" -RunCommandName "LabPrep" -SourceScript $RunCommandScript -AsJob -AsyncExecution
     } else {
         Write-Host "Run Command already set for VM: $($rg.ResourceGroupName)-linux-vm"
     }

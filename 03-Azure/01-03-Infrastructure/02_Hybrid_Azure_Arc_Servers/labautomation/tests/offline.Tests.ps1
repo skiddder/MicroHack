@@ -362,8 +362,58 @@ Assert-Test ($defaults.deploymentType -eq 'resourcegroup') 'Resource group isola
 Assert-Test ($defaults.groups.Count -eq 0) 'No extra licenses'
 Assert-Test (-not $defaults.ContainsKey('labsPerSubscription')) 'Console controls subscription packing'
 Assert-Test (-not $defaults.ContainsKey('estimatedDailyCostsUsd')) 'No invented cost estimate'
-$source = Get-Content (Join-Path (Split-Path $labRoot -Parent) 'resources\demo-vm-creator\create_vms.sh') -Raw
+$source = Get-Content (Join-Path $labRoot 'demo-vm-creator\create_vms.sh') -Raw
 Assert-Test (-not $source.Contains("`r")) 'Standalone Bash creator uses Unix line endings'
+$setupAssets = @(
+    'AddKey.zip', 'ChangeTracking\template-DCR-ChangeTracking.json',
+    'cleanup\1-resource-groups.ps1', 'demo-vm-creator\.gitattributes',
+    'demo-vm-creator\create_vms.ps1', 'demo-vm-creator\create_vms.sh',
+    'demo-vm-creator\parameters-win2012.json', 'demo-vm-creator\README.md',
+    'demo-vm-creator\template-win2012.json',
+    'demo-vm-onboarder\arc-enable-vms.sh', 'demo-vm-onboarder\create-and-onboard.sh',
+    'demo-vm-onboarder\onboard-linux.yml', 'demo-vm-onboarder\onboard-win.yml',
+    'demo-vm-onboarder\README.md', 'subscription-preparations\1-resource-providers.ps1',
+    'subscription-preparations\2-vcpu-quotas.ps1', 'subscription-preparations\3-rbac.ps1'
+)
+foreach ($name in $setupAssets) {
+    Assert-Test (Test-Path -LiteralPath (Join-Path $labRoot $name) -PathType Leaf) "Setup asset is centralized: $name"
+}
+Assert-Test (-not (Test-Path -LiteralPath (Join-Path (Split-Path $labRoot -Parent) 'resources'))) 'No setup assets remain in the former resources directory'
+foreach ($file in Get-ChildItem $labRoot -Filter '*.json' -Recurse) {
+    $document = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json -AsHashtable
+    Assert-Test ($null -ne $document) "Central setup JSON parses: $($file.Name)"
+}
+$creatorPath = Join-Path $labRoot 'demo-vm-creator\create_vms.ps1'
+$creatorSource = Get-Content -LiteralPath $creatorPath -Raw
+Assert-Test (-not ($creatorSource -match '-TemplateUri|-SourceScriptUri|raw\.githubusercontent\.com')) 'Legacy PowerShell creator consumes local setup assets rather than remote repository URLs'
+$templatePaths = @([regex]::Matches($creatorSource, '(?m)^\$TemplateFile = Join-Path \$(labautomationRoot|PSScriptRoot) ''([^'']+)''') | ForEach-Object {
+    $root = if ($_.Groups[1].Value -eq 'labautomationRoot') { $labRoot } else { Split-Path $creatorPath -Parent }
+    Join-Path $root $_.Groups[2].Value
+})
+Assert-Test ($templatePaths.Count -eq 3) 'Legacy PowerShell creator resolves three local templates'
+$creatorAst = [System.Management.Automation.Language.Parser]::ParseFile($creatorPath, [ref]$null, [ref]$null)
+$parameterAssignments = @($creatorAst.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+    $node.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
+    $node.Left.VariablePath.UserPath -eq 'TemplateParameters'
+}, $true))
+Assert-Test ($parameterAssignments.Count -eq 3) 'Legacy creator defines parameters for all three templates'
+for ($i = 0; $i -lt $templatePaths.Count; $i++) {
+    Assert-Test (Test-Path -LiteralPath $templatePaths[$i]) 'Legacy creator local template exists'
+    $template = Get-Content -LiteralPath $templatePaths[$i] -Raw | ConvertFrom-Json -AsHashtable
+    $parameterTable = $parameterAssignments[$i].Right.Find({
+        param($node)
+        $node -is [System.Management.Automation.Language.HashtableAst]
+    }, $false)
+    $keys = @($parameterTable.KeyValuePairs | ForEach-Object { $_.Item1.Value })
+    foreach ($key in $keys) {
+        Assert-Test ($key -in $template.parameters.Keys) "Legacy creator parameter '$key' exists in its local template"
+    }
+    foreach ($key in $template.parameters.Keys) {
+        Assert-Test ($key -in $keys -or $template.parameters[$key].Contains('defaultValue')) "Legacy creator supplies required template parameter '$key'"
+    }
+}
 $bashRegions = [regex]::Match($source, '(?m)^regions=\(([^)]+)\)').Groups[1].Value
 $bashRegions = @([regex]::Matches($bashRegions, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
 $defaultRegions = @($defaults.preferredLocation.Split(',') | ForEach-Object { $_.Trim() })
@@ -808,10 +858,6 @@ try {
     New-Item -ItemType Directory -Path $packageRoot | Out-Null
     foreach ($name in @('common.ps1', 'deploy-lab.ps1', 'shared-deploy-lab.ps1', 'lab-defaults.json') + $assetNames) {
         Copy-Item -LiteralPath (Join-Path $labRoot $name) -Destination (Join-Path $packageRoot $name)
-    }
-    foreach ($name in $assetNames) {
-        $original = Join-Path (Split-Path $labRoot -Parent) "resources\demo-vm-creator\$name"
-        Assert-Test (-not (Test-Path -LiteralPath $original)) "Asset $name was moved, not duplicated"
     }
     Reset-Mock -Count 1
     Invoke-Shared -LabPath $packageRoot

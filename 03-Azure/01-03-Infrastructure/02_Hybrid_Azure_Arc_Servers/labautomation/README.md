@@ -1,4 +1,23 @@
-# Hackbox automation: Azure Arc-enabled servers
+# Setup and Hackbox automation: Azure Arc-enabled servers
+
+This directory is the central location for **all** environment and demo setup
+files for this MicroHack. Add future setup assets here, not under `resources`.
+The former `resources` contents were moved here, not copied.
+
+| Setup area | Location |
+| --- | --- |
+| Hackbox Console hooks and shared VM assets | This directory |
+| Standalone Bash and legacy PowerShell VM creators, including Windows Server 2012 R2 assets | [demo-vm-creator](demo-vm-creator/README.md) |
+| Optional demo Arc onboarding and Ansible playbooks | [demo-vm-onboarder](demo-vm-onboarder/README.md) |
+| Manual subscription preparation | [subscription-preparations](subscription-preparations) |
+| Manual event cleanup | [cleanup](cleanup) |
+| Change Tracking DCR template | [template-DCR-ChangeTracking.json](ChangeTracking/template-DCR-ChangeTracking.json) |
+| Challenge 7 machine-configuration package | [AddKey.zip](AddKey.zip) |
+
+Moving these tools does not make them Console deployment stages. The Console
+only runs its existing hooks; manual/demo scripts retain their separate
+authentication, prerequisites and behavior. In particular, the Console does not
+run cleanup, request quota increases or perform demo Arc onboarding.
 
 ## Console configuration
 
@@ -62,7 +81,7 @@ reused. SSH (22), RDP (3389), and Windows WinRM (5985) retain their existing pub
 inbound rules. This is a disposable training environment, not a production
 network design. Do not put sensitive data on these VMs.
 
-The baseline is [create_vms.sh](../resources/demo-vm-creator/create_vms.sh), not
+The baseline is [create_vms.sh](demo-vm-creator/create_vms.sh), not
 the older PowerShell creator. The existing ARM templates, parameter files and
 guest scripts were moved here without changing their contents. The Bash creator
 now resolves these shared files relative to its own location; its VM creation,
@@ -238,6 +257,21 @@ propagation and re-runs. They do **not** validate an actual Azure deployment.
 They also deploy from an isolated copy of only the runtime `labautomation`
 files, without the original repository layout, and test that each missing asset
 fails before Azure access.
+The centralized legacy PowerShell creator's parameter sets are also checked
+against its three local templates.
+
+On Linux/WSL, validate the moved standalone demo paths with:
+
+```bash
+bash ./tests/setup-paths.Tests.sh
+```
+
+This syntax-checks the Bash scripts and runs the creator, onboarder and combined
+entry point with mocked Azure CLI, jq and Ansible commands. It uses an isolated
+copy with spaces in its path, starts outside the setup directory, and checks all
+template, parameter, reconfiguration and playbook references. No cloud commands
+are sent; only the temporary playbook copies are populated with dummy values.
+
 The [network quota fixture](tests/fixtures/network-usages.json) uses the counter
 names, labels and string values observed in the Console diagnostics, restored to
 the CLI's unprojected `name` / `currentValue` / `limit` response shape.

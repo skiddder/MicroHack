@@ -1,5 +1,5 @@
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)" || exit 1
-labautomation_dir="$script_dir/../../labautomation"
+labautomation_dir="$script_dir/.."
 
 # adjust parameters with your own values as needed
 resourceGroupName="mh-arc-onprem-demo"

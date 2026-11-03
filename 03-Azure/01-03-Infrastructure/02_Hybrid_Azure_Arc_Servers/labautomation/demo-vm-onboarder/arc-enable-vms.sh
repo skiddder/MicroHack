@@ -1,3 +1,5 @@
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)" || exit 1
+
 resourceGroupforOnprem="mh-arc-onprem"
 resourceGroupforArc="mh-arc-cloud"
 adminUsername="mhadmin"
@@ -24,7 +26,7 @@ clientSecret=$(echo $tmp | jq -r '.password')
 
 ######## set ansible variables according to target environment --> parameters will be passed on via ansible command line ########
 
-for yamlFile in ./*.yml; do
+for yamlFile in "$script_dir"/*.yml; do
   echo "Updating $yamlFile with service principal and resource group details"
   sed -i "s|service_principal_id: '.*'|service_principal_id: '$servicePrincipalId'|g" "$yamlFile"
   sed -i "s|service_principal_secret: '.*'|service_principal_secret: '$clientSecret'|g" "$yamlFile"
@@ -50,10 +52,10 @@ for server in $servers; do
 
   if [ "$os_type" == "Windows" ]; then
     echo "Starting Ansible playbook for Windows VM: $vm_name"
-    ansible-playbook onboard-win.yml -i "$public_ip," -e "ansible_user='$adminUsername' ansible_password='$adminPassword' ansible_port=5985 ansible_connection=winrm ansible_winrm_transport=basic ansible_winrm_server_cert_validation=ignore" # azure_service_principal_id='$servicePrincipalId' azure_service_principal_secret='$clientSecret' azure_resource_group='$resourceGroupforArc' azure_tenant_id='$tenantId' azure_subscription_id='$subscriptionId'"
+    ansible-playbook "$script_dir/onboard-win.yml" -i "$public_ip," -e "ansible_user='$adminUsername' ansible_password='$adminPassword' ansible_port=5985 ansible_connection=winrm ansible_winrm_transport=basic ansible_winrm_server_cert_validation=ignore" # azure_service_principal_id='$servicePrincipalId' azure_service_principal_secret='$clientSecret' azure_resource_group='$resourceGroupforArc' azure_tenant_id='$tenantId' azure_subscription_id='$subscriptionId'"
   else
     echo "Starting Ansible playbook for Linux VM: $vm_name"
-    ansible-playbook onboard-linux.yml -i "$public_ip," -e "ansible_user='$adminUsername' ansible_ssh_pass='$adminPassword' ansible_port=22 ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no'" # azure_service_principal_id='$servicePrincipalId' azure_service_principal_secret='$clientSecret' azure_resource_group='$resourceGroupforArc' azure_tenant_id='$tenantId' azure_subscription_id='$subscriptionId'"
+    ansible-playbook "$script_dir/onboard-linux.yml" -i "$public_ip," -e "ansible_user='$adminUsername' ansible_ssh_pass='$adminPassword' ansible_port=22 ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no'" # azure_service_principal_id='$servicePrincipalId' azure_service_principal_secret='$clientSecret' azure_resource_group='$resourceGroupforArc' azure_tenant_id='$tenantId' azure_subscription_id='$subscriptionId'"
   fi
 
 done
