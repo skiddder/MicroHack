@@ -85,7 +85,9 @@ standalone creator directory and are not part of this Console deployment.
 4. Verify the subscription's SKU location restrictions and available regional,
    VM-family, VM-count and public-IP quotas for the whole planned deployment.
    Both SKUs currently consume the same VM-family quota: **6 vCPUs per user**.
-   Existing automation-owned VMs are not counted as new VM/core demand.
+   Existing compatible VMs with the expected lab names, including unmarked VMs
+   eligible for the approved reuse policy below, are not counted as new VM/core
+   demand.
    Public IP limits and current usage come from `az network list-usages`: both
    the overall `PublicIPAddresses` counter and the
    `IPv4StandardSkuPublicIpAddresses` counter must have capacity. These names were
@@ -160,8 +162,16 @@ No guest-completion polling or automatic Arc onboarding is performed.
 - The same participant list and ordered region list produce the same region
   mapping, VM names and passwords. Participant input ordering does not matter;
   region ordering deliberately does.
-- Successfully provisioned VMs are reused only when their region, size and
-  `microhackArcUserId` tag match. Unmarked/conflicting VMs are not adopted.
+- Successfully provisioned VMs are reused when their region and size match and
+  their `microhackArcUserId` tag matches or is absent/empty. Under the explicitly
+  approved permanent recovery policy, missing ownership tags are automatically
+  set without manual origin/credential verification, but only for `vm-linux-mh`
+  and `vm-win2025-mh` in the Console-provided participant-owned RG. The shared
+  preflight permits these unmarked VMs; the participant hook tags and reuses them
+  with an explicit warning. Conflicting nonempty owner tags are never overwritten.
+- All ownership and reconfiguration tag writes use `az tag update --operation
+  Merge`, which initializes missing tags and preserves unrelated tags. VM data
+  is read again after ownership tagging; the tag API response is not a VM object.
 - `microhackReconfiguration=submitted` prevents submitting the scripts again to
   a guest whose Azure agent may already be disabled. It records submission,
   **not** verified success.
@@ -170,8 +180,10 @@ No guest-completion polling or automatic Arc onboarding is performed.
   A coach must inspect the guest and Run Command state before changing this tag.
   If the original request was accepted, mark it `submitted`; clear it for retry
   only if the request was not accepted and the guest agent is still available.
-- A VM creation interrupted before its ownership tag is written also requires
-  coach inspection of the deployment and credentials before it can be adopted.
+- A VM creation interrupted before ownership tagging can therefore be retried
+  without recreating that VM. Existing passwords are neither verified nor reset:
+  if a reused VM did not originate from this lab's stable password, the dashboard
+  password may not match it.
 - An existing failed VM deployment is not silently treated as a healthy VM.
 - Removing users or changing their assigned region first triggers a read-only
   subscription resource inventory. A stale mapping can be replaced if the entire
@@ -186,8 +198,8 @@ No guest-completion polling or automatic Arc onboarding is performed.
   subscription or resource in `McapsGovernance` is exempt.
 - If any other resource exists (including partial networks, disks or unrelated
   resources), changed assignments still fail before VM deployment. No resources
-  are deleted, moved or adopted; the previous placement remains intact. Invalid
-  or failed inventory responses cannot authorize a replan. Restore the previous
+  are deleted, moved or adopted during replanning; the previous placement remains
+  intact. Invalid or failed inventory responses cannot authorize a replan. Restore the previous
   participant/region lists or have the coach inspect and clean up through the
   normal Console/event lifecycle.
 

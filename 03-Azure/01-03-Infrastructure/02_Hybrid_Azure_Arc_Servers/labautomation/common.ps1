@@ -160,7 +160,7 @@ function Test-ArcCapacity {
                 $_.resourceGroup -eq $groupName -and $_.name -eq "vm-$type-mh"
             })
             if ($existing.Count -gt 0) {
-                Assert-ArcVm -Vm $existing[0] -Location $entry.location -Size $script:ArcVmSizes[$type] -UserId $entry.userId
+                Assert-ArcVm -Vm $existing[0] -Location $entry.location -Size $script:ArcVmSizes[$type] -UserId $entry.userId -AllowUnmarked
             } else {
                 $key = "$($entry.location)/$type"
                 if (-not $remaining.ContainsKey($key)) { $remaining[$key] = 0 }
@@ -210,15 +210,22 @@ function Test-ArcCapacity {
     }
 }
 
-function Assert-ArcVm {
-    param([object]$Vm, [string]$Location, [string]$Size, [string]$UserId = '')
+function Get-ArcVmUserId {
+    param([object]$Vm)
 
-    if ($UserId -and (
-        -not $Vm.PSObject.Properties['tags'] -or -not $Vm.tags -or
-        -not $Vm.tags.PSObject.Properties['microhackArcUserId'] -or
-        $Vm.tags.microhackArcUserId -ne $UserId
-    )) {
-        throw "Existing VM '$($Vm.name)' is not marked as belonging to this participant's automation. The coach must verify its origin and credentials before reuse."
+    if ($Vm.PSObject.Properties['tags'] -and $Vm.tags -and
+        $Vm.tags.PSObject.Properties['microhackArcUserId']) {
+        return [string]$Vm.tags.microhackArcUserId
+    }
+    return ''
+}
+
+function Assert-ArcVm {
+    param([object]$Vm, [string]$Location, [string]$Size, [string]$UserId = '', [switch]$AllowUnmarked)
+
+    $owner = Get-ArcVmUserId -Vm $Vm
+    if ($UserId -and $owner -ne $UserId -and (-not $AllowUnmarked -or $owner -ne '')) {
+        throw "Existing VM '$($Vm.name)' is not marked as belonging to this participant's automation. A conflicting owner tag will not be overwritten."
     }
     if ($Vm.location -ne $Location -or $Vm.hardwareProfile.vmSize -ne $Size) {
         throw "Existing VM '$($Vm.name)' does not match assigned location/SKU. No VM will be moved or resized automatically."

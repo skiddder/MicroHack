@@ -132,7 +132,6 @@ function global:New-AzResourceGroupDeployment {
         location = $TemplateParameterObject.location
         hardwareProfile = [pscustomobject]@{ vmSize = $TemplateParameterObject.virtualMachineSize }
         provisioningState = 'Succeeded'
-        tags = [pscustomobject]@{}
     }
     [pscustomobject]@{ ProvisioningState = 'Succeeded' }
 }
@@ -281,9 +280,29 @@ function global:az {
             $name = Get-MockArgument $arguments '--name'
             $rg = Get-MockArgument $arguments '--resource-group'
             $vm = $global:ArcMock.vms | Where-Object { $_.name -eq $name -and $_.resourceGroup -eq $rg }
+            if (-not $vm.PSObject.Properties['tags'] -or -not $vm.tags) {
+                $global:LASTEXITCODE = 1
+                return "ERROR: Couldn't find 'tags' in ''."
+            }
             $tag = (Get-MockArgument $arguments '--set') -split '=', 2
             $vm.tags | Add-Member -NotePropertyName ($tag[0] -replace '^tags\.', '') -NotePropertyValue $tag[1] -Force
             $vm
+        }
+        'tag update' {
+            if ((Get-MockArgument $arguments '--operation') -ne 'Merge') {
+                throw 'VM tag updates must merge without replacing other tags.'
+            }
+            $id = Get-MockArgument $arguments '--resource-id'
+            $vm = @($global:ArcMock.vms | Where-Object {
+                $id -eq "/subscriptions/$subscription/resourceGroups/$($_.resourceGroup)/providers/Microsoft.Compute/virtualMachines/$($_.name)"
+            })
+            if ($vm.Count -ne 1) { throw 'Tag update must target exactly one VM resource ID.' }
+            if (-not $vm[0].PSObject.Properties['tags'] -or -not $vm[0].tags) {
+                $vm[0] | Add-Member -NotePropertyName tags -NotePropertyValue ([pscustomobject]@{}) -Force
+            }
+            $tag = (Get-MockArgument $arguments '--tags') -split '=', 2
+            $vm[0].tags | Add-Member -NotePropertyName $tag[0] -NotePropertyValue $tag[1] -Force
+            @{ properties = @{ tags = $vm[0].tags } }
         }
         'vm run-command' {
             if ($arguments[2] -eq 'invoke' -and '--no-wait' -notin $arguments) { throw 'Linux must be asynchronous.' }
@@ -385,6 +404,7 @@ Assert-Test ($credentials[-1].HackboxCredential.value -like '*NOT verified*') 'H
 Assert-Test ($credentials[1].HackboxCredential.value -eq 'OfflineOnlyPassword123') 'Per-lab password returned after acceptance'
 Assert-Test ($global:ArcMock.deployments[0].adminPassword -ceq $credentials[1].HackboxCredential.value) 'Linux receives the dashboard password as a serializable ARM parameter value'
 Assert-Test ($global:ArcMock.deployments[1].adminPassword -ceq $credentials[1].HackboxCredential.value) 'Windows receives the same serializable dashboard password'
+Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'update' }).Count -eq 0) 'All VM tag writes use tag Merge instead of nested VM updates'
 $runs = @($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'run-command' }).Count
 Invoke-Lab | Out-Null
 Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Rerun skips existing VMs'
@@ -503,6 +523,116 @@ Invoke-Shared
 $global:ArcMock.failDeployment = $true
 Assert-Throws { Invoke-Lab } 'Mock ARM deployment failed'
 Assert-Test ($global:ArcMock.vms.Count -eq 0) 'Failed deployment publishes no credentials or reconfiguration'
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.failCommand = 'tag update'
+Assert-Throws { Invoke-Lab } 'Azure CLI failed'
+Assert-Test ($global:ArcMock.vms.Count -eq 1) 'Tag API failure leaves the newly created VM for recovery'
+Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'run-command' }).Count -eq 0) 'Failed ownership tagging never submits reconfiguration'
+$global:ArcMock.failCommand = ''
+Invoke-Shared
+Invoke-Lab | Out-Null
+Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Retry after ownership-tag failure reuses Linux and only creates the missing Windows VM'
+Assert-Test ($global:ArcMock.vms[0].tags.microhackArcUserId -eq $users[0]) 'Retry restores the missing ownership tag'
+
+foreach ($tagShape in @('missing', 'null', 'empty', 'custom', 'empty-owner', 'submitted')) {
+    Reset-Mock -Count 1
+    Invoke-Shared
+    $vm = [pscustomobject]@{
+        name = 'vm-linux-mh'
+        resourceGroup = 'rg-01'
+        location = 'swedencentral'
+        hardwareProfile = [pscustomobject]@{ vmSize = 'Standard_D2ads_v5' }
+        provisioningState = 'Succeeded'
+    }
+    if ($tagShape -ne 'missing') {
+        $tags = switch ($tagShape) {
+            'null' { $null }
+            'empty' { [pscustomobject]@{} }
+            'custom' { [pscustomobject]@{ keep = 'unchanged' } }
+            'empty-owner' { [pscustomobject]@{ microhackArcUserId = '' } }
+            'submitted' { [pscustomobject]@{ microhackReconfiguration = 'submitted' } }
+        }
+        $vm | Add-Member -NotePropertyName tags -NotePropertyValue $tags
+    }
+    $global:ArcMock.vms = @($vm)
+    Invoke-Shared
+    Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'tag' }).Count -eq 0) 'Shared preflight allows unmarked expected VMs without changing tags'
+    $recovered = @(Invoke-Lab)
+    Assert-Test ($global:ArcMock.deployments.Count -eq 1) 'Existing unmarked Linux VM is reused rather than redeployed'
+    Assert-Test ($global:ArcMock.vms[0].tags.microhackArcUserId -eq $users[0]) "Ownership tag is initialized for $tagShape tags"
+    Assert-Test ($global:ArcMock.vms[0].tags.microhackReconfiguration -eq 'submitted') 'Reconfiguration state is merged into initialized VM tags'
+    Assert-Test ($recovered.Count -eq 5) 'Recovery completes both VMs and dashboard output'
+    if ($tagShape -eq 'custom') {
+        Assert-Test ($global:ArcMock.vms[0].tags.keep -eq 'unchanged') 'Ownership and state tag updates preserve unrelated VM tags'
+    }
+    if ($tagShape -eq 'submitted') {
+        Assert-Test (@($global:ArcMock.calls | Where-Object {
+            $_[0] -eq 'vm' -and $_[1] -eq 'run-command' -and $_[2] -eq 'invoke'
+        }).Count -eq 0) 'Adding a missing owner tag preserves submitted state without contacting the stopped Linux agent'
+    }
+}
+
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.vms = @(
+    foreach ($type in @('linux', 'win2025')) {
+        [pscustomobject]@{
+            name = "vm-$type-mh"
+            resourceGroup = 'rg-01'
+            location = 'swedencentral'
+            hardwareProfile = [pscustomobject]@{ vmSize = if ($type -eq 'linux') { 'Standard_D2ads_v5' } else { 'Standard_D4ads_v5' } }
+            provisioningState = 'Succeeded'
+        }
+    }
+)
+Invoke-Shared
+Invoke-Lab | Out-Null
+Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Both existing unmarked VM types are reused without ARM redeployment'
+Assert-Test (@($global:ArcMock.vms | Where-Object { $_.tags.microhackArcUserId -eq $users[0] }).Count -eq 2) 'Recovery tags both Linux and Windows with the current participant ID'
+
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.vms = @([pscustomobject]@{
+    name = 'vm-not-a-lab'
+    resourceGroup = 'rg-01'
+    location = 'swedencentral'
+    hardwareProfile = [pscustomobject]@{ vmSize = 'Standard_D2ads_v5' }
+    provisioningState = 'Succeeded'
+})
+Invoke-Shared
+Invoke-Lab | Out-Null
+Assert-Test (-not $global:ArcMock.vms[0].PSObject.Properties['tags']) 'Unmarked VMs without an expected lab name remain untouched'
+Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'An unrelated VM is not substituted for either expected lab VM'
+
+foreach ($conflict in @('owner', 'location', 'size', 'state')) {
+    Reset-Mock -Count 1
+    Invoke-Shared
+    $vm = [pscustomobject]@{
+        name = 'vm-linux-mh'
+        resourceGroup = 'rg-01'
+        location = 'swedencentral'
+        hardwareProfile = [pscustomobject]@{ vmSize = 'Standard_D2ads_v5' }
+        provisioningState = 'Succeeded'
+        tags = [pscustomobject]@{ keep = 'unchanged' }
+    }
+    $pattern = switch ($conflict) {
+        'owner' {
+            $vm.tags | Add-Member -NotePropertyName microhackArcUserId -NotePropertyValue $users[1]
+            'not marked as belonging'
+        }
+        'location' { $vm.location = 'westus2'; 'No VM will be moved' }
+        'size' { $vm.hardwareProfile.vmSize = 'Standard_D4ads_v5'; 'No VM will be moved' }
+        'state' { $vm.provisioningState = 'Failed'; 'not successfully provisioned' }
+    }
+    $global:ArcMock.vms = @($vm)
+    $sharedPattern = if ($conflict -eq 'location') { 'does not match its assigned region' } else { $pattern }
+    Assert-Throws { Invoke-Shared } $sharedPattern
+    Assert-Throws { Invoke-Lab } $pattern
+    Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'tag' }).Count -eq 0) 'Conflicting VMs are not retagged by either deployment stage'
+    Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Conflicting VMs are not redeployed'
+}
+
 Reset-Mock -Count 1
 Invoke-Shared
 $global:ArcMock.failCommand = 'vm run-command'

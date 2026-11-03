@@ -43,8 +43,10 @@ $endpoints = @()
 
 foreach ($type in $script:ArcVmTypes) {
     $vmName = "vm-$type-mh"
+    $vmResourceId = "$ownerScope/providers/Microsoft.Compute/virtualMachines/$vmName"
     $vm = @($existingVms | Where-Object { $_.name -eq $vmName })
-    if ($vm.Count -eq 0) {
+    $isNewVm = $vm.Count -eq 0
+    if ($isNewVm) {
         $parameterDocument = Get-Content (Join-Path $script:ArcVmSource "parameters-$type.json") -Raw |
             ConvertFrom-Json -AsHashtable
         $parameters = @{}
@@ -72,10 +74,18 @@ foreach ($type in $script:ArcVmTypes) {
             throw "Deployment of $vmName failed: $($result.ProvisioningState)."
         }
         $vm = @(Invoke-ArcAz -Arguments @('vm', 'show', '--resource-group', $ResourceGroupName, '--name', $vmName))
-        Assert-ArcVm -Vm $vm[0] -Location $location -Size $script:ArcVmSizes[$type]
+    }
+    Assert-ArcVm -Vm $vm[0] -Location $location -Size $script:ArcVmSizes[$type] -UserId $userId -AllowUnmarked
+    if ((Get-ArcVmUserId -Vm $vm[0]) -eq '') {
+        if (-not $isNewVm) {
+            Write-Warning "Adding missing ownership tag to existing VM '$vmName' in '$ResourceGroupName' under the approved reuse policy. Its origin and password are not verified; the password is not reset."
+        }
+        Invoke-ArcAz -Arguments @(
+            'tag', 'update', '--resource-id', $vmResourceId, '--operation', 'Merge',
+            '--tags', "microhackArcUserId=$userId"
+        ) | Out-Null
         $vm = @(Invoke-ArcAz -Arguments @(
-            'vm', 'update', '--resource-group', $ResourceGroupName, '--name', $vmName,
-            '--set', "tags.microhackArcUserId=$userId"
+            'vm', 'show', '--resource-group', $ResourceGroupName, '--name', $vmName
         ))
     }
     Assert-ArcVm -Vm $vm[0] -Location $location -Size $script:ArcVmSizes[$type] -UserId $userId
@@ -92,8 +102,8 @@ foreach ($type in $script:ArcVmTypes) {
     if ($state -ne 'submitted') {
         # A stopped guest agent cannot reliably accept a second run-command.
         Invoke-ArcAz -Arguments @(
-            'vm', 'update', '--resource-group', $ResourceGroupName, '--name', $vmName,
-            '--set', 'tags.microhackReconfiguration=submitting'
+            'tag', 'update', '--resource-id', $vmResourceId, '--operation', 'Merge',
+            '--tags', 'microhackReconfiguration=submitting'
         ) | Out-Null
         if ($type -eq 'linux') {
             Invoke-ArcAz -Arguments @(
@@ -109,8 +119,8 @@ foreach ($type in $script:ArcVmTypes) {
             ) | Out-Null
         }
         Invoke-ArcAz -Arguments @(
-            'vm', 'update', '--resource-group', $ResourceGroupName, '--name', $vmName,
-            '--set', 'tags.microhackReconfiguration=submitted'
+            'tag', 'update', '--resource-id', $vmResourceId, '--operation', 'Merge',
+            '--tags', 'microhackReconfiguration=submitted'
         ) | Out-Null
     }
     $ip = Invoke-ArcAz -Arguments @(
