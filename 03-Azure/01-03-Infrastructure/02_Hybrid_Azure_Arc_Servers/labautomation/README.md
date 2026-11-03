@@ -97,6 +97,9 @@ standalone creator directory and are not part of this Console deployment.
    not counted as new IP demand.
 5. Save the user-to-region mapping as outputs of the subscription ARM deployment
    `microhack-arc-server-placement`, containing **no Azure resources**.
+   Re-runs retain the existing deployment record's metadata location, even when
+   the Console selects a different first VM region. This does not affect where
+   participant VMs are deployed.
    The template is serialized to a unique temporary JSON file and passed through
    `-TemplateFile`, avoiding Az.Resources dynamic-parameter serialization of
    nested PowerShell objects. The file contains only placement metadata, no
@@ -166,13 +169,17 @@ No guest-completion polling or automatic Arc onboarding is performed.
 - A VM creation interrupted before its ownership tag is written also requires
   coach inspection of the deployment and credentials before it can be adopted.
 - An existing failed VM deployment is not silently treated as a healthy VM.
-- Removing users or changing their assigned region in an existing mapping fails
-  before VM deployment. This guard still applies to Console region overrides:
-  no existing user is silently relocated. Keep the participant and region lists
-  stable for re-runs. A failed initial region validation has not saved a mapping,
-  so the coach can correct the Console selection and retry. For a new event, the
-  coach must clean up the old event's resources and placement deployment through
-  the normal Console/event lifecycle before starting again.
+- Removing users or changing their assigned region first triggers a read-only
+  subscription resource inventory. A stale mapping can be replaced if the entire
+  subscription contains no resources other than resource groups and deployment
+  metadata. This supports retrying a failed deployment that saved the mapping
+  but never created VMs. The coach sees an explicit warning when this happens.
+- If any resource exists (including partial networks, disks or unrelated
+  resources), changed assignments still fail before VM deployment. No resources
+  are deleted, moved or adopted; the previous placement remains intact. Invalid
+  or failed inventory responses cannot authorize a replan. Restore the previous
+  participant/region lists or have the coach inspect and clean up through the
+  normal Console/event lifecycle.
 
 The hooks do not delete resources or perform automatic cleanup.
 

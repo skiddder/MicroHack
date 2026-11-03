@@ -15,13 +15,38 @@ Assert-ArcContext
 $regions = @(Get-ArcRegions -Locations $PreferredLocation)
 $placement = @(New-ArcPlacement -UserIds $AllowedEntraUserIds -Regions $regions)
 $previous = @(Get-ArcPlacement)
+$requiresReplan = $false
 if ($previous.Count -gt 0) {
     foreach ($entry in $previous) {
         $next = @($placement | Where-Object { $_.userId -eq $entry.userId })
         if ($next.Count -ne 1 -or $next[0].location -ne $entry.location) {
-            throw 'The participant or region list would remove or relocate a previously assigned user. Restore the original participant and region lists or have the coach clean up the previous event first.'
+            $requiresReplan = $true
         }
     }
+}
+if ($requiresReplan) {
+    $inventory = Invoke-ArcAz -Arguments @('resource', 'list', '--query', '{resources:@}')
+    if (-not $inventory -or -not $inventory.PSObject.Properties['resources'] -or $inventory.resources -isnot [array]) {
+        throw 'Cannot verify that the subscription is empty: Azure returned an invalid resource inventory. Previous placement was not changed.'
+    }
+    $blocking = @($inventory.resources | Where-Object {
+        $_.type -notin @('Microsoft.Resources/resourceGroups', 'Microsoft.Resources/deployments')
+    })
+    if ($blocking.Count -gt 0) {
+        $examples = ($blocking | Select-Object -First 3 | ForEach-Object { $_.id }) -join ', '
+        throw "The participant or region list would remove or relocate a previously assigned user, but the subscription contains $($blocking.Count) resource(s). Restore the original lists or have the coach inspect and clean up first. Previous placement was not changed. Examples: $examples"
+    }
+    Write-Warning 'The subscription contains only resource groups/deployment metadata. Replacing stale participant placement for the Console-selected users and regions; no Azure resources will be deleted or moved.'
+}
+$deploymentLocation = $regions[0]
+if ($previous.Count -gt 0) {
+    $storedLocation = Invoke-ArcAz -Arguments @(
+        'deployment', 'sub', 'show', '--name', $script:ArcPlacementDeployment, '--query', 'location'
+    )
+    if ($storedLocation -isnot [string] -or [string]::IsNullOrWhiteSpace($storedLocation)) {
+        throw 'Cannot read the existing placement deployment location. Previous placement was not changed.'
+    }
+    $deploymentLocation = $storedLocation
 }
 
 $providers = @(
@@ -56,7 +81,7 @@ try {
     $template | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $templatePath -Encoding utf8
     Update-MhhToken | Out-Null
     $result = New-AzSubscriptionDeployment -Name $script:ArcPlacementDeployment `
-        -Location $regions[0] -TemplateFile $templatePath -ErrorAction Stop
+        -Location $deploymentLocation -TemplateFile $templatePath -ErrorAction Stop
     if ($result.ProvisioningState -ne 'Succeeded') {
         throw "Saving participant placement failed: $($result.ProvisioningState)."
     }

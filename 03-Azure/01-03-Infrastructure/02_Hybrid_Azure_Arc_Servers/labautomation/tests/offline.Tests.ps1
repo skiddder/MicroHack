@@ -32,6 +32,9 @@ function Reset-Mock {
         sharedTemplatePaths = [System.Collections.Generic.List[string]]::new()
         sharedTemplates = [System.Collections.Generic.List[object]]::new()
         sharedFailure = ''
+        sharedLocation = ''
+        otherResources = @()
+        inventoryShape = 'valid'
         registrations = @{}
         availableRegions = @($regions) + @('westeurope')
         quota = 100
@@ -90,6 +93,10 @@ function global:New-AzSubscriptionDeployment {
     if ($global:ArcMock.sharedFailure -eq 'state') {
         return [pscustomobject]@{ ProvisioningState = 'Failed' }
     }
+    if ($global:ArcMock.sharedLocation -and $Location -ne $global:ArcMock.sharedLocation) {
+        throw 'Existing subscription deployment location cannot be changed.'
+    }
+    $global:ArcMock.sharedLocation = $Location
     $global:ArcMock.placement = @($template.outputs.placement.value | ForEach-Object { [pscustomobject]$_ })
     [pscustomobject]@{ ProvisioningState = 'Succeeded' }
 }
@@ -145,10 +152,41 @@ function global:az {
         'account show' { $global:ArcMock.cliSubscription }
         'account list-locations' { $global:ArcMock.availableRegions }
         'deployment sub' {
+            if ($arguments[2] -eq 'show') {
+                if ((Get-MockArgument $arguments '--query') -ne 'location') {
+                    throw 'Unexpected placement deployment query.'
+                }
+                return (ConvertTo-Json -InputObject $global:ArcMock.sharedLocation -Compress)
+            }
             # Match Azure's nested projection: one deployment containing an array.
             return (ConvertTo-Json -InputObject @(
                 if ($global:ArcMock.placement.Count -gt 0) { ,$global:ArcMock.placement }
             ) -Depth 30 -Compress)
+        }
+        'resource list' {
+            if ((Get-MockArgument $arguments '--query') -ne '{resources:@}') {
+                throw 'Resource inventory must preserve an explicit empty array.'
+            }
+            if ($global:ArcMock.inventoryShape -eq 'missing') { return '{}' }
+            if ($global:ArcMock.inventoryShape -eq 'null') { return '{"resources":null}' }
+            if ($global:ArcMock.inventoryShape -eq 'object') { return '{"resources":{}}' }
+            @{
+                resources = @(
+                    $global:ArcMock.otherResources
+                    foreach ($vm in $global:ArcMock.vms) {
+                        @{
+                            id = "/subscriptions/$subscription/resourceGroups/$($vm.resourceGroup)/providers/Microsoft.Compute/virtualMachines/$($vm.name)"
+                            type = 'Microsoft.Compute/virtualMachines'
+                        }
+                    }
+                    foreach ($ip in $global:ArcMock.partialIps) {
+                        @{
+                            id = "/subscriptions/$subscription/resourceGroups/$($ip.resourceGroup)/providers/Microsoft.Network/publicIPAddresses/$($ip.name)"
+                            type = 'Microsoft.Network/publicIPAddresses'
+                        }
+                    }
+                )
+            }
         }
         'provider show' {
             $provider = Get-MockArgument $arguments '--namespace'
@@ -470,7 +508,68 @@ Assert-Throws { Invoke-Lab -Group 'rg-someone-else' } 'not owned'
 Reset-Mock -Count 2
 Invoke-Shared
 $global:ArcMock.users = @($users[1])
+Invoke-Shared
+Assert-Test ($global:ArcMock.placement.Count -eq 1 -and $global:ArcMock.placement[0].userId -eq $users[1]) 'Stale placement can be replaced when the subscription is empty'
+Assert-Test ($global:ArcMock.placement[0].location -eq 'swedencentral') 'Remaining participant is remapped according to the current Console list'
+Assert-Test ($global:ArcMock.sharedLocation -eq 'swedencentral') 'Metadata location remains unchanged after participant replanning'
+
+Reset-Mock -Count 2
+Invoke-Shared -Locations 'swedencentral,australiaeast'
+Invoke-Shared -Locations 'westus2,swedencentral'
+Assert-Test (($global:ArcMock.placement.location -join ',') -eq 'westus2,swedencentral') 'Empty subscription accepts a new ordered region list'
+Assert-Test ($global:ArcMock.sharedLocation -eq 'swedencentral') 'New first VM region does not relocate the existing deployment record'
+Invoke-Lab -Locations @('westus2', 'swedencentral') | Out-Null
+Assert-Test ($global:ArcMock.deployments[0].location -eq 'westus2') 'VMs use the new region, not the retained metadata location'
+Assert-Throws { Invoke-Shared -Locations 'australiaeast,swedencentral' } 'remove or relocate'
+Assert-Test (($global:ArcMock.placement.location -join ',') -eq 'westus2,swedencentral') 'VM presence protects the prior mapping from replacement'
+
+foreach ($resourceType in @('Microsoft.Network/networkInterfaces', 'Microsoft.Compute/disks', 'Microsoft.Storage/storageAccounts')) {
+    Reset-Mock -Count 2
+    Invoke-Shared
+    $global:ArcMock.otherResources = @(@{
+        id = "/subscriptions/$subscription/resourceGroups/rg-01/providers/$resourceType/existing"
+        type = $resourceType
+    })
+    $global:ArcMock.users = @($users[1])
+    Assert-Throws { Invoke-Shared } 'remove or relocate'
+    Assert-Test ($global:ArcMock.placement.Count -eq 2) 'Any existing resource prevents stale placement replacement'
+    Assert-Test ($global:ArcMock.sharedTemplatePaths.Count -eq 1) 'Blocked replan does not overwrite the deployment record'
+}
+Reset-Mock -Count 2
+Invoke-Shared
+$global:ArcMock.partialIps = @(@{ name = 'vm-linux-mh-pip'; resourceGroup = 'rg-01'; location = 'swedencentral' })
+$global:ArcMock.users = @($users[1])
 Assert-Throws { Invoke-Shared } 'remove or relocate'
+
+Reset-Mock -Count 2
+Invoke-Shared
+$global:ArcMock.otherResources = @(
+    @{ id = "/subscriptions/$subscription/resourceGroups/rg-01"; type = 'Microsoft.Resources/resourceGroups' },
+    @{ id = "/subscriptions/$subscription/providers/Microsoft.Resources/deployments/old"; type = 'Microsoft.Resources/deployments' }
+)
+$global:ArcMock.users = @($users[1])
+Invoke-Shared
+Assert-Test ($global:ArcMock.placement.Count -eq 1) 'Only RGs and deployment metadata do not block empty-subscription replanning'
+
+foreach ($shape in @('missing', 'null', 'object')) {
+    Reset-Mock -Count 2
+    Invoke-Shared
+    $global:ArcMock.users = @($users[1])
+    $global:ArcMock.inventoryShape = $shape
+    Assert-Throws { Invoke-Shared } 'invalid resource inventory'
+    Assert-Test ($global:ArcMock.placement.Count -eq 2) 'Malformed inventory cannot authorize placement replacement'
+}
+Reset-Mock -Count 2
+Invoke-Shared
+$global:ArcMock.users = @($users[1])
+$global:ArcMock.failCommand = 'resource list'
+Assert-Throws { Invoke-Shared } 'Azure CLI failed'
+Assert-Test ($global:ArcMock.placement.Count -eq 2) 'Inventory API failure preserves the previous mapping'
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.sharedLocation = ''
+Assert-Throws { Invoke-Shared } 'Cannot read the existing placement deployment location'
+Assert-Test ($global:ArcMock.sharedTemplatePaths.Count -eq 1) 'Missing deployment location cannot overwrite existing metadata'
 Reset-Mock -Count 1
 $global:ArcMock.users = @($users[0], $users[0])
 Assert-Throws { Invoke-Shared } 'duplicate'
