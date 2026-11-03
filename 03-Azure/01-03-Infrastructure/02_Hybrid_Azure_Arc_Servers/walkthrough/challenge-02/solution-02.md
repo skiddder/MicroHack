@@ -1,156 +1,232 @@
-# Walkthrough Challenge 2 - Use Azure Monitor, Azure Update Management and Inventory for your Azure Arc enabled Servers
+# Walkthrough Challenge 2 - Azure Monitor, Update Manager, Change Tracking and Inventory
 
 [Previous Challenge Solution](../challenge-01/solution-01.md) - **[Home](../../Readme.md)** - [Next Challenge Solution](../challenge-03/solution-03.md)
 
-Duration: 30 minutes
+Documentation checked against Microsoft Learn on **2026-11-03**.
+Allow additional time for policy evaluation, initial data ingestion and patching/reboots.
 
-## Prerequisites
+## Prerequisites and scope
 
-Please ensure that you successfully passed [challenge 1](../../Readme.md#challenge-1) before continuing with this challenge.
+- Complete [Challenge 1](../../challenges/challenge-01.md). Both servers must appear as **Connected** under **Azure Arc > Machines**, with their system-assigned managed identities enabled.
+- Use the **Arc machine resources** (`Microsoft.HybridCompute/machines`), not the underlying Azure IaaS VMs used to simulate on-premises servers. Their Azure VM guest agents were deliberately disabled; do not re-enable them or remove the IMDS block.
+- In the Hackbox Console, keep everything in your existing participant RG and subscription. You have RG `Owner`, not subscription `Owner`. Keep **`SecurityControl=Ignore`** on the RG. Provider registration, subscription-wide policy and permissions outside your RG are coach tasks.
+- Verify the [AMA supported operating systems](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-supported-operating-systems), [Change Tracking support matrix](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/change-tracking-inventory-support-matrix) and service availability for your assigned region.
+- Allow the documented outbound connections for [AMA](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-network-configuration), Azure Arc and your OS update sources. This exercise does not require opening additional public inbound ports.
+- Ask the coach to approve service costs and update/reboot timing. Do not activate Windows Server benefits, paid plans or licenses merely to make a portal blade appear.
 
+### These are separate services
 
-### Task 1: Create all necessary Azure Resources (Log Analytics workspace)
+| Capability | Required components |
+| --- | --- |
+| Windows event logs / Linux Syslog | Azure Monitor Agent (AMA), log DCRs, DCR associations, Log Analytics workspace |
+| Classic VM insights performance | AMA, a **VM insights-specific** DCR and association, Log Analytics workspace |
+| Change Tracking and Inventory | AMA, Change Tracking extension, a **Change Tracking-specific** DCR and association, Log Analytics workspace |
+| Azure Update Manager | Connected Arc machine, Update Manager extensions and access to OS update sources; **no AMA, Log Analytics workspace or Automation account dependency** |
 
-1. Sign in to the [Azure Portal](https://portal.azure.com/).
+Do not install the retired Log Analytics agent (MMA/OMS) or use Automation Update Management.
+The [current Update Manager overview](https://learn.microsoft.com/en-us/azure/update-manager/overview) explains the independent update-management architecture.
 
-2. Create a new Log Analytics Workspace called *mh-arc-servers-automation-law* with default settings in the same Resource Group.
+## Task 1: Create or select your Log Analytics workspace
 
-![image](./img/5_CreateLAW.jpg)
+1. In the [Azure portal](https://portal.azure.com/), search for **Log Analytics workspaces** and select **Create**, or reuse your workspace from an earlier attempt.
+2. Select your event subscription and **existing participant RG**. Use a name such as `mh-arc-servers-automation-law`.
+3. Choose a workspace region supported by the services in this challenge. Do not copy Sweden Central from an old screenshot if it is unsuitable for your event.
+4. Review the settings, create the workspace and record its **resource ID** and **region**.
 
-***Please note**: For convenience, in this MicroHack create the Log Analytics workspace in the same resource group as you are using for your arc-enabled servers. Reason: The service pricinipal (used for remediation tasks) of the policy will be given the necessary RBAC roles on the scope where the policy is assigned. In this MicroHack we assume that every participant will assign the policy on resource group level. Hence, if the LAW is outside of that scope, you would need to assign the required permissions manually on the LAW.*
+Keep the workspace, DCRs and Arc machines in your own RG for this lab so the policy assignment identity can be granted permissions at that scope.
+For log collection, a DCR's region must match its destination workspace's region; it is not determined by the RG's metadata location.
+If the coach supplies a workspace outside your RG, the coach must also arrange the necessary access.
 
+References: [Create a Log Analytics workspace](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/quick-create-workspace), [DCR permissions and regional requirements](https://learn.microsoft.com/en-us/azure/azure-monitor/data-collection/data-collection-rule-create-edit).
 
-### Task 2: Configure Data Collection Rules in Log Analytics to collect Windows event logs and Linux syslog
+## Task 2: Collect Windows events and Linux Syslog
 
-1. Navigate to the Log Analytics Workspace and open *Agents* in the left navigation pane.
+Use **Monitor > Data Collection Rules > Create**, rather than the old workspace **Agents** navigation.
+The portal has default and classic DCR creation experiences; the labels differ. Follow the [current DCR creation instructions](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/data-collection).
 
-2. Select *Data Collection Rules* followed by a click on *Create* to create Data collection rules.
+Create separate log DCRs to make their purpose and OS scope explicit:
 
-![image](./img/2.2_Create_Data_Collection_Rule.png)
+| Setting | Windows | Linux |
+| --- | --- | --- |
+| Rule name | `mh-dcr-windows-events` | `mh-dcr-linux-syslog` |
+| RG | Your participant RG | Your participant RG |
+| Region | Workspace region from Task 1 | Workspace region from Task 1 |
+| Resources | Your **Windows Arc machine** | Your **Linux Arc machine** |
+| Data source | Windows Event Logs | Linux Syslog |
+| Destination | Azure Monitor Logs: Task 1 workspace | Azure Monitor Logs: Task 1 workspace |
 
-3. Name the Data Collection Rule *mh-dcr* select your subscription and resource group and change the Region to *Sweden Central*. Change Platform Type to *All* and click *Next: Resources* to continue.
+1. On **Basics**, select the telemetry type that supports the required guest log source. Use **Help me choose** in the default experience. Do not select platform-metrics export. In the classic experience, select platform **Windows** or **Linux**, respectively.
+2. On **Resources**, add the corresponding **Machines - Azure Arc** resource. This creates the DCR association. The portal's agent-based onboarding installs AMA if needed; retain the Arc machine's system-assigned identity.
+3. Under **Collect and deliver**, add the data source and the destination workspace.
+   - **Windows Event Logs:** collect **Application** and **System** events, including **Information** for the test below, as well as Warning/Error/Critical as appropriate. Do not collect every channel or enable Security collection indiscriminately.
+   - **Linux Syslog:** enable the **user** facility at minimum level **Information** so the `user.notice` test below is included. Select other facilities only if required. Do not rely on an unreviewed "all facilities" default.
+4. Create each rule. Under the DCR's **Resources**, confirm the correct Arc machine is associated.
+5. On each Arc machine, open **Extensions** and confirm `AzureMonitorWindowsAgent` or `AzureMonitorLinuxAgent` is provisioned successfully. An installed agent without a DCR association does not establish the requested collection.
 
-![image](./img/2.3_Create_Data_Collection_Rule_Basics.png)
+An Arc machine can have several DCR associations. Keep these log rules separate from the VM insights and Change Tracking rules below to avoid duplicate ingestion or overwriting specialized configurations.
+For public-endpoint collection of these sources, a separate DCE is not required merely because the machine is Arc-enabled; private-link designs have additional requirements.
 
-4. Click on *Collect and deliver* as we going to set the scope of resources later on via Azure Policy. Click *Add data source*. For *Data source type* select *Windows Event Logs* and check the boxes of the log levels you would like to collect.
+References: [Windows event collection](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/data-collection-windows-events), [Syslog collection](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/data-collection-syslog), [Install and manage AMA](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-manage).
+
+### Verify actual ingestion
+
+After the extension and associations are ready, generate a test event **inside each guest**:
+
+Windows, from an elevated terminal:
+
+```powershell
+eventcreate /T INFORMATION /ID 100 /L APPLICATION /SO MicroHack /D "MicroHack AMA Windows test"
+```
 
-5. Click *Next: Destination* and *Add destination*. As *Destination type* select *Azure Monitor Logs* and in *Account or namespace* pick the Log Analytics workspace your created earlier. Click *Add data source*.
+Linux:
 
-![image](./img/2.5_Create_Data_Collection_Rule_Destination.png)
+```bash
+logger -p user.notice -t MicroHack "MicroHack AMA Linux test"
+```
 
-6. Repeat step 4 & 5 for Linux Syslog and accept the defaults.
+In the workspace's **Logs**, select a suitable time range and run these queries separately:
 
-7. Create the Data Collection Rule.
+```kusto
+Heartbeat
+| where TimeGenerated > ago(30m)
+| summarize LastSeen = max(TimeGenerated) by Computer, _ResourceId
+```
+
+```kusto
+Event
+| where TimeGenerated > ago(30m)
+| where Source == "MicroHack"
+| project TimeGenerated, Computer, EventLog, EventID, RenderedDescription
+```
 
+```kusto
+Syslog
+| where TimeGenerated > ago(30m)
+| where ProcessName == "MicroHack"
+| project TimeGenerated, Computer, Facility, SeverityLevel, SyslogMessage
+```
+
+Initial ingestion is asynchronous. A missing table before its first record or an empty result is **not** proof of success.
+Check the selected workspace, DCR resources/destination, event filters, extension status and outbound connectivity before proceeding.
+
+## Task 3: Enable classic VM insights and enforce it with Azure Policy
 
-### Task 3: Enable Azure Monitor for Azure Arc enabled Servers with Azure Policy initiative
-
-1. Navigate to *Policy* using the top search bar and select *Assignments* in the left navigation pane.
-
-2. Select *Assignments* in the left navigation pane and go to *Assign initiative*
-
-3. In this section you can now configure the assignment with the following settings and create the assignment:
-
-- Scope: Please select your resource group
-- Basics: Please search for *Enable Azure Monitor for Hybrid VMs with AMA* and select the initiative.
-- Parameters: Please insert the Resource ID of the Data Collection Rule from Task 2.
-- Remediation: Please select the System assigned identity location according to your resources, e.g. West Europe. Don't check the box for "Create a remediation task" here, as it would only create a remediation task for the first policy within the policy initiative. We will do this in one of the next steps for all policies.
-- Click *Review + create* and then *Create*
-
-4. Please wait around 30 seconds until the creation of the assignment is complete. You should see that the initiative is assigned. Every new Azure Arc server will now automatically install the AMA and Dependency agents as well the necessary association with the data collection rule we created in task 2. Be aware that agent installation can take up to 60 Minutes.
-
-![image](./img/3.4_Assign_Policy_Monitor_AMA.png)
-
-5. Important: Both machines were already onboarded earlier. As a result, you need to create a remediation task for each policy in the initiative to apply the policy to your existing Azure Arc Servers. Please select the Policy Assignment and select *Create Remediation Task*.
-
-![image](./img/3.5_Assign_Policy_Monitor_AMA_remidiate.png)
-
-6. Accept the default values, check *Re-evaluate resource compliance before remediating* and repeat the remediation for the following policies:
- - AzureMonitorAgent_Windows_HybridVM_Deploy
- - AzureMonitorAgent_Linux_HybridVM_Deploy
- - DependencyAgentExtension_AMA_Windows_HybridVM_Deploy
- - DependencyAgentExtension_AMA_Linux_HybridVM_Deploy
- - DataCollectionRuleAssociation_Windows
- - DataCollectionRuleAssociation_Linux
-
-![image](./img/3.6_Assign_Policy_Monitor_AMA_remidiate.png)
-
-7. In Policy > Remediation > Remediation Task, verify that all remediation completed successfully:
-
-![image](./img/3.7_Assign_Policy_Monitor_AMA_remidiate.png)
-
-### Task 4: Enable and configure Update Manager
-
-1. Navigate to *Policy* using the top search bar and select *Assignments* in the left navigation pane.
-
-2. Select *Assignments* in the left navigation pane and go to *Assign Policy*
-
-3. In this section you can now configure the assignment with the following settings and create the assignment:
-
-- Scope: Please select your resource group
-- Basics: Please search for *Configure periodic checking for missing system updates on azure Arc-enabled servers* and select the policy. As *Assignment name* append *(Windows)*
-- Parameters: Skip, and keep defaults (which targeting Windows guest OS.)
-- Remediation: Please select the System assigned identity location according to your resources, e.g. West Europe.
-- Click *Review + create* and then *Create*
-
-4. Please wait a few seconds until the creation of the assignment is complete. You should see that the policy is assigned.
-
-5. Repeat step 3 and 4 for the policy definition *Configure periodic checking for missing system updates on azure Arc-enabled servers*, apply the same configuration as in step 3 but this time unselect the checkbox at *Only show parameters that need input or review*, and change OS Type to *Linux*. Also append *(Linux)* in the *Assignment name* field.
-
-6. Important: Both machines were already onboarded earlier. As a result, you need to create a remediation task to trigger the DeployIfNotExists effect of the policy to your Azure Arc Servers. Please select the policy assignment and select *Create Remediation Task*.
-
-7. Accept the default values, check *Re-evaluate resource compliance before remediating* and repeat the remediation for the following policies:
- - Configure periodic checking for missing system updates on azure Arc-enabled servers (Windows)
- - Configure periodic checking for missing system updates on azure Arc-enabled servers (Linux)
-
-8. Verify that all remediation were successful.
-
-9. Navigate to Azure Arc, select Machines, repeat step 10 for your Windows and Linux servers.
-
-10. Select Updates. If there are no update information dispayed yet, click *Check for updates* and wait until missing updates appear. Then click on *One-time update* or *Schedule updates* if you would like to postpone the installation to a later point in time. (follow the wizzard).
-
-![image](./img/4.10_Update_Management.png)
-
-11. After applying the updates point-in-time or via scheduler you should see the updates beeing installed on the system.
-
-![image](./img/4.11_Update_Management.png)
-
-### Task 5: Enable Change Tracking and Inventory
-
-1. Browse to the Azure Arc [Machines overview](https://portal.azure.com/#view/Microsoft_Azure_ArcCenterUX/ArcCenterMenuBlade/~/servers)
-2. Click on one of your Windows Server 2025 machine
-3. In the left pane, select "Licenses" and then "Windows Server"
-4. Check the "Activate Azure benefits" box and click "Confirm" to enable the Azure Benefits for this machine. This may take up to 10 minutes.
-
-![alt text](img/image7.png)
-5. In order to use the built-in policy initiative to enable *Change Tracking and Inventory* feature, perform the steps outlined [here](https://learn.microsoft.com/azure/automation/change-tracking/enable-change-tracking-at-scale-machines-blade).
-
-6. Navigate to Azure Arc, select Servers, followed by selecting your Windows Server. Select Inventory. Please be aware that generating the initial inventory takes multiple minutes/hours. After a while the white page should show values.
-
-![image](./img/5.9_Inventory.png)
-
-### Task 6: Enable VM Insights
-
-1. Navigate to your Virtual Machines, in section *Monitoring* select *Insights* in the left navigation pane.
-
-2. In the *Insights* tab, click the *Enable* button.
-
-3. In the *Monitoring Configuration* form, for *Data collection rule* click the *Create New* link
-
-4. Fill in the *Create new rule* form
-- Data collection rule name: Provide a name (MSVMI for VMInsights will be appended automatically) - i.e. *DCR-MicroHack*
-- Enable process and dependencies (Map): Check the box
-- Subscription: Keep the default
-- Log Analytics workspace: Choose the workspace you created in task 1
-- Click *Create* button. Then click *Configure* button.
-
-5. For all other VMs you want to enable for VM Insights in that region, repeat step 1 and 2. Then, in the *Monitoring configuration* form, make sure your newly created data collection rule is selected and click configure.
-
-6. Wait for the deployment of the data collection rule to finish. This might take several minutes.
-
-
-### Coffee Break of 10 minutes to let the data flow between your Virtual Machines and Azure
-
-After your coffee break you should see that the Virtual Machines are reporting their status. You can now check the Update Management for pending updates, verify what software is installed on the machines and get deep insights of the utilization of your Virtual Machines.
-
-You successfully completed challenge 2! 🚀🚀🚀
+### Choose the monitoring experience deliberately
+
+Microsoft now recommends [OpenTelemetry metrics-based monitoring](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/metrics-opentelemetry-guest) for new VM and Arc monitoring deployments.
+It stores metrics in an **Azure Monitor workspace**, not the Log Analytics workspace used for this lab's logs.
+Creating that workspace also creates a [managed resource group](https://learn.microsoft.com/en-us/azure/azure-monitor/metrics/azure-monitor-workspace-manage).
+
+This MicroHack deliberately uses the still-supported **logs-based (classic)** VM insights experience to preserve the existing one-RG-per-participant setup and its Log Analytics/Policy learning goals.
+Do not accept portal defaults that create additional workspaces or managed RGs outside your permissions.
+A coach can arrange an OpenTelemetry alternative with an approved Azure Monitor workspace, access and governance tagging; it is not an implicit prerequisite of this walkthrough.
+
+### Enable performance collection
+
+1. Open your first server under **Azure Arc > Machines > Monitoring > Insights**. This now opens the machine's **Monitor** page.
+2. Select **Configure**. Choose **logs-based metrics / classic**; deselect OpenTelemetry metrics for this lab-only path.
+3. Select **Customize infrastructure monitoring** and explicitly select the **existing Log Analytics workspace** from Task 1. Do not accept a newly generated default workspace.
+4. Create a **VM insights DCR** for the logs-based experience. Verify its workspace destination and region. Leave **process/dependency collection (Map)** disabled if that option is shown. Recommended alerts are not required for this exercise.
+5. Review and enable monitoring. Record the generated VM insights DCR's resource ID. Repeat for the other Arc server, reusing the suitable VM insights DCR.
+
+The VM insights rule collects `Microsoft-InsightsMetrics` using `\VmInsights\DetailedMetrics`.
+The Windows Event/Syslog DCRs from Task 2 are **not substitutes** for this rule.
+See [Monitor a hybrid machine with VM insights](https://learn.microsoft.com/en-us/azure/azure-arc/servers/tutorial-enable-vm-insights) and [monitoring DCR definitions](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vm-enable-monitoring).
+
+### Assign the current AMA-based initiative
+
+1. Open **Policy > Assignments > Assign initiative**.
+2. Set the scope to **your participant RG**, not the shared subscription.
+3. Select **Enable Azure Monitor for Hybrid VMs with AMA**, not a legacy MMA initiative or an Azure-VM-only initiative.
+4. Under **Parameters**, show all parameters:
+   - Set **VMI Data Collection Rule Resource Id** to the **VM insights DCR** created above, not an event/Syslog rule.
+   - Set **Enable Processes and Dependencies** to **false**.
+   - Keep the applicable deployment effects enabled.
+5. Configure the assignment's **system-assigned managed identity** on the **Managed identity** tab (or corresponding identity section), and select its metadata location.
+   This is the **policy remediation identity**, not the Arc machine identity or the onboarding service principal.
+6. Review the initiative's required roles. Confirm the assignment identity has those roles at the scopes needed to deploy extensions and associate the DCR. Portal assignment can grant the roles when you have permission; if access is missing, ask the coach. Do not broaden the assignment to subscription scope.
+7. Create the assignment. For these **existing** Arc machines, open **Policy > Remediation**, select the assignment and create remediation tasks for each applicable AMA installation and DCR-association `DeployIfNotExists` definition. Re-evaluate compliance when required.
+8. Verify individual remediation results and extension/association state. Disabled Dependency Agent definitions do not need remediation.
+
+The old checklist of six fixed policy reference names is not a reliable instruction for current initiative versions.
+Do **not** install Dependency Agent: [VM insights Map and Dependency Agent are deprecated and retire on 2028-06-30](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vminsights-maps-retirement).
+Their retirement does not retire AMA or the classic performance view.
+
+References: [VM insights initiatives and their parameters](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vminsights-enable-policy), [AMA policy identities and remediation](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-policy).
+
+## Task 4: Assess and install updates with Azure Update Manager
+
+Do not wait for AMA ingestion to enable Update Manager. Its own Arc extensions are installed automatically when you first trigger an update operation.
+It uses Windows Update/WSUS or the configured Linux repositories; it does not supply updates or bypass OS support/subscription requirements.
+For Ubuntu 20.04, check the configured repositories and any Ubuntu Pro/ESM requirements with the coach rather than assuming extended-support packages are available.
+
+1. Open **Azure Update Manager > Machines** and filter to your subscription and RG. Select the **Arc-enabled** Windows and Linux machines.
+2. Select **Check for updates** / **Assess now**. Wait for the assessment status and inspect failures rather than treating an empty update list as a successful assessment.
+3. Enable periodic assessment using **Policy > Definitions**:
+   - Definition: **Configure periodic checking for missing system updates on Azure Arc-enabled servers**.
+   - Scope: your participant RG.
+   - Parameters: **Assessment mode = AutomaticByPlatform** and **OS Type = Windows**.
+   - Configure the remediation managed identity and required roles, then create a remediation task for the existing machine.
+4. Create a second assignment with **OS Type = Linux** and remediate it as well. Periodic assessment checks approximately every 24 hours; it does **not** install updates.
+5. Back in Update Manager, review missing updates. Select **One-time update** / **Install updates now** to install the approved OS updates, or create a maintenance schedule if the coach has agreed.
+6. Review the selected machines, update selections, maintenance window and reboot settings before starting. Monitor **History** and individual installation results.
+7. After any restart, confirm both Arc machines reconnect and run another assessment. Resolve failed/pending applicable OS updates before declaring the update task complete. Driver installation is not supported by Update Manager.
+
+Do not use the Azure-VM patch-orchestration instructions for these Arc resources.
+Do not register an Automation account or connect a Log Analytics workspace for Update Manager.
+
+References: [Assess updates](https://learn.microsoft.com/en-us/azure/update-manager/view-updates), [periodic assessment policies for Arc](https://learn.microsoft.com/en-us/azure/update-manager/periodic-assessment-at-scale), [deploy updates and review results](https://learn.microsoft.com/en-us/azure/update-manager/deploy-updates), [prerequisites](https://learn.microsoft.com/en-us/azure/update-manager/prerequisites), [supported update types](https://learn.microsoft.com/en-us/azure/update-manager/support-matrix).
+
+## Task 5: Enable Change Tracking and Inventory with AMA
+
+Use the current **Change Tracking and Inventory** service, not an Automation-account-based onboarding workflow.
+There is no step here to activate Windows Server Azure benefits. Licensing/benefit decisions belong to the coach and are not an agent-installation prerequisite in the current quickstart.
+
+1. Open **Azure Arc > Machines**, select your Windows server and go to **Operations > Change tracking**.
+2. Select **Enable change tracking and inventory feature with AMA**, then **Enable**. Follow the [current Arc quickstart](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/quickstart-monitor-changes-collect-inventory-azure-change-tracking-inventory).
+3. Review any offered workspace settings and select your existing workspace. After deployment, inspect the generated Change Tracking DCR (typically `ct-dcr-...`), its destination and its association. Do not assume it reused the workspace from Task 1.
+4. If the flow cannot select your required workspace, create a dedicated CTI DCR using the current [Change Tracking DCR template procedure](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/create-data-collection-rule), in your participant RG with the Task 1 workspace resource ID. Associate that rule with the Arc machine through **Monitor > Data Collection Rules > your CTI rule > Resources > Add**. Keep **only one CTI DCR association per machine**.
+5. Confirm AMA and the **ChangeTracking-Windows** extension are installed successfully. The [current overview](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/overview-monitoring-agent) requires Change Tracking extension **2.20.0.0 or later**. Do not copy older extension-version examples from historical screenshots.
+6. Repeat for Linux using its Arc resource and **ChangeTracking-Linux**, where supported.
+7. In **Change Tracking and Inventory**, filter to your RG/machines and inspect **Inventory** / software data after initial collection. For policy-based rollout to further machines, use the built-in **Enable Change Tracking and Inventory for Arc-enabled virtual machines** initiative with the dedicated CTI DCR and remediate its applicable definitions.
+
+Do not add Windows Event Logs or Syslog sources to a CTI DCR using the generic DCR editor; doing so can break Change Tracking. Use the separate rules from Task 2.
+If an unexpected workspace or configuration outside your RG was created, ask the coach to resolve it; do not delete shared resources.
+
+Verify the destination workspace directly:
+
+```kusto
+ConfigurationData
+| where TimeGenerated > ago(24h)
+| where ConfigDataType == "Software"
+| summarize arg_max(TimeGenerated, *) by Computer, SoftwareName
+| project TimeGenerated, Computer, SoftwareName, CurrentVersion, Publisher
+```
+
+Change events are stored in `ConfigurationChange`; current inventory is stored in `ConfigurationData`.
+Initial inventory collection can take longer than a short portal refresh. Check the CTI extension, its DCR/association and workspace before concluding that there is no installed software.
+
+References: [CTI overview and supported rollout methods](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/overview-monitoring-agent), [at-scale portal onboarding](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/enable-change-tracking-at-scale-machines-blade), [ConfigurationData schema](https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables/configurationdata).
+
+## Task 6: Verify guest performance and completion
+
+1. Return to each **Arc machine > Monitoring > Insights** / **Monitor**.
+2. Select **Log based visualizations (Classic)** if a selector is shown. Inspect guest CPU, memory, disk and network charts. An empty chart immediately after onboarding is not a completed monitoring setup.
+3. In the Task 1 workspace, verify the specialized performance stream:
+
+```kusto
+InsightsMetrics
+| where TimeGenerated > ago(30m)
+| summarize Samples = count(), LastSeen = max(TimeGenerated) by Computer, Namespace, Name
+```
+
+4. Confirm all of the following before completing the challenge:
+   - Both Arc machines are connected and AMA is healthy.
+   - Windows and Linux test messages appear in `Event` and `Syslog`.
+   - The AMA-based monitoring initiative is assigned at your RG and applicable remediation succeeds.
+   - Update Manager has successful assessments and reviewed update installation results; periodic assessment alone is not patching.
+   - Software inventory is visible in the correct workspace and CTI view.
+   - Both machines report guest performance data; Map/Dependency Agent is **not** a success criterion.
+
+If data is missing, troubleshoot the relevant service's extension, DCR, association, identity and network path.
+Waiting a fixed ten minutes is not a substitute for checking those results.
