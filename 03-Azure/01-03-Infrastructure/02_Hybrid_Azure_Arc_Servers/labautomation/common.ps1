@@ -51,17 +51,79 @@ function Assert-ArcContext {
 }
 
 function Set-ArcResourceGroupSecurityTag {
-    param([Parameter(Mandatory)][string]$ResourceGroupName)
+    param([Parameter(Mandatory)][string]$ResourceGroupName, [hashtable]$AdditionalTags = @{})
 
-    $result = Invoke-ArcAz -Arguments @(
+    $tags = @('SecurityControl=Ignore')
+    foreach ($key in $AdditionalTags.Keys) { $tags += "$key=$($AdditionalTags[$key])" }
+    $result = Invoke-ArcAz -Arguments (@(
         'tag', 'update', '--resource-id', "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName",
-        '--operation', 'Merge', '--tags', 'SecurityControl=Ignore'
-    )
+        '--operation', 'Merge', '--tags'
+    ) + $tags)
     if (-not $result -or -not $result.PSObject.Properties['properties'] -or -not $result.properties -or
         -not $result.properties.PSObject.Properties['tags'] -or -not $result.properties.tags -or
         -not $result.properties.tags.PSObject.Properties['SecurityControl'] -or
         $result.properties.tags.SecurityControl -cne 'Ignore') {
         throw "Resource group '$ResourceGroupName' did not confirm SecurityControl=Ignore. Deployment stopped before VM creation."
+    }
+    foreach ($key in $AdditionalTags.Keys) {
+        if (-not $result.properties.tags.PSObject.Properties[$key] -or
+            $result.properties.tags.$key -ne $AdditionalTags[$key]) {
+            throw "Resource group '$ResourceGroupName' did not confirm tag '$key'."
+        }
+    }
+}
+
+function Get-ArcOnPremResourceGroupName {
+    param([Parameter(Mandatory)][string]$AzureResourceGroupName)
+
+    $name = "$AzureResourceGroupName-onprem"
+    if ($name.Length -gt 90) {
+        throw "Console resource group '$AzureResourceGroupName' is too long to append '-onprem' within Azure's 90-character limit."
+    }
+    return $name
+}
+
+function Assert-ArcOnPremResourceGroup {
+    param([object]$Group, [string]$AzureResourceGroupName, [string]$UserId)
+
+    $name = Get-ArcOnPremResourceGroupName -AzureResourceGroupName $AzureResourceGroupName
+    if (-not $Group -or $Group.name -ne $name -or
+        -not $Group.PSObject.Properties['tags'] -or -not $Group.tags -or
+        -not $Group.tags.PSObject.Properties['microhackArcPurpose'] -or $Group.tags.microhackArcPurpose -ne 'onprem' -or
+        -not $Group.tags.PSObject.Properties['microhackArcAzureResourceGroup'] -or
+        $Group.tags.microhackArcAzureResourceGroup -ne $AzureResourceGroupName -or
+        -not $Group.tags.PSObject.Properties['microhackArcUserId'] -or $Group.tags.microhackArcUserId -ne $UserId) {
+        throw "On-prem resource group '$name' does not have the expected participant and purpose tags. No existing group will be adopted."
+    }
+}
+
+function Initialize-ArcOnPremResourceGroup {
+    param([string]$AzureResourceGroupName, [string]$UserId, [string]$Location)
+
+    $name = Get-ArcOnPremResourceGroupName -AzureResourceGroupName $AzureResourceGroupName
+    $exists = Invoke-ArcAz -Arguments @('group', 'exists', '--name', $name)
+    if ($exists -isnot [bool]) { throw "Cannot determine whether on-prem resource group '$name' exists." }
+    if ($exists) {
+        $group = Invoke-ArcAz -Arguments @('group', 'show', '--name', $name)
+    } else {
+        $group = Invoke-ArcAz -Arguments @(
+            'group', 'create', '--name', $name, '--location', $Location, '--tags',
+            'SecurityControl=Ignore', 'microhackArcPurpose=onprem',
+            "microhackArcUserId=$UserId", "microhackArcAzureResourceGroup=$AzureResourceGroupName"
+        )
+    }
+    Assert-ArcOnPremResourceGroup -Group $group -AzureResourceGroupName $AzureResourceGroupName -UserId $UserId
+    Set-ArcResourceGroupSecurityTag -ResourceGroupName $name
+    return $name
+}
+
+function Assert-ArcAzureGroupLayout {
+    param([string]$AzureResourceGroupName, [object[]]$Vms)
+
+    if (@($Vms | Where-Object {
+        $_.resourceGroup -eq $AzureResourceGroupName -and $_.name -in @('vm-linux-mh', 'vm-win2025-mh')
+    }).Count -gt 0) {
+        throw "Legacy lab VMs exist in Azure exercise RG '$AzureResourceGroupName'. The two-RG layout is for new events only; no VM will be moved or duplicated."
     }
 }
 
@@ -148,11 +210,16 @@ function Test-ArcCapacity {
     $owners = @($assignments | Where-Object {
         $_.roleDefinitionName -eq 'Owner' -and $_.scope -match '(?i)/resourceGroups/[^/]+$'
     })
+    $onPremGroups = @($groups | Where-Object {
+        $_.PSObject.Properties['tags'] -and $_.tags -and
+        $_.tags.PSObject.Properties['microhackArcPurpose'] -and $_.tags.microhackArcPurpose -eq 'onprem'
+    } | ForEach-Object { $_.name })
     $remaining = @{}
     $remainingIps = @{}
     foreach ($entry in $Placement) {
         $ownedGroups = @($owners | Where-Object { $_.principalId -eq $entry.userId } |
-            ForEach-Object { ($_.scope -split '/')[-1] } | Sort-Object -Unique)
+            ForEach-Object { ($_.scope -split '/')[-1] } |
+            Where-Object { $_ -notin $onPremGroups } | Sort-Object -Unique)
         if ($ownedGroups.Count -ne 1) {
             throw "Expected exactly one Console-provisioned Owner resource group for user $($entry.userId); found $($ownedGroups.Count)."
         }
@@ -160,7 +227,13 @@ function Test-ArcCapacity {
         if (@($groups | Where-Object { $_.name -eq $groupName }).Count -ne 1) {
             throw "Participant resource group '$groupName' was not found."
         }
-        Set-ArcResourceGroupSecurityTag -ResourceGroupName $groupName
+        Assert-ArcAzureGroupLayout -AzureResourceGroupName $groupName -Vms $vms
+        Set-ArcResourceGroupSecurityTag -ResourceGroupName $groupName -AdditionalTags @{
+            microhackArcPurpose = 'azure'
+            microhackArcUserId = $entry.userId
+        }
+        $groupName = Initialize-ArcOnPremResourceGroup -AzureResourceGroupName $groupName `
+            -UserId $entry.userId -Location $entry.location
         foreach ($type in $script:ArcVmTypes) {
             $existingIp = @($publicIps | Where-Object {
                 $_.resourceGroup -eq $groupName -and $_.name -eq "vm-$type-mh-pip"

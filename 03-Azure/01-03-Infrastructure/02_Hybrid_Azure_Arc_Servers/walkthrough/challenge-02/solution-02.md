@@ -9,6 +9,7 @@ Duration: 40 minutes - Allow additional time for policy evaluation, initial data
 - Complete [Challenge 1](../../challenges/challenge-01.md). Both servers must appear as **Connected** under **Azure Arc > Machines**, with their system-assigned managed identities enabled.
 - Use the **Arc machine resources** (`Microsoft.HybridCompute/machines`), not the underlying Azure IaaS VMs used to simulate on-premises servers. Their Azure VM guest agents were deliberately disabled; do not re-enable them or remove the IMDS block.
 - In the Hackbox Console's default `resourcegroup-with-subscriptionowner` mode, you have `Owner` on your participant RG and the shared subscription. Use your participant RG for this walkthrough and keep **`SecurityControl=Ignore`** on it. Coordinate subscription-wide changes or additional managed RGs with the coach; do not modify other participants' resources. Entra and management-group permissions are separate.
+- Here, **participant RG** means the dashboard's **Azure exercise resource group**: the unchanged Console RG containing your Arc representations and exercise resources. The prepared Azure VMs live separately in `<Console-RG>-onprem`. Do not select that infrastructure RG for workspaces, DCRs, Arc Run Command or Arc policy assignments.
 - Verify the [AMA supported operating systems](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-supported-operating-systems), [Change Tracking support matrix](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/change-tracking-inventory-support-matrix) and service availability for your assigned region.
 - Allow the documented outbound connections for [AMA](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-network-configuration), Azure Arc and your OS update sources. This exercise does not require opening additional public inbound ports.
 - Ask the coach to approve service costs and update/reboot timing. Do not activate Windows Server benefits, paid plans or licenses merely to make a portal blade appear.
@@ -86,7 +87,7 @@ Run Command for Arc is currently **preview** and has **no dedicated Azure portal
 
 ```bash
 subscriptionId="<event-subscription-id>"
-resourceGroup="<your-participant-rg>"
+resourceGroup="<your-azure-exercise-rg-containing-the-arc-resources>"
 windowsMachine="<windows-arc-resource-name>"
 linuxMachine="<linux-arc-resource-name>"
 windowsArcLocation="<windows-arc-resource-location>"

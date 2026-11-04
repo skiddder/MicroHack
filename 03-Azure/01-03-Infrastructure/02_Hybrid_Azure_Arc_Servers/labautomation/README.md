@@ -10,7 +10,8 @@ The former `resources` contents were moved here, not copied.
 | Standalone Bash and legacy PowerShell VM creators, including Windows Server 2012 R2 assets | [demo-vm-creator](demo-vm-creator/README.md) |
 | Optional demo Arc onboarding and Ansible playbooks | [demo-vm-onboarder](demo-vm-onboarder/README.md) |
 | Manual subscription preparation | [subscription-preparations](subscription-preparations) |
-| Manual event cleanup | [cleanup](cleanup) |
+| Targeted Console RG-pair cleanup | [2-console-resource-groups.ps1](cleanup/2-console-resource-groups.ps1) |
+| Legacy standalone bulk cleanup | [1-resource-groups.ps1](cleanup/1-resource-groups.ps1) |
 | Change Tracking DCR template | [template-DCR-ChangeTracking.json](ChangeTracking/template-DCR-ChangeTracking.json) |
 | Challenge 7 machine-configuration package | [AddKey.zip](AddKey.zip) |
 
@@ -47,14 +48,15 @@ The participant hook accepts both this mode and the older `resourcegroup` mode
 for compatibility. The older mode retains the Console's subscription `Reader`
 permissions and does not provide the additional privileges required here.
 Dedicated `subscription` deployments remain unsupported.
-No additional resource group is created by these hooks. No Copilot
+The hooks create one additional `-onprem` RG per participant; see the layout below. No Copilot
 or Microsoft 365 licenses are requested. Cost fields are omitted; the documented
 Console fallback is USD 25 per lab/day, an estimate rather than a spending limit.
 
 Every lab/demo resource group must carry **`SecurityControl=Ignore`** so MCAPS
 Governance does not disable the training environment's public-IP access. The
-shared hook merges this tag into the Console-provisioned participant RGs, and
-the participant hook confirms it again before VM creation. Tag API failures or
+shared hook merges this tag into the Console-provisioned Azure RGs and creates
+the on-prem RGs with the tag already present. The participant hook confirms both
+groups again before VM creation. Tag API failures or
 missing confirmation stop the deployment. Only participant RGs are tagged, not
 the `McapsGovernance` RG or unrelated subscription groups.
 
@@ -95,7 +97,12 @@ the hook scripts is insufficient.
 3. Use a participant session, allowing for RBAC propagation and refreshing the
    session if necessary. Verify creation of a uniquely named empty test RG with
    `SecurityControl=Ignore`, then delete only that test RG.
-4. Verify the subscription-scope deployment validation in Challenge 5 with the
+4. Confirm the dashboard shows **Azure exercise resource group** and
+   **Simulated on-prem resource group**. The first is the unchanged Console RG,
+   the second is `<Console-RG>-onprem`. Both must have `SecurityControl=Ignore`;
+   only the second contains the two prepared Azure VMs and their infrastructure.
+5. Onboard both servers' **Arc resources into the Azure exercise RG** in
+   Challenge 1, then verify subscription-scope deployment validation in Challenge 5 with the
    participant account, not the coach or deployment service principal.
 
 These are live Console acceptance checks, not guarantees provided by offline
@@ -112,7 +119,34 @@ resource commands explicitly include the target subscription.
 
 ## What is deployed
 
-Per participant, into their existing resource group:
+### Two resource groups per participant
+
+This layout is for **new Console events only**. The Console-provided name is
+kept unchanged; no Console naming customization or RG rename is required.
+
+| Purpose | Example | Contents |
+| --- | --- | --- |
+| Azure exercise RG, provisioned by Console | `rg-labuser-0001` | Participant-created Arc machine representations, workspaces, DCRs, policies, Key Vault and other exercise resources |
+| Simulated on-prem RG, provisioned by the hooks | `rg-labuser-0001-onprem` | Underlying Azure VMs, networks, disks, public IPs and their VM Run Commands |
+
+The base name must leave room for the seven-character `-onprem` suffix within
+Azure's 90-character RG name limit. Overlong names fail explicitly, without
+truncation. There is deliberately no separate `-az` suffix on the Console RG.
+The hooks tag both groups with `microhackArcUserId` and
+`microhackArcPurpose=azure|onprem`; the on-prem group additionally records
+`microhackArcAzureResourceGroup=<Console-RG>`. Existing same-name on-prem groups
+must already have matching ownership/purpose/parent tags or deployment stops.
+Unrelated tags are preserved.
+
+No extra direct Owner role is added to the on-prem RG: participants inherit
+access from subscription Owner. Tagged on-prem groups are excluded when the
+shared preflight identifies the Console RG by direct Owner assignment.
+This remains an organizational split, not an access boundary.
+An Azure Monitor workspace can create another service-managed RG; these two
+groups do not replace it or implement the OpenTelemetry migration.
+Standalone Bash/legacy PowerShell demos retain their existing layouts.
+
+Per participant, the hooks deploy these VMs into the **on-prem RG**:
 
 | VM | Image from the existing template | SKU |
 | --- | --- | --- |
@@ -129,11 +163,11 @@ the [official standard Ubuntu Server x64 Gen2 image](https://ubuntu.com/azure/do
 Ubuntu 24.04 is in standard security maintenance, so the Update Manager exercise
 does not require Ubuntu Pro/ESM for standard OS security updates.
 
-**Existing environments:** this image change applies to newly created Linux
-VMs only. Console reruns reuse existing VMs, including Ubuntu 20.04; they do not
-perform an in-place OS upgrade or replace the OS disk. Ask the coach to arrange
-an approved rebuild of an old Linux lab VM before repeating Challenge 2. No
-existing resources are automatically deleted or migrated.
+**Existing environments:** there is no migration from the old single-RG layout.
+If expected lab VMs are found in the Azure exercise RG, deployment fails rather
+than moving or duplicating them. Create a new event. Within the new two-RG layout,
+compatible existing VMs in the tagged on-prem RG are reused; image changes affect
+new VMs only, not existing OS disks.
 
 The existing ARM templates, parameter files, public IPs, disks and networking are
 reused. SSH (22), RDP (3389), and Windows WinRM (5985) retain their existing public
@@ -166,8 +200,11 @@ standalone creator directory and are not part of this Console deployment.
    Existing compatible VMs with the expected lab names, including unmarked VMs
    eligible for the approved reuse policy below, are not counted as new VM/core
    demand.
-   Participant RGs are tagged `SecurityControl=Ignore` before VM/core demand is
-   validated; incompatible VMs still fail validation.
+   The Console Azure RG is tagged and its matching on-prem RG is created/reused
+   with `SecurityControl=Ignore` before VM/core demand is validated. An empty
+   tagged on-prem RG can therefore remain if a later quota/SKU check fails.
+   Existing VMs and IPs are checked in the on-prem RG; incompatible VMs still
+   fail validation.
    Public IP limits and current usage come from `az network list-usages`: both
    the overall `PublicIPAddresses` counter and the
    `IPv4StandardSkuPublicIpAddresses` counter must have capacity. These names were
@@ -187,17 +224,20 @@ standalone creator directory and are not part of this Console deployment.
    nested PowerShell objects. The file contains only placement metadata, no
    credentials, and is removed in `finally` on success or failure.
 
-The user RGs and their direct `Owner` assignments must already exist, as
-guaranteed by the Console. The shared stage checks these assignments to account
-for existing participant VMs during quota validation. Ambiguous ownership,
+The Console Azure RGs and their direct `Owner` assignments must already exist,
+as guaranteed by the Console. The shared stage uses these assignments and the
+tagged RG-purpose distinction to identify each corresponding on-prem RG during
+quota validation. Ambiguous ownership,
 missing quota information, unavailable/restricted SKUs or insufficient quotas
 fail explicitly. No quotas are raised and no alternate SKU or region is selected.
-Provider registration is the only subscription preparation performed; Defender
-plans, custom policies and service principals are not configured.
+Beyond the paired RG creation/tagging, provider registration is the only
+subscription preparation performed; Defender plans, custom policies and service
+principals are not configured.
 
 [deploy-lab.ps1](deploy-lab.ps1) reads the saved mapping and checks that the
-supplied user owns the supplied resource group. Both VMs go into that user's
-assigned region, regardless of the resource group's metadata location.
+supplied user directly owns the supplied Console Azure RG. It validates/reuses
+the matching tagged on-prem RG and deploys both VMs there, in that user's assigned
+region regardless of either resource group's metadata location.
 
 The default list of regions and the two SKUs match the verified Bash script; the
 offline tests detect default drift and verify Console overrides. A recognized
@@ -215,7 +255,7 @@ PowerShell `SecureString` object in that hashtable can fail serialization.
 Both ARM templates retain the `secureString` parameter type, which prevents ARM
 from recording the password value in deployment history. No password file or
 password CLI argument is created. Credentials
-and public IPs are emitted only after both VMs have deployed and both
+and public IPs, plus the two RG names and their purpose, are emitted only after both VMs have deployed and both
 reconfiguration requests have been accepted.
 
 Reconfiguration deliberately matches the Bash mechanism:
@@ -246,7 +286,7 @@ No guest-completion polling or automatic Arc onboarding is performed.
   their `microhackArcUserId` tag matches or is absent/empty. Under the explicitly
   approved permanent recovery policy, missing ownership tags are automatically
   set without manual origin/credential verification, but only for `vm-linux-mh`
-  and `vm-win2025-mh` in the Console-provided participant-owned RG. The shared
+  and `vm-win2025-mh` in the matching tagged on-prem RG. The shared
   preflight permits these unmarked VMs; the participant hook tags and reuses them
   with an explicit warning. Conflicting nonempty owner tags are never overwritten.
 - All ownership and reconfiguration tag writes use `az tag update --operation
@@ -285,11 +325,36 @@ No guest-completion polling or automatic Arc onboarding is performed.
 
 The hooks do not delete resources or perform automatic cleanup.
 
+## Cleaning up both RGs
+
+Do not assume the Console's normal teardown discovers an RG created by a content
+hook. The coach must remove the paired groups explicitly, preferably **before**
+Console teardown, using [2-console-resource-groups.ps1](cleanup/2-console-resource-groups.ps1).
+Authenticate Az PowerShell to the event subscription first; the script never logs
+in or switches subscriptions. Use the exact Console **Azure exercise RG names**:
+
+```powershell
+.\cleanup\2-console-resource-groups.ps1 `
+    -SubscriptionId '<event-subscription-id>' `
+    -AzureResourceGroupNames 'rg-labuser-0001', 'rg-labuser-0002' -WhatIf
+```
+
+Inspect the preview, then repeat without `-WhatIf` and confirm each deletion.
+The script validates every requested pair's tags before deleting any group.
+It deletes the on-prem group first and then the Azure exercise group, including
+all their contents. It also supports a remaining tagged on-prem RG after its
+Console RG was already removed. Wildcards and a mismatched active subscription
+are rejected. Other participants, governance groups and service-managed RGs are
+not inferred or deleted; arrange their cleanup separately with the coach.
+The legacy bulk cleanup script is not this paired Console cleanup path.
+
 ## Participant exercises and coach duties
 
-Use the Console-provided resource group for the participant resources in the
+Use the Console-provided **Azure exercise RG**, not the `-onprem` RG, for the participant resources in the
 challenges and walkthroughs; replace example names such as `mh-arc-servers-rg`
-with that group. Create additional RGs only when an approved feature requires
+with that group. Onboard the guests into it so Arc-scoped policies and monitoring
+apply to their Arc representations. Reserve `-onprem` for the underlying VM
+infrastructure and guest-preparation checks. Create further RGs only when an approved feature requires
 them, and arrange `SecurityControl=Ignore` for those groups as well.
 RG-scoped resource creation, role assignments and policy assignments remain
 participant tasks. Although participants now have subscription Owner, coordinate
@@ -323,6 +388,8 @@ propagation and re-runs. They do **not** validate an actual Azure deployment.
 They also deploy from an isolated copy of only the runtime `labautomation`
 files, without the original repository layout, and test that each missing asset
 fails before Azure access.
+Two-RG creation/reuse, ownership conflicts, legacy-layout rejection, dashboard
+RG names and targeted cleanup/WhatIf are covered with mocks.
 The centralized legacy PowerShell creator's parameter sets are also checked
 against its three local templates.
 

@@ -38,14 +38,23 @@ if (@($owners | Where-Object {
     throw 'The requested resource group is not owned by this participant.'
 }
 Invoke-ArcAz -Arguments @('group', 'show', '--name', $ResourceGroupName) | Out-Null
-Set-ArcResourceGroupSecurityTag -ResourceGroupName $ResourceGroupName
+Assert-ArcAzureGroupLayout -AzureResourceGroupName $ResourceGroupName -Vms @(
+    Invoke-ArcAz -Arguments @('vm', 'list', '--resource-group', $ResourceGroupName)
+)
+Set-ArcResourceGroupSecurityTag -ResourceGroupName $ResourceGroupName -AdditionalTags @{
+    microhackArcPurpose = 'azure'
+    microhackArcUserId = $userId
+}
+$onPremResourceGroupName = Initialize-ArcOnPremResourceGroup -AzureResourceGroupName $ResourceGroupName `
+    -UserId $userId -Location $location
+$vmScope = "/subscriptions/$SubscriptionId/resourceGroups/$onPremResourceGroupName"
 $password = New-MhhStablePassword -Purpose 'vm-admin'
-$existingVms = @(Invoke-ArcAz -Arguments @('vm', 'list', '--resource-group', $ResourceGroupName))
+$existingVms = @(Invoke-ArcAz -Arguments @('vm', 'list', '--resource-group', $onPremResourceGroupName))
 $endpoints = @()
 
 foreach ($type in $script:ArcVmTypes) {
     $vmName = "vm-$type-mh"
-    $vmResourceId = "$ownerScope/providers/Microsoft.Compute/virtualMachines/$vmName"
+    $vmResourceId = "$vmScope/providers/Microsoft.Compute/virtualMachines/$vmName"
     $vm = @($existingVms | Where-Object { $_.name -eq $vmName })
     $isNewVm = $vm.Count -eq 0
     if ($isNewVm) {
@@ -58,7 +67,7 @@ foreach ($type in $script:ArcVmTypes) {
         $parameters.location = $location
         $parameters.virtualMachineName = $vmName
         $parameters.virtualMachineComputerName = $vmName
-        $parameters.virtualMachineRG = $ResourceGroupName
+        $parameters.virtualMachineRG = $onPremResourceGroupName
         $parameters.virtualMachineSize = $script:ArcVmSizes[$type]
         $parameters.adminUsername = 'mhadmin'
         $parameters.adminPassword = $password
@@ -69,25 +78,25 @@ foreach ($type in $script:ArcVmTypes) {
 
         Update-MhhToken | Out-Null
         $result = New-AzResourceGroupDeployment -Name "$vmName-Deploy" `
-            -ResourceGroupName $ResourceGroupName `
+            -ResourceGroupName $onPremResourceGroupName `
             -TemplateFile (Join-Path $script:ArcVmSource "template-$type.json") `
             -TemplateParameterObject $parameters -ErrorAction Stop
         if ($result.ProvisioningState -ne 'Succeeded') {
             throw "Deployment of $vmName failed: $($result.ProvisioningState)."
         }
-        $vm = @(Invoke-ArcAz -Arguments @('vm', 'show', '--resource-group', $ResourceGroupName, '--name', $vmName))
+        $vm = @(Invoke-ArcAz -Arguments @('vm', 'show', '--resource-group', $onPremResourceGroupName, '--name', $vmName))
     }
     Assert-ArcVm -Vm $vm[0] -Location $location -Size $script:ArcVmSizes[$type] -UserId $userId -AllowUnmarked
     if ((Get-ArcVmUserId -Vm $vm[0]) -eq '') {
         if (-not $isNewVm) {
-            Write-Warning "Adding missing ownership tag to existing VM '$vmName' in '$ResourceGroupName' under the approved reuse policy. Its origin and password are not verified; the password is not reset."
+            Write-Warning "Adding missing ownership tag to existing VM '$vmName' in '$onPremResourceGroupName' under the approved reuse policy. Its origin and password are not verified; the password is not reset."
         }
         Invoke-ArcAz -Arguments @(
             'tag', 'update', '--resource-id', $vmResourceId, '--operation', 'Merge',
             '--tags', "microhackArcUserId=$userId"
         ) | Out-Null
         $vm = @(Invoke-ArcAz -Arguments @(
-            'vm', 'show', '--resource-group', $ResourceGroupName, '--name', $vmName
+            'vm', 'show', '--resource-group', $onPremResourceGroupName, '--name', $vmName
         ))
     }
     Assert-ArcVm -Vm $vm[0] -Location $location -Size $script:ArcVmSizes[$type] -UserId $userId
@@ -109,13 +118,13 @@ foreach ($type in $script:ArcVmTypes) {
         ) | Out-Null
         if ($type -eq 'linux') {
             Invoke-ArcAz -Arguments @(
-                'vm', 'run-command', 'invoke', '--resource-group', $ResourceGroupName, '--name', $vmName,
+                'vm', 'run-command', 'invoke', '--resource-group', $onPremResourceGroupName, '--name', $vmName,
                 '--command-id', 'RunShellScript', '--scripts',
                 ('@' + (Join-Path $script:ArcVmSource 'reconfig-ubuntu.sh')), '--no-wait'
             ) | Out-Null
         } else {
             Invoke-ArcAz -Arguments @(
-                'vm', 'run-command', 'create', '--resource-group', $ResourceGroupName, '--vm-name', $vmName,
+                'vm', 'run-command', 'create', '--resource-group', $onPremResourceGroupName, '--vm-name', $vmName,
                 '--name', 'reconfigWin', '--location', $location, '--script',
                 ('@' + (Join-Path $script:ArcVmSource 'reconfig-win.ps1')), '--async-execution', 'true'
             ) | Out-Null
@@ -126,7 +135,7 @@ foreach ($type in $script:ArcVmTypes) {
         ) | Out-Null
     }
     $ip = Invoke-ArcAz -Arguments @(
-        'network', 'public-ip', 'show', '--resource-group', $ResourceGroupName, '--name', "$vmName-pip"
+        'network', 'public-ip', 'show', '--resource-group', $onPremResourceGroupName, '--name', "$vmName-pip"
     )
     if ([string]::IsNullOrWhiteSpace($ip.ipAddress)) {
         throw "No public IP address was returned for $vmName."
@@ -134,16 +143,26 @@ foreach ($type in $script:ArcVmTypes) {
     $endpoints += @{ name = $vmName; ip = $ip.ipAddress; type = $type }
 }
 
-@{ HackboxCredential = @{ name = 'VM Admin Username'; value = 'mhadmin'; note = 'Both VMs in your resource group' } }
+@{ HackboxCredential = @{ name = 'VM Admin Username'; value = 'mhadmin'; note = "Both simulated on-prem VMs in $onPremResourceGroupName" } }
 @{ HackboxCredential = @{ name = 'VM Admin Password'; value = $password; note = 'Stable per-user credential for both VMs' } }
 foreach ($endpoint in $endpoints) {
     $protocol = if ($endpoint.type -eq 'linux') { 'SSH port 22' } else { 'RDP port 3389; WinRM port 5985' }
     @{ HackboxCredential = @{
         name = $endpoint.name
         value = $endpoint.ip
-        note = "$protocol; Azure region: $location; resource group: $ResourceGroupName"
+        note = "$protocol; Azure region: $location; resource group: $onPremResourceGroupName"
     } }
 }
+@{ HackboxCredential = @{
+    name = 'Azure exercise resource group'
+    value = $ResourceGroupName
+    note = 'Onboard Arc machines and create workspaces, DCRs, policies and other exercise resources here.'
+} }
+@{ HackboxCredential = @{
+    name = 'Simulated on-prem resource group'
+    value = $onPremResourceGroupName
+    note = 'Underlying Azure VMs and their infrastructure only; do not use this group for Arc onboarding.'
+} }
 @{ HackboxCredential = @{
     name = 'Reconfiguration status'
     value = 'Submitted asynchronously - completion NOT verified'

@@ -15,6 +15,8 @@ Please ensure that you successfully passed [challenge 3](../../Readme.md#challen
 > the default Console mode, but changes affect all participants and can incur
 > charges. Do not change these settings without coach approval; continue with
 > inspection of your own Arc servers after coach preparation.
+> These Arc resources are in your **Azure exercise resource group**, not the
+> `-onprem` RG containing the underlying simulated servers.
 
 * In the Defender for Cloud environment settings, click on the subscription your resource group resides in
 ![image](./img/1.png)

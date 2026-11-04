@@ -27,6 +27,11 @@ function Reset-Mock {
         placement = @()
         vms = @()
         groupTags = @{}
+        groupLocations = @{}
+        extraOwners = @()
+        invalidGroupExists = $false
+        deletedGroups = [System.Collections.Generic.List[string]]::new()
+        failRemoval = $false
         invalidGroupTagResponse = $false
         calls = [System.Collections.Generic.List[object]]::new()
         deployments = [System.Collections.Generic.List[object]]::new()
@@ -149,6 +154,18 @@ function Get-MockArgument {
     return ''
 }
 
+function Get-MockTags {
+    param([object[]]$Arguments)
+    $tags = @{}
+    $index = [array]::IndexOf($Arguments, '--tags') + 1
+    while ($index -gt 0 -and $index -lt $Arguments.Count -and -not $Arguments[$index].StartsWith('--')) {
+        $parts = $Arguments[$index] -split '=', 2
+        $tags[$parts[0]] = $parts[1]
+        $index++
+    }
+    return $tags
+}
+
 function global:az {
     $arguments = @($args)
     $global:LASTEXITCODE = 0
@@ -218,11 +235,32 @@ function global:az {
             @{ registrationState = 'Registered' }
         }
         'group list' {
-            @($global:ArcMock.users | ForEach-Object {
-                @{ name = "rg-$($_.Substring($_.Length - 2))" }
-            })
+            $names = @($global:ArcMock.users | ForEach-Object { "rg-$($_.Substring($_.Length - 2))" })
+            foreach ($name in @($names + @($global:ArcMock.groupTags.Keys) | Sort-Object -Unique)) {
+                @{ name = $name; tags = if ($global:ArcMock.groupTags.ContainsKey($name)) {
+                    $global:ArcMock.groupTags[$name]
+                } else { [pscustomobject]@{} } }
+            }
         }
-        'group show' { @{ name = Get-MockArgument $arguments '--name' } }
+        'group exists' {
+            if ($global:ArcMock.invalidGroupExists) { 'unknown' } else {
+                $global:ArcMock.groupTags.ContainsKey((Get-MockArgument $arguments '--name'))
+            }
+        }
+        'group show' {
+            $name = Get-MockArgument $arguments '--name'
+            @{ name = $name; tags = if ($global:ArcMock.groupTags.ContainsKey($name)) {
+                $global:ArcMock.groupTags[$name]
+            } else { [pscustomobject]@{} } }
+        }
+        'group create' {
+            $name = Get-MockArgument $arguments '--name'
+            $tags = Get-MockTags $arguments
+            if ($tags.SecurityControl -cne 'Ignore') { throw 'New RG must be tagged on creation.' }
+            $global:ArcMock.groupTags[$name] = [pscustomobject]$tags
+            $global:ArcMock.groupLocations[$name] = Get-MockArgument $arguments '--location'
+            @{ name = $name; tags = $global:ArcMock.groupTags[$name] }
+        }
         'role assignment' {
             @($global:ArcMock.users | ForEach-Object {
                 @{
@@ -231,6 +269,7 @@ function global:az {
                     scope = "/subscriptions/$subscription/resourceGroups/rg-$($_.Substring($_.Length - 2))"
                 }
             })
+            $global:ArcMock.extraOwners
         }
         'vm list' {
             $rg = Get-MockArgument $arguments '--resource-group'
@@ -299,19 +338,20 @@ function global:az {
                 throw 'Tag updates must merge without replacing other tags.'
             }
             $id = Get-MockArgument $arguments '--resource-id'
-            $group = @($global:ArcMock.users | ForEach-Object {
-                "rg-$($_.Substring($_.Length - 2))"
-            } | Where-Object { $id -eq "/subscriptions/$subscription/resourceGroups/$_" })
-            if ($group.Count -eq 1) {
-                if ((Get-MockArgument $arguments '--tags') -cne 'SecurityControl=Ignore') {
+            if ($id -match "^/subscriptions/$subscription/resourceGroups/([^/]+)$") {
+                $group = $Matches[1]
+                $tags = Get-MockTags $arguments
+                if ($tags.SecurityControl -cne 'Ignore') {
                     throw 'RG tag update must set SecurityControl=Ignore.'
                 }
                 if ($global:ArcMock.invalidGroupTagResponse) { return '{"properties":{"tags":{}}}' }
-                if (-not $global:ArcMock.groupTags.ContainsKey($group[0])) {
-                    $global:ArcMock.groupTags[$group[0]] = [pscustomobject]@{}
+                if (-not $global:ArcMock.groupTags.ContainsKey($group)) {
+                    $global:ArcMock.groupTags[$group] = [pscustomobject]@{}
                 }
-                $global:ArcMock.groupTags[$group[0]] | Add-Member -NotePropertyName SecurityControl -NotePropertyValue Ignore -Force
-                return (ConvertTo-Json -InputObject @{ properties = @{ tags = $global:ArcMock.groupTags[$group[0]] } } -Depth 30 -Compress)
+                foreach ($key in $tags.Keys) {
+                    $global:ArcMock.groupTags[$group] | Add-Member -NotePropertyName $key -NotePropertyValue $tags[$key] -Force
+                }
+                return (ConvertTo-Json -InputObject @{ properties = @{ tags = $global:ArcMock.groupTags[$group] } } -Depth 30 -Compress)
             }
             $vm = @($global:ArcMock.vms | Where-Object {
                 $id -eq "/subscriptions/$subscription/resourceGroups/$($_.resourceGroup)/providers/Microsoft.Compute/virtualMachines/$($_.name)"
@@ -386,7 +426,7 @@ $source = Get-Content (Join-Path $labRoot 'demo-vm-creator\create_vms.sh') -Raw
 Assert-Test (-not $source.Contains("`r")) 'Standalone Bash creator uses Unix line endings'
 $setupAssets = @(
     'AddKey.zip', 'ChangeTracking\template-DCR-ChangeTracking.json',
-    'cleanup\1-resource-groups.ps1', 'demo-vm-creator\.gitattributes',
+    'cleanup\1-resource-groups.ps1', 'cleanup\2-console-resource-groups.ps1', 'demo-vm-creator\.gitattributes',
     'demo-vm-creator\create_vms.ps1', 'demo-vm-creator\create_vms.sh',
     'demo-vm-creator\parameters-win2012.json', 'demo-vm-creator\README.md',
     'demo-vm-creator\template-win2012.json',
@@ -462,8 +502,8 @@ foreach ($mode in @('resourcegroup-with-subscriptionowner', 'resourcegroup')) {
     Invoke-Shared
     $credentials = @(Invoke-Lab -Type $mode)
     Assert-Test ($global:ArcMock.deployments.Count -eq 2) "$mode deploys the same two participant VMs"
-    Assert-Test (@($global:ArcMock.vms | Where-Object { $_.resourceGroup -ne 'rg-01' }).Count -eq 0) "$mode deploys only into the Console-supplied participant RG"
-    Assert-Test ($credentials.Count -eq 5) "$mode returns the same dashboard credentials"
+    Assert-Test (@($global:ArcMock.vms | Where-Object { $_.resourceGroup -ne 'rg-01-onprem' }).Count -eq 0) "$mode deploys only into the derived on-prem RG"
+    Assert-Test ($credentials.Count -eq 7) "$mode returns dashboard credentials and both RG names"
     Assert-Test (@($global:ArcMock.calls | Where-Object {
         $_[0] -eq 'role' -and ($_[1] -ne 'assignment' -or $_[2] -ne 'list')
     }).Count -eq 0) "$mode leaves RBAC provisioning to the Console"
@@ -481,7 +521,7 @@ Assert-Test ($global:ArcMock.sharedTemplates[0].outputs.placement.value.Count -e
 Assert-Test ($global:ArcMock.placement.Count -eq 7) 'All Console participants mapped'
 Assert-Test ($global:ArcMock.placement[5].location -eq $regions[0]) 'Round-robin wraps'
 Assert-Test ($global:ArcMock.registrations.Count -eq 15) 'Providers registered once'
-Assert-Test ($global:ArcMock.groupTags.Count -eq 7) 'Shared hook tags all Console participant RGs'
+Assert-Test ($global:ArcMock.groupTags.Count -eq 14) 'Shared hook tags both RGs for all seven participants'
 Assert-Test (@($global:ArcMock.groupTags.Values | Where-Object { $_.SecurityControl -cne 'Ignore' }).Count -eq 0) 'Every participant RG has exactly SecurityControl=Ignore'
 Assert-Test (-not $global:ArcMock.registrations.ContainsKey('Microsoft.Quota')) 'No unnecessary Quota provider dependency'
 Assert-Test (@($global:ArcMock.calls | Where-Object {
@@ -502,7 +542,7 @@ Assert-Test ($global:ArcMock.deployments[0].virtualMachineSize -eq 'Standard_D2a
 Assert-Test ($global:ArcMock.deployments[1].virtualMachineSize -eq 'Standard_D4ads_v5') 'Windows size'
 Assert-Test ($global:ArcMock.deployments[0].networkSecurityGroupRules[0].properties.destinationPortRange -eq '22') 'Existing SSH rule'
 Assert-Test ($global:ArcMock.deployments[1].networkSecurityGroupRules.Count -eq 2) 'Existing RDP/WinRM rules'
-Assert-Test ($credentials.Count -eq 5) 'Only dashboard credentials on success stream'
+Assert-Test ($credentials.Count -eq 7) 'Only dashboard credentials and both RG names on success stream'
 Assert-Test ($credentials[-1].HackboxCredential.value -like '*NOT verified*') 'Honest asynchronous status'
 Assert-Test ($credentials[1].HackboxCredential.value -eq 'OfflineOnlyPassword123') 'Per-lab password returned after acceptance'
 Assert-Test ($global:ArcMock.deployments[0].adminPassword -ceq $credentials[1].HackboxCredential.value) 'Linux receives the dashboard password as a serializable ARM parameter value'
@@ -588,7 +628,7 @@ Reset-Mock -Count 1
 $global:ArcMock.networkQuota = 2
 $global:ArcMock.networkUsed = 1
 $global:ArcMock.partialIps = @(@{
-    name = 'vm-linux-mh-pip'; resourceGroup = 'rg-01'; location = 'swedencentral'
+    name = 'vm-linux-mh-pip'; resourceGroup = 'rg-01-onprem'; location = 'swedencentral'
 })
 Invoke-Shared
 Assert-Test ($global:ArcMock.placement.Count -eq 1) 'Partial deployment does not double-count existing public IPs'
@@ -628,7 +668,7 @@ Assert-Throws { Invoke-Lab } 'Mock ARM deployment failed'
 Assert-Test ($global:ArcMock.vms.Count -eq 0) 'Failed deployment publishes no credentials or reconfiguration'
 Reset-Mock -Count 1
 Invoke-Shared
-$global:ArcMock.failCommand = 'microhackArcUserId='
+$global:ArcMock.failCommand = '/providers/Microsoft.Compute/virtualMachines/vm-linux-mh --operation Merge --tags microhackArcUserId='
 Assert-Throws { Invoke-Lab } 'Azure CLI failed'
 Assert-Test ($global:ArcMock.vms.Count -eq 1) 'Tag API failure leaves the newly created VM for recovery'
 Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'run-command' }).Count -eq 0) 'Failed ownership tagging never submits reconfiguration'
@@ -647,7 +687,7 @@ $global:ArcMock.groupTags['rg-01'].SecurityControl = 'Enforce'
 Invoke-Lab | Out-Null
 Assert-Test ($global:ArcMock.groupTags['rg-01'].SecurityControl -ceq 'Ignore') 'Participant stage restores RG tag before VM deployment even after shared stage'
 Assert-Test ($global:ArcMock.groupTags['rg-01'].keep -ceq 'unchanged') 'Participant RG tagging preserves unrelated tags'
-Assert-Test (@($global:ArcMock.groupTags.Keys | Where-Object { $_ -ne 'rg-01' }).Count -eq 0) 'RG tagging only targets participant RGs, never governance or unrelated groups'
+Assert-Test (@($global:ArcMock.groupTags.Keys | Where-Object { $_ -notin @('rg-01', 'rg-01-onprem') }).Count -eq 0) 'RG tagging only targets the participant pair, never governance or unrelated groups'
 
 Reset-Mock -Count 1
 $global:ArcMock.failCommand = 'tag update'
@@ -676,7 +716,7 @@ foreach ($tagShape in @('missing', 'null', 'empty', 'custom', 'empty-owner', 'su
     Invoke-Shared
     $vm = [pscustomobject]@{
         name = 'vm-linux-mh'
-        resourceGroup = 'rg-01'
+        resourceGroup = 'rg-01-onprem'
         location = 'swedencentral'
         hardwareProfile = [pscustomobject]@{ vmSize = 'Standard_D2ads_v5' }
         provisioningState = 'Succeeded'
@@ -698,7 +738,7 @@ foreach ($tagShape in @('missing', 'null', 'empty', 'custom', 'empty-owner', 'su
     Assert-Test ($global:ArcMock.deployments.Count -eq 1) 'Existing unmarked Linux VM is reused rather than redeployed'
     Assert-Test ($global:ArcMock.vms[0].tags.microhackArcUserId -eq $users[0]) "Ownership tag is initialized for $tagShape tags"
     Assert-Test ($global:ArcMock.vms[0].tags.microhackReconfiguration -eq 'submitted') 'Reconfiguration state is merged into initialized VM tags'
-    Assert-Test ($recovered.Count -eq 5) 'Recovery completes both VMs and dashboard output'
+    Assert-Test ($recovered.Count -eq 7) 'Recovery completes both VMs and dashboard RG output'
     if ($tagShape -eq 'custom') {
         Assert-Test ($global:ArcMock.vms[0].tags.keep -eq 'unchanged') 'Ownership and state tag updates preserve unrelated VM tags'
     }
@@ -715,7 +755,7 @@ $global:ArcMock.vms = @(
     foreach ($type in @('linux', 'win2025')) {
         [pscustomobject]@{
             name = "vm-$type-mh"
-            resourceGroup = 'rg-01'
+            resourceGroup = 'rg-01-onprem'
             location = 'swedencentral'
             hardwareProfile = [pscustomobject]@{ vmSize = if ($type -eq 'linux') { 'Standard_D2ads_v5' } else { 'Standard_D4ads_v5' } }
             provisioningState = 'Succeeded'
@@ -731,7 +771,7 @@ Reset-Mock -Count 1
 Invoke-Shared
 $global:ArcMock.vms = @([pscustomobject]@{
     name = 'vm-not-a-lab'
-    resourceGroup = 'rg-01'
+    resourceGroup = 'rg-01-onprem'
     location = 'swedencentral'
     hardwareProfile = [pscustomobject]@{ vmSize = 'Standard_D2ads_v5' }
     provisioningState = 'Succeeded'
@@ -746,7 +786,7 @@ foreach ($conflict in @('owner', 'location', 'size', 'state')) {
     Invoke-Shared
     $vm = [pscustomobject]@{
         name = 'vm-linux-mh'
-        resourceGroup = 'rg-01'
+        resourceGroup = 'rg-01-onprem'
         location = 'swedencentral'
         hardwareProfile = [pscustomobject]@{ vmSize = 'Standard_D2ads_v5' }
         provisioningState = 'Succeeded'
@@ -818,7 +858,7 @@ foreach ($resourceType in @('Microsoft.Network/networkInterfaces', 'Microsoft.Co
 }
 Reset-Mock -Count 2
 Invoke-Shared
-$global:ArcMock.partialIps = @(@{ name = 'vm-linux-mh-pip'; resourceGroup = 'rg-01'; location = 'swedencentral' })
+$global:ArcMock.partialIps = @(@{ name = 'vm-linux-mh-pip'; resourceGroup = 'rg-01-onprem'; location = 'swedencentral' })
 $global:ArcMock.users = @($users[1])
 Assert-Throws { Invoke-Shared } 'remove or relocate'
 
@@ -949,7 +989,7 @@ try {
     Invoke-Shared -LabPath $packageRoot
     $credentials = @(Invoke-Lab -LabPath $packageRoot)
     Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Standalone labautomation package deploys both VMs without the repository layout'
-    Assert-Test ($credentials.Count -eq 5) 'Standalone package emits all dashboard credentials'
+    Assert-Test ($credentials.Count -eq 7) 'Standalone package emits all dashboard credentials and both RG names'
     foreach ($path in $global:ArcMock.vmTemplatePaths) {
         Assert-Test ((Split-Path $path -Parent) -eq $packageRoot) 'VM deployment uses a template inside the imported package'
     }
@@ -975,5 +1015,135 @@ try {
         Remove-Item -LiteralPath $packageRoot -Recurse -Force -ErrorAction Stop
     }
 }
+
+. (Join-Path $labRoot 'common.ps1')
+$SubscriptionId = $subscription
+Assert-Test ((Get-ArcOnPremResourceGroupName -AzureResourceGroupName ('a' * 83)).Length -eq 90) 'On-prem RG name supports the exact Azure name limit'
+Assert-Throws { Get-ArcOnPremResourceGroupName -AzureResourceGroupName ('a' * 84) } '90-character limit'
+
+Reset-Mock -Count 2
+Invoke-Shared
+Assert-Test ($global:ArcMock.groupLocations.Count -eq 2) 'Shared stage creates one additional RG per participant'
+Assert-Test ($global:ArcMock.groupLocations['rg-01-onprem'] -eq 'swedencentral' -and
+    $global:ArcMock.groupLocations['rg-02-onprem'] -eq 'australiaeast') 'On-prem metadata regions follow participant placement'
+Assert-Test ($global:ArcMock.groupTags['rg-01'].microhackArcPurpose -eq 'azure') 'Console RG is tagged for Azure exercises'
+Assert-Test ($global:ArcMock.groupTags['rg-01-onprem'].microhackArcAzureResourceGroup -eq 'rg-01') 'On-prem RG records its exact Console parent'
+$global:ArcMock.extraOwners = @(@{
+    principalId = $users[0]; roleDefinitionName = 'Owner'
+    scope = "/subscriptions/$subscription/resourceGroups/rg-01-onprem"
+})
+Invoke-Shared
+Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'group' -and $_[1] -eq 'create' }).Count -eq 2) 'Reruns reuse both on-prem RGs even with an explicit on-prem Owner assignment'
+$credentials = @(Invoke-Lab)
+Assert-Test (@($credentials | Where-Object {
+    $_.HackboxCredential.name -eq 'Azure exercise resource group' -and $_.HackboxCredential.value -eq 'rg-01'
+}).Count -eq 1) 'Dashboard identifies the Azure exercise RG'
+Assert-Test (@($credentials | Where-Object {
+    $_.HackboxCredential.name -eq 'Simulated on-prem resource group' -and $_.HackboxCredential.value -eq 'rg-01-onprem'
+}).Count -eq 1) 'Dashboard identifies the on-prem RG'
+Assert-Test (@($global:ArcMock.calls | Where-Object {
+    (($_[0] -eq 'vm' -and $_[1] -in @('show', 'run-command')) -or
+        ($_[0] -eq 'network' -and $_[1] -eq 'public-ip' -and $_[2] -eq 'show')) -and
+    (Get-MockArgument $_ '--resource-group') -ne 'rg-01-onprem'
+}).Count -eq 0) 'VM operations and endpoint lookup target only the on-prem RG'
+$global:ArcMock.groupTags['rg-01-onprem'] | Add-Member -NotePropertyName keep -NotePropertyValue unchanged
+$global:ArcMock.groupTags['rg-01-onprem'].SecurityControl = 'Enforce'
+Invoke-Lab | Out-Null
+Assert-Test ($global:ArcMock.groupTags['rg-01-onprem'].SecurityControl -ceq 'Ignore' -and
+    $global:ArcMock.groupTags['rg-01-onprem'].keep -eq 'unchanged') 'On-prem security tag is restored without replacing other tags'
+
+foreach ($tag in @('microhackArcPurpose', 'microhackArcUserId', 'microhackArcAzureResourceGroup')) {
+    Reset-Mock -Count 1
+    Invoke-Shared
+    $global:ArcMock.groupTags['rg-01-onprem'].$tag = 'conflict'
+    Assert-Throws { Invoke-Shared } 'will be adopted'
+    Assert-Throws { Invoke-Lab } 'will be adopted'
+    Assert-Test ($global:ArcMock.vms.Count -eq 0) 'Conflicting on-prem group tags cannot deploy VMs'
+    Assert-Test ($global:ArcMock.groupTags['rg-01-onprem'].$tag -eq 'conflict') 'Conflicting group tags are not overwritten'
+}
+Reset-Mock -Count 1
+$global:ArcMock.groupTags['rg-01-onprem'] = [pscustomobject]@{ keep = 'unrelated' }
+Assert-Throws { Invoke-Shared } 'will be adopted'
+Assert-Test ($global:ArcMock.groupTags['rg-01-onprem'].keep -eq 'unrelated') 'Unmarked same-name RG is not adopted'
+foreach ($failure in @('group create', 'group exists', '/resourceGroups/rg-01-onprem --operation')) {
+    Reset-Mock -Count 1
+    $global:ArcMock.failCommand = $failure
+    Assert-Throws { Invoke-Shared } 'Azure CLI failed'
+    Assert-Test ($global:ArcMock.placement.Count -eq 0) 'On-prem RG API failure cannot publish placement'
+}
+Reset-Mock -Count 1
+$global:ArcMock.invalidGroupExists = $true
+Assert-Throws { Invoke-Shared } 'Cannot determine whether'
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.vms = @([pscustomobject]@{
+    name = 'vm-linux-mh'; resourceGroup = 'rg-01'; location = 'swedencentral'
+})
+Assert-Throws { Invoke-Shared } 'new events only'
+Assert-Throws { Invoke-Lab } 'new events only'
+Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Legacy single-RG VMs are never moved or duplicated'
+
+function global:Get-AzResourceGroup {
+    [CmdletBinding()]
+    param()
+    foreach ($name in $global:ArcMock.groupTags.Keys) {
+        $tags = @{}
+        foreach ($property in $global:ArcMock.groupTags[$name].PSObject.Properties) {
+            $tags[$property.Name] = $property.Value
+        }
+        [pscustomobject]@{ ResourceGroupName = $name; Tags = $tags }
+    }
+}
+function global:Remove-AzResourceGroup {
+    [CmdletBinding()]
+    param([string]$Name, [switch]$Force)
+    if (-not $Force) { throw 'Cleanup must confirm through ShouldProcess before forcing deletion.' }
+    if ($global:ArcMock.failRemoval) { return $false }
+    $global:ArcMock.deletedGroups.Add($Name)
+    $global:ArcMock.groupTags.Remove($Name)
+    return $true
+}
+$cleanup = Join-Path $labRoot 'cleanup\2-console-resource-groups.ps1'
+Reset-Mock -Count 2
+Invoke-Shared
+$global:ArcMock.groupTags['McapsGovernance'] = [pscustomobject]@{ keep = 'unrelated' }
+$global:ArcMock.groupTags['MA_lab_managed'] = [pscustomobject]@{ keep = 'service-managed' }
+& $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -WhatIf
+Assert-Test ($global:ArcMock.deletedGroups.Count -eq 0) 'Cleanup WhatIf does not delete any group'
+& $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -Confirm:$false
+Assert-Test (($global:ArcMock.deletedGroups -join ',') -eq 'rg-01-onprem,rg-01') 'Cleanup deletes only the explicit pair, on-prem first'
+Assert-Test ($global:ArcMock.groupTags.ContainsKey('rg-02') -and $global:ArcMock.groupTags.ContainsKey('rg-02-onprem')) 'Cleanup preserves the other participant pair'
+Assert-Test ($global:ArcMock.groupTags.ContainsKey('McapsGovernance') -and $global:ArcMock.groupTags.ContainsKey('MA_lab_managed')) 'Cleanup never infers governance or service-managed RGs'
+
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.groupTags.Remove('rg-01')
+& $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -Confirm:$false
+Assert-Test (($global:ArcMock.deletedGroups -join ',') -eq 'rg-01-onprem') 'Cleanup can remove the tagged on-prem RG after Console RG deletion'
+
+Reset-Mock -Count 2
+Invoke-Shared
+$global:ArcMock.groupTags['rg-02-onprem'].microhackArcUserId = $users[0]
+Assert-Throws { & $cleanup -SubscriptionId $subscription -AzureResourceGroupNames @('rg-01', 'rg-02') -Confirm:$false } 'will be adopted'
+Assert-Test ($global:ArcMock.deletedGroups.Count -eq 0) 'Cleanup validates every pair before deleting any group'
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.groupTags['rg-01'].microhackArcPurpose = 'unrelated'
+Assert-Throws { & $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -Confirm:$false } 'not tagged as an Azure exercise RG'
+Assert-Test ($global:ArcMock.deletedGroups.Count -eq 0) 'Cleanup rejects an unverified Azure RG'
+Assert-Throws { & $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-*' -Confirm:$false } 'exact Console Azure RG names'
+$global:ArcMock.wrongContext = $true
+Assert-Throws { & $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -Confirm:$false } 'never logs in or switches'
+
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.groupTags['rg-01-onprem'] = [pscustomobject]@{}
+Assert-Throws { & $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -Confirm:$false } 'has no ownership tags'
+Assert-Test ($global:ArcMock.deletedGroups.Count -eq 0) 'Cleanup rejects an untagged on-prem group'
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.failRemoval = $true
+Assert-Throws { & $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -Confirm:$false } 'was not confirmed'
+Assert-Test ($global:ArcMock.groupTags.ContainsKey('rg-01')) 'Cleanup stops on a failed on-prem deletion before deleting the Azure RG'
 
 Write-Host "PASS: $script:Assertions offline assertions. No Azure login or network calls were made."

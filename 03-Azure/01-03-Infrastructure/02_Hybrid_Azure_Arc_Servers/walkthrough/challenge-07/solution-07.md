@@ -7,7 +7,8 @@ Duration: 30 minutes
 ## Action 1: Create an Azure Policy Guest Configuration for your Azure Arc VMs
 
 > **Hackbox Console:** Replace `mh-arc-servers-rg` with your Console-provided user
-> resource group. Scope all assignments to that group.
+> **Azure exercise resource group** containing the Arc representations. Scope
+> assignments to that group, not the `-onprem` RG containing the underlying Azure VMs.
 
 ### Setup a Policy that checks if the user "FrodoBaggins" is part of the local administrators group
 

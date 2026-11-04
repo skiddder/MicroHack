@@ -14,7 +14,8 @@ Please ensure that you successfully passed [challenge 2](../../Readme.md#challen
 > This covers `Microsoft.Resources/deployments/validate/action` at subscription
 > scope for the setup validation below. If validation reports missing permissions,
 > ask the coach to verify the participant's subscription Owner assignment and
-> allow for RBAC propagation. Continue to select your own RG and workspace.
+> allow for RBAC propagation. Select your **Azure exercise resource group** and
+> its workspace and Arc machine, not the underlying VM in the `-onprem` RG.
 
 ## Task 1: Set up the Best Practices Assessment for a Windows server
 

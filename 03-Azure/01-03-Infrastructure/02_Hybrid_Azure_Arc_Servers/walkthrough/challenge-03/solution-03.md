@@ -10,6 +10,10 @@ Please ensure that you successfully passed [challenge 2](../../Readme.md#challen
 
 ### Task 1: Create an Azure Key Vault
 
+> **Hackbox Console:** Replace `mh-arc-servers-rg` with the dashboard's **Azure
+> exercise resource group** for Key Vault, Arc resources and access assignments.
+> The separate `<Console-RG>-onprem` contains only the underlying Azure VM infrastructure.
+
 1. Navigate to *Azure Key Vault* using the top search bar and select *Create* in the top navigation pane.
 
 ![image](./img/1_new_KV.png)

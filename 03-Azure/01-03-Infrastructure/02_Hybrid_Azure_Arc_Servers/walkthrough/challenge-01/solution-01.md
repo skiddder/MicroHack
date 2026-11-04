@@ -10,8 +10,10 @@ Please ensure that you successfully verified the [General prerequisits](../../Re
 
 ### Task 1: Create Azure Resource Group
 
-> **Hackbox Console:** Skip RG creation and use your existing user resource group
-> for this exercise and the screenshot examples. In the default
+> **Hackbox Console:** Skip RG creation and use the dashboard's **Azure exercise
+> resource group** (the unchanged Console RG) for Arc onboarding and the screenshot
+> examples. The prepared Azure VMs are in the separate **Simulated on-prem resource
+> group**, `<Console-RG>-onprem`; do not select it as the Arc onboarding destination. In the default
 > `resourcegroup-with-subscriptionowner` mode, you have Owner on this group and
 > the shared subscription. Do not change other participants' resources.
 
@@ -48,6 +50,9 @@ Sign in to the [Azure Portal](https://portal.azure.com/).
 > Their OS reconfiguration was only submitted asynchronously: verify guest-agent
 > shutdown, IMDS blocking and Windows reboot completion as described in the
 > [automation guide](../../labautomation/README.md#credentials-and-asynchronous-reconfiguration).
+> Locate the underlying Azure VMs in the dashboard's **Simulated on-prem resource
+> group**. Their Arc representations will instead be created in the **Azure
+> exercise resource group** during onboarding.
 > Do not blindly rerun guest-agent-based preparation after that agent is stopped.
 
 * Have a server, windows or linux ready, perhaps on your own laptop/notebook
