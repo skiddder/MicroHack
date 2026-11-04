@@ -119,8 +119,11 @@ These are live Console acceptance checks, not guarantees provided by offline
 tests. The new mode does not automatically tag additional service-managed RGs
 or bypass Azure Policy/deny assignments. Coordinate their governance handling
 with the coach before using features that create them.
-It also does not switch Challenge 2 to OpenTelemetry; that migration remains
-tracked in [#11](https://github.com/skiddder/MicroHack/issues/11).
+[Challenge 2](../walkthrough/challenge-02/solution-02.md) uses OpenTelemetry guest
+metrics in an Azure Monitor workspace: Windows is enabled manually and Linux
+through generic AMA/DCR-association policies. Logs and Change Tracking retain
+their Log Analytics workspace. Participants create the metrics workspace and
+identify/tag its service-managed RG during the exercise, not in the hooks.
 
 Both hooks verify the Az PowerShell subscription and the active isolated CLI
 subscription before proceeding. Account-context queries use that verified current
@@ -160,8 +163,9 @@ tags before any writes. Unmarked Console RGs are initialized with the ownership
 tags. The older `resourcegroup` mode still requires direct RG Owner.
 Multiple matching RGs remain an error in the shared stage.
 This remains an organizational split, not an access boundary.
-An Azure Monitor workspace can create another service-managed RG; these two
-groups do not replace it or implement the OpenTelemetry migration.
+Challenge 2 creates an Azure Monitor workspace with another service-managed RG;
+the two provisioned participant groups do not replace that managed RG. Follow
+the walkthrough's governance tagging and the cleanup procedure below.
 Standalone Bash/legacy PowerShell demos retain their existing layouts.
 
 Per participant, the hooks deploy these VMs into the **on-prem RG**:

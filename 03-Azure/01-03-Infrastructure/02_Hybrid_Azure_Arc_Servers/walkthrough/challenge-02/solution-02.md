@@ -19,12 +19,14 @@ Duration: 40 minutes - Allow additional time for policy evaluation, initial data
 | Capability | Required components |
 | --- | --- |
 | Windows event logs / Linux Syslog | Azure Monitor Agent (AMA), log DCRs, DCR associations, Log Analytics workspace |
-| Classic VM insights performance | AMA, a **VM insights-specific** DCR and association, Log Analytics workspace |
+| OpenTelemetry guest performance metrics | AMA, an **OpenTelemetry performance** DCR and association, Azure Monitor workspace |
 | Change Tracking and Inventory | AMA, Change Tracking extension, a **Change Tracking-specific** DCR and association, Log Analytics workspace |
 | Azure Update Manager | Connected Arc machine, Update Manager extensions and access to OS update sources; **no AMA, Log Analytics workspace or Automation account dependency** |
 
 Do not install the retired Log Analytics agent (MMA/OMS) or use Automation Update Management.
 The [current Update Manager overview](https://learn.microsoft.com/en-us/azure/update-manager/overview) explains the independent update-management architecture.
+Logs and Change Tracking remain in **Log Analytics** and use KQL. Guest performance metrics use **OpenTelemetry (OTel)**, an **Azure Monitor workspace** and PromQL.
+AMA collects the guest metrics; you do not need to install a separate OpenTelemetry Collector or expose an inbound OTLP endpoint.
 
 ## Task 1: Create or select your Log Analytics workspace
 
@@ -62,7 +64,7 @@ Create separate log DCRs to make their purpose and OS scope explicit:
 4. Create each rule. Under the DCR's **Resources**, confirm the correct Arc machine is associated.
 5. On each Arc machine, open **Extensions** and confirm `AzureMonitorWindowsAgent` or `AzureMonitorLinuxAgent` is provisioned successfully. An installed agent without a DCR association does not establish the requested collection.
 
-*Please note:* An Arc machine can have several DCR associations. Keep these log rules separate from the VM insights and Change Tracking rules below to avoid duplicate ingestion or overwriting specialized configurations.
+*Please note:* An Arc machine can have several DCR associations. Keep these log rules separate from the OpenTelemetry performance and Change Tracking rules below to avoid duplicate ingestion or overwriting specialized configurations.
 For public-endpoint collection of these sources, a separate DCE is not required merely because the machine is Arc-enabled; private-link designs have additional requirements.
 
 References: [Windows event collection](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/data-collection-windows-events), [Syslog collection](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/data-collection-syslog), [Install and manage AMA](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-manage).
@@ -173,49 +175,75 @@ Syslog
 Initial ingestion is asynchronous. It can take several minutes until the logs become visible. A missing table before its first record or an empty result is **not** proof of success.
 Check the selected workspace, DCR resources/destination, event filters, extension status and outbound connectivity before proceeding.
 
-## Task 3: Enable classic VM insights and enforce it with Azure Policy
+## Task 3: Enable OpenTelemetry metrics manually on Windows and at scale on Linux
 
-### Choose the monitoring experience deliberately
+Use the [OpenTelemetry metrics-based experience](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/metrics-opentelemetry-guest), which Microsoft recommends for new VM and Arc monitoring deployments.
+The first machine (**Windows**) is configured manually. The second machine (**Linux**) receives its monitoring configuration through Azure Policy.
+Keep the Task 2 log DCRs and their Log Analytics destination unchanged.
 
-Microsoft now recommends [OpenTelemetry metrics-based monitoring](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/metrics-opentelemetry-guest) for new VM and Arc monitoring deployments.
-It stores metrics in an **Azure Monitor workspace**, not the Log Analytics workspace used for this lab's logs.
-Creating that workspace also creates a [managed resource group](https://learn.microsoft.com/en-us/azure/azure-monitor/metrics/azure-monitor-workspace-manage).
+### Create your Azure Monitor workspace
 
-This walkthrough still uses the supported **logs-based (classic)** VM insights experience and its Log Analytics/Policy learning goals. The subscription Owner permission change does not itself migrate monitoring to OpenTelemetry; that work is tracked in [#11](https://github.com/skiddder/MicroHack/issues/11).
-Do not accept portal defaults that create unapproved additional workspaces or managed RGs merely because your new role permits it.
-A coach can arrange an OpenTelemetry alternative with an approved Azure Monitor workspace, access and governance tagging; it is not an implicit prerequisite of this walkthrough.
+1. In **Subscriptions > your event subscription > Resource providers**, verify that **Microsoft.Monitor** is **Registered**. Register it if necessary and wait for registration to finish. **Microsoft.Insights** must also be registered.
+2. Search for **Azure Monitor workspaces**, select **Create**, and choose your event subscription and **existing Azure exercise RG**, not the `-onprem` RG. This is a different resource type from Log Analytics.
+3. Use a participant-specific name, for example **`mh-amw-labuser-0001`**, replacing the suffix with your own participant identifier. Do not have every participant use the same name: the automatically generated managed RG name must also be distinct within the shared subscription.
+4. Choose a service-supported workspace region agreed with the coach. Create the OTel DCR in this same region; it need not match the Arc machines' metadata locations or physical VM locations. This lab uses public endpoints; the metrics-based experience does not currently support Private Link.
+5. Review and create the workspace. Record its full **resource ID**. Azure also creates a service-managed RG, normally `MA_<workspace-name>_<location>_managed`, containing its default ingestion DCR and DCE.
+6. Open the workspace's **JSON View** and inspect `properties.defaultIngestionSettings`. Follow the referenced DCR/DCE resource IDs to identify the actual managed RG, rather than assuming ownership from its name. Record this RG and apply **`SecurityControl=Ignore`** to it as well. If naming/tag policies or a deny assignment prevent creation or tagging, stop and involve the coach; do not remove service-managed protections or modify another participant's managed RG.
 
-### Enable performance collection
+Keep the workspace in your Azure exercise RG and leave its service-managed resources where Azure created them. Do not mark the managed RG as an additional `exercise` RG.
+The managed ingestion DCR is **not** the guest-performance DCR used in the next steps.
+The [coach cleanup procedure](../../labautomation/README.md#cleaning-up-participant-and-linked-managed-resources) discovers these workspace links and verifies Azure's automatic managed-RG deletion when the owning workspace is deleted.
 
-1. Open your first server under **Azure Arc > Machines > Monitoring > Insights**. This now opens the machine's **Monitor** page.
-2. Select **Configure**. Choose **logs-based metrics / classic**; deselect OpenTelemetry metrics for this lab-only path.
-3. Select **Customize infrastructure monitoring** and explicitly select the **existing Log Analytics workspace** from Task 1. Do not accept a newly generated default workspace.
-4. Create a **VM insights DCR** for the logs-based experience. Verify its workspace destination and region. Leave **process/dependency collection (Map)** disabled if that option is shown. Recommended alerts are not required for this exercise.
-5. Review and enable monitoring. Record the generated VM insights DCR's resource ID. Repeat for the other Arc server, reusing the suitable VM insights DCR.
+Reference: [Create and manage an Azure Monitor workspace](https://learn.microsoft.com/en-us/azure/azure-monitor/metrics/azure-monitor-workspace-manage).
 
-The VM insights rule collects `Microsoft-InsightsMetrics` using `\VmInsights\DetailedMetrics`.
-The Windows Event/Syslog DCRs from Task 2 are **not substitutes** for this rule.
-See [Monitor a hybrid machine with VM insights](https://learn.microsoft.com/en-us/azure/azure-arc/servers/tutorial-enable-vm-insights) and [monitoring DCR definitions](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vm-enable-monitoring).
+### Manually enable the first machine: Windows
 
-### Assign the current AMA-based initiative
+1. Open your **Windows Arc resource** under **Azure Arc > Machines > Monitoring > Insights** / **Monitor**, then select **Configure**.
+2. Keep **OpenTelemetry metrics** enabled and **deselect logs-based metrics / classic**. The Windows event and Linux Syslog rules from Task 2 remain active; this selection concerns performance collection only.
+3. Select **Customize infrastructure monitoring** and explicitly choose the **Azure Monitor workspace you just created**. Do not accept a new default workspace or a destination belonging to another participant.
+4. Keep the **default OpenTelemetry system metrics**. Disable **OpenTelemetry per-process metrics** and **recommended alerts** for this exercise. Default system metrics are collected at no additional cost; additional metrics, alerts and other services can incur charges. Do not create an Azure Managed Grafana workspace for this task.
+5. Have the portal create a new **OpenTelemetry performance DCR** in your **Azure exercise RG**, in the Azure Monitor workspace's region. It is typically named `MSVMOtel-<region>-<name>`. Keep it separate from the Windows Event, Syslog and Change Tracking DCRs.
+6. Review the selected resource, destination, RG and options, then select **Review + Enable > Enable**. Only enable the **Windows Arc machine** here. Do **not** manually enable performance monitoring on Linux.
+7. Open **Monitor > Data Collection Rules > Resources**, locate the Windows Arc machine and inspect its new OTel rule. Copy the full **DCR resource ID** for the policy assignment below. Verify in its JSON definition:
+   - `properties.dataSources.performanceCountersOTel` collects the `Microsoft-OtelPerfMetrics` stream.
+   - `properties.destinations.monitoringAccounts[].accountResourceId` points to **your Azure Monitor workspace**.
+   - `properties.dataFlows` sends that stream to the monitoring-account destination.
+   - It contains only the intended cross-platform OTel performance configuration, not Windows-only event sources. The default OTel system metrics can be reused for Windows and Linux.
+8. Confirm the Windows AMA extension is healthy and the OTel DCR's **Resources** lists Windows. Check for actual Windows metrics using Task 6 before considering this onboarding successful. Linux must not yet have this OTel DCR association.
 
-1. Open **Policy > Assignments > Assign initiative**.
-2. Set the scope to **your participant RG**, not the shared subscription.
-3. Select **Enable Azure Monitor for Hybrid VMs with AMA**, not a legacy MMA initiative or an Azure-VM-only initiative.
-4. Under **Parameters**, show all parameters:
-   - Set **VMI Data Collection Rule Resource Id** to the **VM insights DCR** created above, not an event/Syslog rule.
-   - Set **Enable Processes and Dependencies** to **false**.
-   - Keep the applicable deployment effects enabled.
-5. Configure the assignment's **system-assigned managed identity** on the **Managed identity** tab (or corresponding identity section), and select its metadata location.
-   This is the **policy remediation identity**, not the Arc machine identity or the onboarding service principal.
-6. Review the initiative's required roles. Confirm the assignment identity has those roles at the scopes needed to deploy extensions and associate the DCR. Portal assignment can grant the roles when you have permission; if access is missing, ask the coach. Do not broaden the assignment to subscription scope.
-7. Create the assignment. *Please note:* For the **existing** Arc machines the policy will not automatically remediate - only newly created arc machines in the assignment scope will automatically be configured. For exising VMs you need to create a remediation task if needed: Open **Policy > Remediation**, select the assignment and create remediation tasks for each applicable AMA installation and DCR-association `DeployIfNotExists` definition. Re-evaluate compliance when required.
-8. Verify individual remediation results and extension/association state. Disabled Dependency Agent definitions do not need remediation.
+Do not install a second monitoring agent or Dependency Agent. AMA from Task 2 can use multiple DCRs.
+The default metrics include `system.uptime`, `system.cpu.time`, memory, disk and network metrics. They do **not** include every available counter; for example, `system.cpu.utilization` is an additional metric, so Task 6 derives CPU utilization from the default CPU-time metric.
 
-Do **not** install Dependency Agent: [VM insights Map and Dependency Agent are deprecated and retire on 2028-06-30](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vminsights-maps-retirement).
-Their retirement does not retire AMA or the classic performance view.
+References: [Portal monitoring configuration](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/tutorial-enable-monitoring), [OTel DCR definition and Arc associations](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vm-enable-monitoring), [default versus additional metrics](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/metrics-opentelemetry-guest-modify).
 
-References: [VM insights initiatives and their parameters](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vminsights-enable-policy), [AMA policy identities and remediation](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-policy).
+### Enable the second machine: Linux, with Azure Policy
+
+**Important:** the [VM insights policy article](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vminsights-enable-policy) currently describes the **logs-based** experience and says dedicated metrics-based policies are not yet available. Do **not** use **Enable Azure Monitor for Hybrid VMs with AMA** as an OTel onboarding initiative.
+Instead, use the following existing, generic **Arc Linux policies** to enforce AMA and associate the **already created OTel DCR**. They do not create an Azure Monitor workspace or generate an OTel rule.
+
+| Purpose | Built-in policy definition | Definition ID |
+| --- | --- | --- |
+| Ensure AMA is installed | **Configure Linux Arc-enabled machines to run Azure Monitor Agent** | `845857af-0333-4c5d-bbbc-6076697da122` |
+| Associate the OTel DCR | **Configure Linux Arc Machines to be associated with a Data Collection Rule or a Data Collection Endpoint** | `d5c37ce1-5f52-4523-b949-f19bf945b73a` |
+
+1. Open **Policy > Definitions**, select the first **policy** above and choose **Assign policy**. Use **your Azure exercise RG** as the scope and an assignment name such as `mh-otel-linux-ama`. Do not select an Azure IaaS VM policy or scope the assignment to the shared subscription.
+2. Set **Effect = DeployIfNotExists**. Configure a **system-assigned managed identity** for the assignment and select its metadata location. Review and grant the roles required by the definition at your RG. This is a **policy remediation identity**; the Linux Arc machine keeps its existing system-assigned identity.
+3. Create a second assignment for the DCR-association policy, at the same RG scope, named for example `mh-otel-linux-dcr`. Show all parameters and set:
+   - **Effect:** `DeployIfNotExists`.
+   - **Data Collection Rule Resource Id or Data Collection Endpoint Resource Id** (`dcrResourceId`): the **OTel guest-performance DCR ID copied from Windows onboarding**.
+   - **Resource Type** (`resourceType`): **`Microsoft.Insights/dataCollectionRules`**, not `Microsoft.Insights/dataCollectionEndpoints`.
+4. Configure this assignment's own **system-assigned remediation identity** and grant the roles requested by the definition. The DCR and Arc machines are in the same participant RG, so do not broaden permissions to the subscription or managed RG. Confirm the grants actually succeeded; subscription Owner on your participant account is not a role grant to either remediation identity.
+5. Create both assignments, then **wait for their first policy evaluations to finish**. In **Policy > Compliance**, open each assignment and refresh until resource-level results exist for the **Linux Arc resource**. Empty results or **Not started** are not a completed evaluation. If Linux is absent, check the RG scope, `osName` and whether its **Arc metadata location** is supported by the selected built-in definition.
+6. Inspect the evaluated results. AMA should already be **Compliant** from Task 2; the missing OTel DCR association should be **Non-compliant**. Keep the original Syslog DCR association in place.
+7. **Only after evaluation**, open **Policy > Remediation** and create a remediation task for the **non-compliant DCR-association assignment**, selecting the existing Linux Arc machine. If the AMA installation policy is also non-compliant, remediate it and wait for the extension to succeed as well. Do not create an empty remediation task before Linux has been evaluated.
+8. Wait for successful remediation, inspect individual deployment results, then open the OTel DCR's **Resources** and confirm it now lists **both Windows and Linux Arc machines**. On Linux, verify AMA is healthy. Do not click **Configure/Enable** on Linux as a manual workaround; troubleshoot the assignment, remediation identity, DCR ID and association instead.
+9. After another evaluation, confirm both Linux policies are compliant, then verify actual Linux metrics in Task 6. Compliance proves the configured resources exist, **not** that telemetry has arrived.
+
+This is the at-scale pattern: configure the workspace and collection rule once, then use policy to enforce the agent and rule association for matching Linux Arc machines in scope.
+New machines are configured through normal `DeployIfNotExists` processing; existing non-compliant machines need remediation. Neither evaluation nor ingestion is instantaneous.
+The policies target Linux, so Windows retains its manually created association.
+
+References: [AMA policy deployment and identities](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-policy), [Arc Linux AMA policy source](https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Monitoring/AzureMonitor_Agent_Linux_HybridVM_DINE.json), [Arc Linux DCR-association policy source and parameters](https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Monitoring/AzureMonitor_DCRA_Arc_Linux_DINE.json).
 
 ## Task 4: Assess and install updates with Azure Update Manager
 
@@ -256,7 +284,7 @@ There is no step here to activate Windows Server Azure benefits. Licensing/benef
 
 Do **not** manually enable Change Tracking on Linux. Instead, use an RG-scoped policy initiative to onboard it and demonstrate how the same configuration can be enforced for additional Arc machines.
 
-7. Open the **CTI DCR** created or selected during Windows onboarding and copy its full **resource ID**. Verify that its destination is your workspace from Task 1. Reuse this dedicated CTI rule, not the event/Syslog or VM insights DCR.
+7. Open the **CTI DCR** created or selected during Windows onboarding and copy its full **resource ID**. Verify that its destination is your workspace from Task 1. Reuse this dedicated CTI rule, not the event/Syslog or OpenTelemetry performance DCR.
 8. Open **Policy > Definitions**, filter to **Initiative** and the **Change Tracking and Inventory** category, and select **Enable ChangeTracking and Inventory for Arc-enabled virtual machines**. Choose the **Arc-enabled** initiative, not the Azure VM or VM scale set variant.
 9. Select **Assign initiative**. Set **Scope** to your event subscription and **participant RG** and use an assignment name such as `mh-cti-arc`. Keep the Linux Arc machine in scope. The already configured Windows Arc machine is also evaluated; existing compliant components do not need remediation.
 10. Under **Parameters**, show all parameters and configure:
@@ -271,7 +299,7 @@ Do **not** manually enable Change Tracking on Linux. Instead, use an RG-scoped p
     - Open **Policy > Remediation**, select the assignment and confirm that the Linux machine is listed for the relevant non-compliant definition.
     - Create remediation tasks for each **non-compliant Linux `DeployIfNotExists` definition**: AMA installation if missing, Change Tracking extension installation, and CTI DCR association. An initiative assignment alone does not guarantee that all its definitions have been remediated.
     - AMA should already be present from Task 2. Do not reinstall it manually if its policy is compliant. Inspect individual remediation results and resolve failures before proceeding.
-14. On the **Linux Arc resource**, verify that **ChangeTracking-Linux** is provisioned successfully and meets the extension-version requirement from step 6. In the CTI DCR's **Resources**, confirm that Linux is associated. Keep **only one CTI DCR association per machine**; the separate log and VM insights associations remain in place.
+14. On the **Linux Arc resource**, verify that **ChangeTracking-Linux** is provisioned successfully and meets the extension-version requirement from step 6. In the CTI DCR's **Resources**, confirm that Linux is associated. Keep **only one CTI DCR association per machine**; the separate log and OpenTelemetry performance associations remain in place.
 15. Check policy compliance for both Arc machines after a subsequent evaluation. New matching machines added to this RG are covered by the same assignment through normal policy evaluation; do not expect immediate deployment or ingestion.
 
 After the extension and DCR have been deployed, it will take several minutes before any data will be visible in Azure. We suggest that you continue with the next challenge and revisit the verification step later.
@@ -302,24 +330,45 @@ References: [CTI overview and supported rollout methods](https://learn.microsoft
 ## Task 6: Verify guest performance and completion
 
 1. Return to each **Arc machine > Monitoring > Insights** / **Monitor**.
-2. Select **Log based visualizations (Classic)** if a selector is shown. Inspect guest CPU, memory, disk and network charts. An empty chart immediately after onboarding is not a completed monitoring setup.
-3. In the Task 1 workspace, verify the specialized performance stream:
+2. Select **OpenTelemetry / metrics-based** if a selector is shown. Inspect guest CPU, memory, disk and network charts. Do not use the underlying Azure VM's host/platform metrics as proof of Arc guest collection.
+3. Open **Azure Monitor's metrics explorer**, set its **scope to your Azure Monitor workspace** from Task 3, select the **PromQL editor**, and choose a recent time range, for example the last 30 minutes. Do not use **Log Analytics > Logs** or the workspace's own platform/ingestion-limit metrics. Run the following separately:
 
-```kusto
-InsightsMetrics
-| where TimeGenerated > ago(30m)
-| summarize Samples = count(), LastSeen = max(TimeGenerated) by Computer, Namespace, Name
+Current uptime in seconds, grouped by the originating resource:
+
+```promql
+max by ("Microsoft.resourceid") ({"system.uptime"})
 ```
+
+Confirm that results include **both expected Arc machine resource IDs**, containing `/providers/Microsoft.HybridCompute/machines/`, and recent samples. A Windows result verifies the manual path; a Linux result verifies the policy path.
+
+CPU utilization as a percentage, derived from the default CPU-time counter:
+
+```promql
+100 * (
+  1 -
+  (
+    sum by ("Microsoft.resourceid") (rate({"system.cpu.time", state="idle"}[5m])) /
+    sum by ("Microsoft.resourceid") (rate({"system.cpu.time"}[5m]))
+  )
+)
+```
+
+These queries use quoted OTel metric and attribute names with dots, as supported by Azure Monitor's PromQL editor. Do not silently substitute underscored metric names or query `InsightsMetrics` for this OTel-only setup.
+The default sampling interval is 60 seconds. Allow enough samples for `rate()`; a blank initial graph or missing series is not success. Check the workspace, OTel DCR source/destination, machine association, agent, identity and outbound connectivity.
+Logs and metrics reside in separate stores and require separate KQL and PromQL queries.
+
+References: [Querying OTel system metrics with PromQL](https://learn.microsoft.com/en-us/azure/azure-monitor/metrics/prometheus-system-metrics-best-practices), [OTel collection verification](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/metrics-opentelemetry-guest-modify#verify-data-collection), [guest metrics and resource attributes](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/metrics-guest-reference).
 
 4. Confirm all of the following before completing the challenge:
    - Both Arc machines are connected and AMA is healthy.
    - Windows and Linux test messages appear in `Event` and `Syslog`.
-   - The AMA-based monitoring initiative is assigned at your RG and applicable remediation succeeds.
+   - Your Azure Monitor workspace and its actual managed RG are identified and have the agreed governance tagging.
+   - Windows was enabled manually; Linux received its OTel DCR association through the two RG-scoped Linux policy assignments, after initial evaluation and successful applicable remediation.
    - Update Manager has successful assessments and reviewed update installation results; periodic assessment alone is not patching.
    - Software inventory is visible in the correct workspace and CTI view.
-   - Both machines report guest performance data; Map/Dependency Agent is **not** a success criterion.
+   - Both Arc machine IDs have recent OpenTelemetry guest metric samples in your Azure Monitor workspace; Map/Dependency Agent and classic `InsightsMetrics` data are **not** success criteria.
 
 If data is missing, troubleshoot the relevant service's extension, DCR, association, identity and network path.
 Waiting a fixed ten minutes is not a substitute for checking those results.
 
-You successfully completed challenge 3! 🚀🚀🚀
+You successfully completed challenge 2! 🚀🚀🚀
