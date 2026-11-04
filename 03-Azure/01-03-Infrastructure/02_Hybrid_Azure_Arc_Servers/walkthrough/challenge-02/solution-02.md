@@ -2,8 +2,7 @@
 
 [Previous Challenge Solution](../challenge-01/solution-01.md) - **[Home](../../Readme.md)** - [Next Challenge Solution](../challenge-03/solution-03.md)
 
-Documentation checked against Microsoft Learn on **2026-11-03**.
-Allow additional time for policy evaluation, initial data ingestion and patching/reboots.
+Duration: 40 minutes - Allow additional time for policy evaluation, initial data ingestion and patching/reboots.
 
 ## Prerequisites and scope
 
@@ -273,6 +272,8 @@ Do **not** manually enable Change Tracking on Linux. Instead, use an RG-scoped p
     - AMA should already be present from Task 2. Do not reinstall it manually if its policy is compliant. Inspect individual remediation results and resolve failures before proceeding.
 14. On the **Linux Arc resource**, verify that **ChangeTracking-Linux** is provisioned successfully and meets the extension-version requirement from step 6. In the CTI DCR's **Resources**, confirm that Linux is associated. Keep **only one CTI DCR association per machine**; the separate log and VM insights associations remain in place.
 15. Check policy compliance for both Arc machines after a subsequent evaluation. New matching machines added to this RG are covered by the same assignment through normal policy evaluation; do not expect immediate deployment or ingestion.
+
+After the extension and DCR have been deployed, it will take several minutes before any data will be visible in Azure. We suggest that you continue with the next challenge and revisit the verification step later.
 
 ### Verify inventory for both onboarding paths
 
