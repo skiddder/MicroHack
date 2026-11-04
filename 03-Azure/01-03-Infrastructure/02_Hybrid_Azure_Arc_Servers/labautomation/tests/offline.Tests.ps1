@@ -3,7 +3,7 @@ Set-StrictMode -Version Latest
 $labRoot = Split-Path $PSScriptRoot -Parent
 $subscription = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 $users = @(1..27 | ForEach-Object { '00000000-0000-0000-0000-{0:d12}' -f $_ })
-$regions = @('swedencentral', 'australiaeast', 'indiasouthcentral', 'westindia', 'westus2')
+$regions = @('swedencentral', 'australiaeast', 'indiasouthcentral', 'westus2')
 $script:Assertions = 0
 
 function Assert-Test {
@@ -29,9 +29,18 @@ function Reset-Mock {
         groupTags = @{}
         groupLocations = @{}
         extraOwners = @()
+        consoleGroupsReady = $true
+        consoleOwnersReady = $true
         invalidGroupExists = $false
         deletedGroups = [System.Collections.Generic.List[string]]::new()
         failRemoval = $false
+        resources = @()
+        managedBy = @{}
+        keepManagedGroups = $false
+        managedDelay = 0
+        pendingManaged = @()
+        cleanupSleeps = 0
+        failResourceInventory = $false
         invalidGroupTagResponse = $false
         calls = [System.Collections.Generic.List[object]]::new()
         deployments = [System.Collections.Generic.List[object]]::new()
@@ -235,12 +244,15 @@ function global:az {
             @{ registrationState = 'Registered' }
         }
         'group list' {
-            $names = @($global:ArcMock.users | ForEach-Object { "rg-$($_.Substring($_.Length - 2))" })
-            foreach ($name in @($names + @($global:ArcMock.groupTags.Keys) | Sort-Object -Unique)) {
+            $names = @(if ($global:ArcMock.consoleGroupsReady) {
+                $global:ArcMock.users | ForEach-Object { "rg-$($_.Substring($_.Length - 2))" }
+            })
+            $mockGroups = @(foreach ($name in @($names + @($global:ArcMock.groupTags.Keys) | Sort-Object -Unique)) {
                 @{ name = $name; tags = if ($global:ArcMock.groupTags.ContainsKey($name)) {
                     $global:ArcMock.groupTags[$name]
                 } else { [pscustomobject]@{} } }
-            }
+            })
+            return (ConvertTo-Json -InputObject $mockGroups -Depth 30 -Compress)
         }
         'group exists' {
             if ($global:ArcMock.invalidGroupExists) { 'unknown' } else {
@@ -262,14 +274,19 @@ function global:az {
             @{ name = $name; tags = $global:ArcMock.groupTags[$name] }
         }
         'role assignment' {
-            @($global:ArcMock.users | ForEach-Object {
-                @{
-                    principalId = $_
-                    roleDefinitionName = 'Owner'
-                    scope = "/subscriptions/$subscription/resourceGroups/rg-$($_.Substring($_.Length - 2))"
+            $mockAssignments = @(
+                if ($global:ArcMock.consoleOwnersReady) {
+                    $global:ArcMock.users | ForEach-Object {
+                        @{
+                            principalId = $_
+                            roleDefinitionName = 'Owner'
+                            scope = "/subscriptions/$subscription/resourceGroups/rg-$($_.Substring($_.Length - 2))"
+                        }
+                    }
                 }
-            })
-            $global:ArcMock.extraOwners
+                $global:ArcMock.extraOwners
+            )
+            return (ConvertTo-Json -InputObject $mockAssignments -Depth 30 -Compress)
         }
         'vm list' {
             $rg = Get-MockArgument $arguments '--resource-group'
@@ -394,6 +411,7 @@ function global:az {
 }
 
 function Invoke-Shared {
+    [CmdletBinding()]
     param([string]$Locations = ($regions -join ','), [string]$LabPath = $labRoot)
     & (Join-Path $LabPath 'shared-deploy-lab.ps1') -SubscriptionId $subscription `
         -PreferredLocation $Locations -AllowedEntraUserIds $global:ArcMock.users
@@ -493,9 +511,57 @@ $bashRegions = [regex]::Match($source, '(?m)^regions=\(([^)]+)\)').Groups[1].Val
 $bashRegions = @([regex]::Matches($bashRegions, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
 $defaultRegions = @($defaults.preferredLocation.Split(',') | ForEach-Object { $_.Trim() })
 Assert-Test ($defaultRegions.Count -gt 0 -and '' -notin $defaultRegions) 'Defaults contain non-empty region names'
+Assert-Test ('westindia' -notin $defaultRegions) 'West India is excluded from preferred regions because required VM quota is unavailable'
 Assert-Test (($bashRegions -join ',') -eq ($defaultRegions -join ',')) 'Default region order matches verified Bash independently of Console test fixtures'
 Assert-Test ($source -match 'virtualWinMachineSize="Standard_D4ads_v5"') 'Windows SKU matches Bash'
 Assert-Test ($source -match 'virtualLnxMachineSize="Standard_D2ads_v5"') 'Linux SKU matches Bash'
+
+foreach ($groupsReady in @($false, $true)) {
+    Reset-Mock -Count 1
+    $global:ArcMock.consoleGroupsReady = $groupsReady
+    $global:ArcMock.consoleOwnersReady = $false
+    $global:ArcMock.extraOwners = @(@{
+        principalId = $users[0]; roleDefinitionName = 'Owner'; scope = "/subscriptions/$subscription"
+    })
+    $global:ArcMock.quota = 6
+    $global:ArcMock.networkQuota = 2
+    $warnings = @()
+    Invoke-Shared -WarningVariable warnings
+    Assert-Test (@($warnings | Where-Object { $_ -like '*Reserving the full VM and public-IP demand*' }).Count -eq 1) 'Missing direct RG ownership explicitly reports deferred RG preparation'
+    Assert-Test ($global:ArcMock.placement.Count -eq 1) 'Shared stage succeeds before Console RG ownership is visible'
+    Assert-Test ($global:ArcMock.groupTags.Count -eq 0) 'Shared stage does not infer, create or tag groups without direct RG ownership'
+    Assert-Throws { Invoke-Lab } 'not owned by this participant'
+    Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Subscription Owner alone cannot bypass participant RG ownership validation'
+    Assert-Test ($global:ArcMock.groupTags.Count -eq 0) 'Participant ownership failure happens before RG writes'
+    $global:ArcMock.consoleGroupsReady = $true
+    $global:ArcMock.consoleOwnersReady = $true
+    Invoke-Lab | Out-Null
+    Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Participant stage deploys both VMs after Console provisioning'
+    Assert-Test ($global:ArcMock.groupTags.Count -eq 2) 'Participant stage prepares both groups when shared preparation was deferred'
+    Assert-Test (@($global:ArcMock.groupTags.Values | Where-Object { $_.SecurityControl -cne 'Ignore' }).Count -eq 0) 'Deferred preparation still tags both groups before deploying resources'
+    Invoke-Shared
+    Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Shared rerun reuses the prepared layout after deferred setup'
+}
+foreach ($limitedQuota in @('cores', 'ips')) {
+    Reset-Mock -Count 1
+    $global:ArcMock.consoleGroupsReady = $false
+    $global:ArcMock.consoleOwnersReady = $false
+    if ($limitedQuota -eq 'cores') { $global:ArcMock.quota = 5 } else { $global:ArcMock.networkQuota = 1 }
+    Assert-Throws { Invoke-Shared } 'Insufficient quota'
+    Assert-Test ($global:ArcMock.placement.Count -eq 0) 'Deferred RG preparation still enforces the full planned quota demand'
+}
+Reset-Mock -Count 1
+$global:ArcMock.consoleOwnersReady = $false
+$global:ArcMock.failCommand = 'role assignment list'
+Assert-Throws { Invoke-Shared } 'Azure CLI failed'
+Assert-Test ($global:ArcMock.placement.Count -eq 0) 'An RBAC API failure is not treated as pending Console provisioning'
+Reset-Mock -Count 1
+$global:ArcMock.extraOwners = @(@{
+    principalId = $users[0]; roleDefinitionName = 'Owner'
+    scope = "/subscriptions/$subscription/resourceGroups/another-console-group"
+})
+Assert-Throws { Invoke-Shared } 'found 2'
+Assert-Test ($global:ArcMock.placement.Count -eq 0) 'Ambiguous direct RG ownership still blocks shared deployment'
 
 foreach ($mode in @('resourcegroup-with-subscriptionowner', 'resourcegroup')) {
     Reset-Mock -Count 1
@@ -514,19 +580,29 @@ foreach ($mode in @('resourcegroup-with-subscriptionowner', 'resourcegroup')) {
 }
 
 Reset-Mock
+Invoke-Shared -Locations $defaults.preferredLocation
+Assert-Test (($global:ArcMock.placement.location -join ',') -eq
+    'swedencentral,australiaeast,westus2,swedencentral,australiaeast,westus2,swedencentral') 'Current defaults distribute participants across the three quota-approved regions'
+Assert-Test (@($global:ArcMock.calls | Where-Object {
+    $_[0] -eq 'vm' -and $_[1] -eq 'list-skus' -and 'westindia' -in $_
+}).Count -eq 0) 'Default deployment never requests VM SKUs in West India'
+Invoke-Lab -User $users[2] -Group 'rg-03' -Locations $defaultRegions | Out-Null
+Assert-Test (@($global:ArcMock.deployments | Where-Object { $_.location -ne 'westus2' }).Count -eq 0) 'Third participant deploys both VMs in West US 2 with current defaults'
+
+Reset-Mock
 Invoke-Shared
 Assert-Test ($global:ArcMock.sharedTemplatePaths.Count -eq 1) 'Shared deployment receives a JSON file instead of a PowerShell TemplateObject'
 Assert-Test (-not (Test-Path -LiteralPath $global:ArcMock.sharedTemplatePaths[0])) 'Temporary shared template removed after success'
 Assert-Test ($global:ArcMock.sharedTemplates[0].outputs.placement.value.Count -eq 7) 'All participant strings survive JSON serialization'
 Assert-Test ($global:ArcMock.placement.Count -eq 7) 'All Console participants mapped'
-Assert-Test ($global:ArcMock.placement[5].location -eq $regions[0]) 'Round-robin wraps'
+Assert-Test ($global:ArcMock.placement[$regions.Count].location -eq $regions[0]) 'Round-robin wraps'
 Assert-Test ($global:ArcMock.registrations.Count -eq 15) 'Providers registered once'
 Assert-Test ($global:ArcMock.groupTags.Count -eq 14) 'Shared hook tags both RGs for all seven participants'
 Assert-Test (@($global:ArcMock.groupTags.Values | Where-Object { $_.SecurityControl -cne 'Ignore' }).Count -eq 0) 'Every participant RG has exactly SecurityControl=Ignore'
 Assert-Test (-not $global:ArcMock.registrations.ContainsKey('Microsoft.Quota')) 'No unnecessary Quota provider dependency'
 Assert-Test (@($global:ArcMock.calls | Where-Object {
     $_[0] -eq 'network' -and $_[1] -eq 'list-usages'
-}).Count -eq 5) 'Confirmed network usage counters read once per deployment region'
+}).Count -eq $regions.Count) 'Confirmed network usage counters read once per deployment region'
 Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'rest' }).Count -eq 0) 'No quota REST requests are needed'
 Assert-Test (@($global:ArcMock.networkUsages | Where-Object {
     $_.name.value -eq 'IPv4BasicSkuPublicIpAddresses' -and $_.limit -eq '0'
@@ -944,14 +1020,14 @@ Reset-Mock
 $withoutIndia = @($regions | Where-Object { $_ -ne 'indiasouthcentral' })
 Invoke-Shared -Locations ($withoutIndia -join ',')
 Assert-Test (($global:ArcMock.placement.location -join ',') -eq (
-    'swedencentral,australiaeast,westindia,westus2,swedencentral,australiaeast,westindia'
+    'swedencentral,australiaeast,westus2,swedencentral,australiaeast,westus2,swedencentral'
 )) 'Console removal of indiasouthcentral controls round-robin and wraparound'
 Assert-Test (@($global:ArcMock.calls | Where-Object {
     $_[0] -eq 'vm' -and $_[1] -eq 'list-skus' -and 'indiasouthcentral' -in $_
 }).Count -eq 0) 'Removed region is not checked or selected for VM deployment'
 Invoke-Lab -User $users[2] -Group 'rg-03' -Locations $withoutIndia | Out-Null
 Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Filtered Console list deploys two participant VMs'
-Assert-Test (@($global:ArcMock.deployments | Where-Object { $_.location -ne 'westindia' }).Count -eq 0) 'Both VMs use the filtered Console mapping'
+Assert-Test (@($global:ArcMock.deployments | Where-Object { $_.location -ne 'westus2' }).Count -eq 0) 'Both VMs use the filtered Console mapping'
 
 Reset-Mock -Count 3
 Invoke-Shared -Locations ' WestUS2, SwedenCentral '
@@ -1086,22 +1162,71 @@ Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Legacy single-RG VMs are 
 function global:Get-AzResourceGroup {
     [CmdletBinding()]
     param()
+    if ($global:ArcMock.pendingManaged.Count -gt 0) {
+        $global:ArcMock.managedDelay--
+        if ($global:ArcMock.managedDelay -eq 0) {
+            foreach ($name in $global:ArcMock.pendingManaged) { $global:ArcMock.groupTags.Remove($name) }
+            $global:ArcMock.pendingManaged = @()
+        }
+    }
     foreach ($name in $global:ArcMock.groupTags.Keys) {
         $tags = @{}
         foreach ($property in $global:ArcMock.groupTags[$name].PSObject.Properties) {
             $tags[$property.Name] = $property.Value
         }
-        [pscustomobject]@{ ResourceGroupName = $name; Tags = $tags }
+        [pscustomobject]@{ ResourceGroupName = $name; Tags = $tags; ManagedBy = $global:ArcMock.managedBy[$name] }
     }
+}
+function global:Get-AzResource {
+    [CmdletBinding()]
+    param([string]$ResourceGroupName, [string]$ResourceType, [switch]$ExpandProperties)
+    if ($global:ArcMock.failResourceInventory) { throw 'Resource inventory failed.' }
+    $global:ArcMock.resources | Where-Object {
+        (-not $ResourceGroupName -or $_.ResourceGroupName -eq $ResourceGroupName) -and
+        (-not $ResourceType -or $_.ResourceType -eq $ResourceType)
+    }
+}
+function global:Start-Sleep {
+    param([int]$Seconds)
+    if ($Seconds -ne 5) { throw 'Managed cleanup must poll at five-second intervals.' }
+    $global:ArcMock.cleanupSleeps++
 }
 function global:Remove-AzResourceGroup {
     [CmdletBinding()]
     param([string]$Name, [switch]$Force)
     if (-not $Force) { throw 'Cleanup must confirm through ShouldProcess before forcing deletion.' }
     if ($global:ArcMock.failRemoval) { return $false }
+    if (-not $global:ArcMock.keepManagedGroups) {
+        foreach ($workspace in @($global:ArcMock.resources | Where-Object {
+            $_.ResourceGroupName -eq $Name -and $_.ResourceType -eq 'Microsoft.Monitor/accounts'
+        })) {
+            $managedName = $workspace.Properties.defaultIngestionSettings.dataCollectionRuleResourceId.Split('/')[4]
+            if ($global:ArcMock.managedDelay -gt 0) {
+                $global:ArcMock.pendingManaged += $managedName
+            } else {
+                $global:ArcMock.groupTags.Remove($managedName)
+            }
+        }
+    }
     $global:ArcMock.deletedGroups.Add($Name)
     $global:ArcMock.groupTags.Remove($Name)
+    $global:ArcMock.resources = @($global:ArcMock.resources | Where-Object { $_.ResourceGroupName -ne $Name })
     return $true
+}
+function Add-MockMonitorWorkspace {
+    param([string]$Group = 'rg-01', [string]$ManagedGroup = 'MA_lab_swedencentral_managed')
+    $id = "/subscriptions/$subscription/resourceGroups/$Group/providers/Microsoft.Monitor/accounts/lab"
+    $global:ArcMock.resources += [pscustomobject]@{
+        ResourceGroupName = $Group; ResourceType = 'Microsoft.Monitor/accounts'; ResourceId = $id
+        Properties = @{
+            defaultIngestionSettings = @{
+                dataCollectionRuleResourceId = "/subscriptions/$subscription/resourceGroups/$ManagedGroup/providers/Microsoft.Insights/dataCollectionRules/default"
+                dataCollectionEndpointResourceId = "/subscriptions/$subscription/resourceGroups/$ManagedGroup/providers/Microsoft.Insights/dataCollectionEndpoints/default"
+            }
+        }
+    }
+    $global:ArcMock.groupTags[$ManagedGroup] = [pscustomobject]@{}
+    $global:ArcMock.managedBy[$ManagedGroup] = $id
 }
 $cleanup = Join-Path $labRoot 'cleanup\2-console-resource-groups.ps1'
 Reset-Mock -Count 2
@@ -1145,5 +1270,102 @@ Invoke-Shared
 $global:ArcMock.failRemoval = $true
 Assert-Throws { & $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -Confirm:$false } 'was not confirmed'
 Assert-Test ($global:ArcMock.groupTags.ContainsKey('rg-01')) 'Cleanup stops on a failed on-prem deletion before deleting the Azure RG'
+
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.groupTags['extra-exercise'] = [pscustomobject]@{
+    microhackArcPurpose = 'exercise'; microhackArcAzureResourceGroup = 'rg-01'; microhackArcUserId = $users[0]
+}
+$global:ArcMock.groupTags['unknown'] = [pscustomobject]@{}
+$global:ArcMock.groupTags['user-only'] = [pscustomobject]@{
+    microhackArcPurpose = 'exercise'; microhackArcUserId = $users[0]
+}
+$unknownId = "/subscriptions/$subscription/resourceGroups/unknown/providers/Microsoft.Storage/storageAccounts/example"
+$global:ArcMock.resources += [pscustomobject]@{
+    ResourceId = $unknownId; ResourceGroupName = 'unknown'; ResourceType = 'Microsoft.Storage/storageAccounts'
+}
+Add-MockMonitorWorkspace -Group 'extra-exercise'
+$preview = @(& $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -WhatIf -InformationVariable previewInfo)
+Assert-Test (@($previewInfo | Where-Object { "$_" -like 'Indirect service cleanup:*' }).Count -eq 1) 'Preview explicitly explains the indirect managed-RG cleanup'
+Assert-Test ($global:ArcMock.deletedGroups.Count -eq 0 -and $global:ArcMock.cleanupSleeps -eq 0) 'Managed cleanup WhatIf neither deletes nor waits'
+Assert-Test ($global:ArcMock.groupTags.ContainsKey('MA_lab_swedencentral_managed')) 'WhatIf retains the linked managed RG'
+Assert-Test (@($preview | Where-Object { $_.ResourceId -eq $unknownId -and $_.Status -eq 'NotAssigned' }).Count -eq 1) 'Preview reports unknown resources without attributing their creator'
+$report = @(& $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -Confirm:$false)
+Assert-Test (($global:ArcMock.deletedGroups -join ',') -eq 'rg-01-onprem,extra-exercise,rg-01') 'Cleanup includes only explicitly associated extra exercise RGs'
+Assert-Test (-not $global:ArcMock.groupTags.ContainsKey('MA_lab_swedencentral_managed')) 'Workspace deletion triggers managed-RG service cleanup'
+Assert-Test ($global:ArcMock.groupTags.ContainsKey('unknown')) 'Unknown RG remains untouched'
+Assert-Test ($global:ArcMock.groupTags.ContainsKey('user-only')) 'A participant ID without the event parent tag cannot authorize cleanup'
+Assert-Test (@($report | Where-Object { $_.ResourceId -eq $unknownId }).Count -eq 1) 'Actual cleanup reports unknown resource IDs'
+
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.groupTags['conflicting-extra'] = [pscustomobject]@{
+    microhackArcPurpose = 'exercise'; microhackArcAzureResourceGroup = 'rg-01'; microhackArcUserId = $users[1]
+}
+Assert-Throws { & $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -Confirm:$false } 'Cannot verify additional exercise RG'
+Assert-Test ($global:ArcMock.deletedGroups.Count -eq 0) 'Conflicting extra RG ownership stops all deletion'
+
+foreach ($fault in @('missing-settings', 'missing-reference', 'foreign-subscription', 'different-groups', 'wrong-type', 'wrong-provider', 'protected-group', 'wrong-managed-owner', 'inventory')) {
+    Reset-Mock -Count 2
+    Invoke-Shared
+    Add-MockMonitorWorkspace -Group 'rg-02'
+    $workspace = $global:ArcMock.resources[0]
+    switch ($fault) {
+        'missing-settings' { $workspace.Properties = @{} }
+        'missing-reference' { $workspace.Properties.defaultIngestionSettings.Remove('dataCollectionEndpointResourceId') }
+        'foreign-subscription' {
+            $workspace.Properties.defaultIngestionSettings.dataCollectionRuleResourceId =
+                $workspace.Properties.defaultIngestionSettings.dataCollectionRuleResourceId.Replace($subscription, $users[0])
+        }
+        'different-groups' {
+            $workspace.Properties.defaultIngestionSettings.dataCollectionEndpointResourceId =
+                $workspace.Properties.defaultIngestionSettings.dataCollectionEndpointResourceId.Replace('MA_lab_swedencentral_managed', 'other')
+        }
+        'wrong-type' {
+            $workspace.Properties.defaultIngestionSettings.dataCollectionRuleResourceId =
+                $workspace.Properties.defaultIngestionSettings.dataCollectionRuleResourceId.Replace('dataCollectionRules', 'workspaces')
+        }
+        'wrong-provider' {
+            $workspace.Properties.defaultIngestionSettings.dataCollectionRuleResourceId =
+                $workspace.Properties.defaultIngestionSettings.dataCollectionRuleResourceId.Replace('Microsoft.Insights', 'MicrosoftXInsights')
+        }
+        'protected-group' {
+            foreach ($field in @('dataCollectionRuleResourceId', 'dataCollectionEndpointResourceId')) {
+                $workspace.Properties.defaultIngestionSettings[$field] =
+                    $workspace.Properties.defaultIngestionSettings[$field].Replace('MA_lab_swedencentral_managed', 'McapsGovernance')
+            }
+        }
+        'wrong-managed-owner' { $global:ArcMock.managedBy['MA_lab_swedencentral_managed'] = 'another-workspace' }
+        'inventory' { $global:ArcMock.failResourceInventory = $true }
+    }
+    $failurePattern = switch ($fault) {
+        'missing-settings' { 'Cannot verify managed resources' }
+        'different-groups' { 'Ambiguous or protected managed RG' }
+        'protected-group' { 'Ambiguous or protected managed RG' }
+        'wrong-managed-owner' { 'conflicting owner or purpose' }
+        'inventory' { 'Resource inventory failed' }
+        default { 'Invalid managed-resource reference' }
+    }
+    Assert-Throws { & $cleanup -SubscriptionId $subscription -AzureResourceGroupNames @('rg-01', 'rg-02') -Confirm:$false } $failurePattern
+    Assert-Test ($global:ArcMock.deletedGroups.Count -eq 0) "Managed discovery failure '$fault' stops deletion of every participant pair"
+}
+
+foreach ($stuck in @($false, $true)) {
+    Reset-Mock -Count 1
+    Invoke-Shared
+    Add-MockMonitorWorkspace
+    $global:ArcMock.keepManagedGroups = $stuck
+    if ($stuck) {
+        Assert-Throws { & $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -Confirm:$false } 'deletion was not verified'
+        Assert-Test ($global:ArcMock.cleanupSleeps -eq 59) 'Managed cleanup wait is bounded to 60 checks'
+        Assert-Test ($global:ArcMock.groupTags.ContainsKey('MA_lab_swedencentral_managed')) 'Stuck service cleanup is not bypassed by direct deletion'
+    } else {
+        $global:ArcMock.managedDelay = 3
+        & $cleanup -SubscriptionId $subscription -AzureResourceGroupNames 'rg-01' -Confirm:$false
+        Assert-Test ($global:ArcMock.cleanupSleeps -eq 2) 'Delayed managed cleanup is verified after polling'
+        Assert-Test (-not $global:ArcMock.groupTags.ContainsKey('MA_lab_swedencentral_managed')) 'Delayed service cleanup removes the managed RG'
+    }
+    Assert-Test (($global:ArcMock.deletedGroups -join ',') -eq 'rg-01-onprem,rg-01') 'Managed RGs are never direct deletion targets'
+}
 
 Write-Host "PASS: $script:Assertions offline assertions. No Azure login or network calls were made."

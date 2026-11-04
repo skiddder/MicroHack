@@ -2,5 +2,5 @@
   "$schema": "https://raw.githubusercontent.com/microsoft/MicroHack/refs/heads/main/lab-defaults-schema.json",
   "groups": [],
   "deploymentType": "resourcegroup-with-subscriptionowner",
-  "preferredLocation": "swedencentral, australiaeast, westindia, westus2"
+  "preferredLocation": "swedencentral, australiaeast, westus2"
 }

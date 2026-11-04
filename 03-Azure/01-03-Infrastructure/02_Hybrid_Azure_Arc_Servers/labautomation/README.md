@@ -35,6 +35,12 @@ Console defaults; the coach can remove, reorder or replace regions to respond
 to subscription restrictions and capacity changes. Both hooks use exactly the
 supplied list, not a hard-coded comparison with those defaults.
 
+The default order is **Sweden Central, Australia East, West US 2**.
+West India is excluded because the required VM quota is unavailable for this
+event setup. Re-import the content to load the updated defaults, and check the
+Console's selection: previously saved event selections are not automatically
+rewritten by this repository change. Remove West India there before deployment.
+
 Each user receives one resource group with a direct `Owner` assignment and
 **`Owner` on the shared subscription**, provisioned by the Console. This permits
 RG creation, including service-managed RGs, and subscription-scope deployment
@@ -55,8 +61,9 @@ Console fallback is USD 25 per lab/day, an estimate rather than a spending limit
 Every lab/demo resource group must carry **`SecurityControl=Ignore`** so MCAPS
 Governance does not disable the training environment's public-IP access. The
 shared hook merges this tag into the Console-provisioned Azure RGs and creates
-the on-prem RGs with the tag already present. The participant hook confirms both
-groups again before VM creation. Tag API failures or
+the on-prem RGs with the tag already present when direct RG ownership is already
+visible. Otherwise, this preparation is deferred to the participant hook, which
+always confirms both groups before VM creation. Tag API failures or
 missing confirmation stop the deployment. Only participant RGs are tagged, not
 the `McapsGovernance` RG or unrelated subscription groups.
 
@@ -141,6 +148,11 @@ Unrelated tags are preserved.
 No extra direct Owner role is added to the on-prem RG: participants inherit
 access from subscription Owner. Tagged on-prem groups are excluded when the
 shared preflight identifies the Console RG by direct Owner assignment.
+If no direct RG assignment is visible during the shared stage, it reserves the
+full demand for that participant without inferring a group name or changing any
+groups. The participant hook uses the Console-supplied RG name and must confirm
+direct ownership before preparing either group. Multiple matching RGs remain an
+error in the shared stage.
 This remains an organizational split, not an access boundary.
 An Azure Monitor workspace can create another service-managed RG; these two
 groups do not replace it or implement the OpenTelemetry migration.
@@ -200,11 +212,19 @@ standalone creator directory and are not part of this Console deployment.
    Existing compatible VMs with the expected lab names, including unmarked VMs
    eligible for the approved reuse policy below, are not counted as new VM/core
    demand.
-   The Console Azure RG is tagged and its matching on-prem RG is created/reused
-   with `SecurityControl=Ignore` before VM/core demand is validated. An empty
+   When direct RG ownership is visible, the Console Azure RG is tagged and its
+   matching on-prem RG is created/reused with `SecurityControl=Ignore` before
+   VM/core demand is validated. An empty
    tagged on-prem RG can therefore remain if a later quota/SKU check fails.
    Existing VMs and IPs are checked in the on-prem RG; incompatible VMs still
    fail validation.
+   If the Console RG or its direct Owner assignment is not yet visible, the
+   shared stage warns and counts both VMs (6 vCPUs) and both public IPs as new
+   demand. It does not assume that subscription-wide RBAC listing already
+   reflects Console provisioning.
+   Existing resources cannot be discounted for that participant until direct
+   ownership is visible; a retry after Console provisioning can resolve an
+   overly conservative quota failure. Failed Azure API calls are still fatal.
    Public IP limits and current usage come from `az network list-usages`: both
    the overall `PublicIPAddresses` counter and the
    `IPv4StandardSkuPublicIpAddresses` counter must have capacity. These names were
@@ -325,7 +345,7 @@ No guest-completion polling or automatic Arc onboarding is performed.
 
 The hooks do not delete resources or perform automatic cleanup.
 
-## Cleaning up both RGs
+## Cleaning up participant and linked managed resources
 
 Do not assume the Console's normal teardown discovers an RG created by a content
 hook. The coach must remove the paired groups explicitly, preferably **before**
@@ -340,12 +360,56 @@ in or switches subscriptions. Use the exact Console **Azure exercise RG names**:
 ```
 
 Inspect the preview, then repeat without `-WhatIf` and confirm each deletion.
-The script validates every requested pair's tags before deleting any group.
-It deletes the on-prem group first and then the Azure exercise group, including
-all their contents. It also supports a remaining tagged on-prem RG after its
-Console RG was already removed. Wildcards and a mismatched active subscription
-are rejected. Other participants, governance groups and service-managed RGs are
-not inferred or deleted; arrange their cleanup separately with the coach.
+The script validates every requested pair, associated extra RG and workspace
+reference before deleting any group. It deletes the on-prem group first, then
+explicitly associated extra exercise RGs, then the Azure exercise group,
+including **all contents**, regardless of who created each resource. It also
+supports a remaining tagged on-prem RG after its Console RG was already removed.
+Wildcards and a mismatched active subscription are rejected.
+
+Additional participant-created RGs are included only with all these ownership tags:
+
+| Tag | Value |
+|---|---|
+| `microhackArcPurpose` | `exercise` |
+| `microhackArcAzureResourceGroup` | Exact Console Azure exercise RG name |
+| `microhackArcUserId` | Same participant Entra object ID as the verified pair |
+
+Set these tags when creating extra exercise RGs; neither a matching user ID
+alone nor a name prefix establishes event ownership. Conflicting ownership on
+an explicitly linked exercise RG stops cleanup. Do not apply these exercise
+tags to service-managed RGs. As with all lab RGs, also set
+`SecurityControl=Ignore`; that governance tag alone does not establish ownership.
+
+For **Azure Monitor workspaces** (`Microsoft.Monitor/accounts`) inside the
+verified deletion scopes, the script reads the actual default DCR/DCE resource
+IDs from `properties.defaultIngestionSettings`. Both must reference one managed
+RG in the selected subscription without conflicting ownership. It never
+guesses associations from `MA_*` names or resource creator metadata.
+[Azure automatically deletes the workspace's managed RG and its resources
+when the workspace is deleted](https://learn.microsoft.com/en-us/azure/azure-monitor/metrics/azure-monitor-workspace-manage#delete-an-azure-monitor-workspace).
+The script therefore deletes the owning exercise RG, **never the managed RG
+directly**, then verifies disappearance with up to 60 checks, five seconds
+apart. Remaining managed RGs produce an error requiring coach investigation;
+there is no forced-deletion fallback. `-WhatIf` explains the indirect cleanup
+but does not delete or wait. Declining the owning RG deletion does not trigger
+managed cleanup verification.
+
+Other groups, including governance, unselected participants and unlinked
+managed RGs, remain untouched. Remaining RGs/resources outside the verified
+scope are reported as objects with `Status=NotAssigned` and `ResourceId`.
+This is **not** a claim that they were created by event participants. Review
+them separately; other managed services are not automatically associated.
+Run cleanup before Console teardown so the participant and workspace ownership
+references are still available. Subscription-wide RBAC/policy definitions and
+Entra objects are not comprehensively inventoried or cleaned by this RG script;
+coordinate those separately with the Console/event lifecycle.
+
+After an event, verify one tagged additional exercise RG and an Azure Monitor
+workspace in the `-WhatIf` preview. After real cleanup, check that the extra RG
+and workspace-linked managed RG disappeared while an untagged control RG
+remained and was reported. This live acceptance check is not replaced by the
+offline mock tests.
 The legacy bulk cleanup script is not this paired Console cleanup path.
 
 ## Participant exercises and coach duties
@@ -390,6 +454,9 @@ files, without the original repository layout, and test that each missing asset
 fails before Azure access.
 Two-RG creation/reuse, ownership conflicts, legacy-layout rejection, dashboard
 RG names and targeted cleanup/WhatIf are covered with mocks.
+The tests also cover the shared stage before Console RG/Owner visibility,
+full quota accounting in that state, and mandatory direct ownership and RG
+tagging in the later participant stage.
 The centralized legacy PowerShell creator's parameter sets are also checked
 against its three local templates.
 
@@ -414,3 +481,15 @@ later, local execution needs explicit Az PowerShell **and** Azure CLI login,
 the correct subscription in both contexts, Hackbox helper implementations, and
 Console-equivalent RGs and RBAC. Run the shared hook first and the participant
 hook second; do not add interactive login to either platform hook.
+
+### Troubleshooting missing Console RG ownership
+
+The Console provisions participant scopes and RBAC before running the hooks, but
+the shared subscription-wide inventory may not yet show a direct RG `Owner`
+assignment. This now produces a warning and conservative quota accounting, not
+the former `Expected exactly one Console-provisioned Owner resource group ...
+found 0` failure. Re-import the complete updated content and retry deployment.
+If the participant hook then reports missing direct ownership, verify the
+Console-supplied RG and its participant's direct `Owner` assignment in IAM,
+allow for RBAC propagation and retry. Subscription `Owner` alone is not a
+replacement for that check. The hooks do not repair missing Console RBAC.

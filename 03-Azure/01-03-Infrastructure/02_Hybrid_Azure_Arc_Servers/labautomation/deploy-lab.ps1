@@ -35,7 +35,7 @@ $owners = @(Invoke-ArcAz -Arguments @(
 if (@($owners | Where-Object {
     $_.principalId -eq $userId -and $_.roleDefinitionName -eq 'Owner' -and $_.scope -eq $ownerScope
 }).Count -eq 0) {
-    throw 'The requested resource group is not owned by this participant.'
+    throw "The requested resource group '$ResourceGroupName' is not owned by this participant through a visible direct Owner assignment (user $userId). Verify Console RG/RBAC provisioning and retry after RBAC propagation. Subscription Owner alone does not satisfy this check."
 }
 Invoke-ArcAz -Arguments @('group', 'show', '--name', $ResourceGroupName) | Out-Null
 Assert-ArcAzureGroupLayout -AzureResourceGroupName $ResourceGroupName -Vms @(

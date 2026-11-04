@@ -220,6 +220,17 @@ function Test-ArcCapacity {
         $ownedGroups = @($owners | Where-Object { $_.principalId -eq $entry.userId } |
             ForEach-Object { ($_.scope -split '/')[-1] } |
             Where-Object { $_ -notin $onPremGroups } | Sort-Object -Unique)
+        if ($ownedGroups.Count -eq 0) {
+            Write-Warning "No Console-provisioned Owner resource group is visible yet for user $($entry.userId). Reserving the full VM and public-IP demand in $($entry.location); resource group tagging, on-prem group creation and mandatory ownership validation are deferred to deploy-lab.ps1."
+            foreach ($type in $script:ArcVmTypes) {
+                $key = "$($entry.location)/$type"
+                if (-not $remaining.ContainsKey($key)) { $remaining[$key] = 0 }
+                $remaining[$key]++
+            }
+            if (-not $remainingIps.ContainsKey($entry.location)) { $remainingIps[$entry.location] = 0 }
+            $remainingIps[$entry.location] += $script:ArcVmTypes.Count
+            continue
+        }
         if ($ownedGroups.Count -ne 1) {
             throw "Expected exactly one Console-provisioned Owner resource group for user $($entry.userId); found $($ownedGroups.Count)."
         }
