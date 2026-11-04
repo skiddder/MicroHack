@@ -264,13 +264,15 @@ Do **not** manually enable Change Tracking on Linux. Instead, use an RG-scoped p
     - **Data Collection Rule Resource Id:** the CTI DCR resource ID copied in step 7.
     - **Applicable Locations:** ensure the list includes the **Azure metadata locations of your Arc machine resources**. These are not necessarily the simulated Azure VMs' physical regions or the workspace region. Keep suitable defaults or select the applicable supported locations.
 11. Configure a **system-assigned managed identity** for the policy assignment and select its metadata location. Review the initiative's required roles and confirm that they are granted to this identity at your participant RG, which contains the Arc machines and DCR. This is the **policy remediation identity**, not a new identity for the Linux guest. If role assignment fails, ask the coach rather than broadening the policy scope.
-12. Review and create the assignment. Because Linux is an **existing** Arc resource, explicitly remediate it:
-    - Open **Policy > Remediation** and select the new assignment.
-    - Re-evaluate resource compliance if the applicable resources are not yet listed.
+12. Review and create the assignment. **Wait for the first policy evaluation to complete before creating remediation tasks.**
+    - Open **Policy > Compliance**, select the new assignment and refresh until resource-level compliance results are available for the Linux Arc machine and the applicable initiative definitions. Evaluation is asynchronous; an empty result or **Not started** is not a completed evaluation.
+    - Confirm that the missing Linux Change Tracking components are reported as **Non-compliant**. Do not proceed to remediation while the Linux resource has not yet been evaluated. If it remains absent after evaluation completes, check the assignment scope and **Applicable Locations**.
+13. Once the initial evaluation has completed, explicitly remediate the **existing** Linux Arc resource:
+    - Open **Policy > Remediation**, select the assignment and confirm that the Linux machine is listed for the relevant non-compliant definition.
     - Create remediation tasks for each **non-compliant Linux `DeployIfNotExists` definition**: AMA installation if missing, Change Tracking extension installation, and CTI DCR association. An initiative assignment alone does not guarantee that all its definitions have been remediated.
     - AMA should already be present from Task 2. Do not reinstall it manually if its policy is compliant. Inspect individual remediation results and resolve failures before proceeding.
-13. On the **Linux Arc resource**, verify that **ChangeTracking-Linux** is provisioned successfully and meets the extension-version requirement from step 6. In the CTI DCR's **Resources**, confirm that Linux is associated. Keep **only one CTI DCR association per machine**; the separate log and VM insights associations remain in place.
-14. Check policy compliance for both Arc machines. New matching machines added to this RG are covered by the same assignment through normal policy evaluation; do not expect immediate deployment or ingestion.
+14. On the **Linux Arc resource**, verify that **ChangeTracking-Linux** is provisioned successfully and meets the extension-version requirement from step 6. In the CTI DCR's **Resources**, confirm that Linux is associated. Keep **only one CTI DCR association per machine**; the separate log and VM insights associations remain in place.
+15. Check policy compliance for both Arc machines after a subsequent evaluation. New matching machines added to this RG are covered by the same assignment through normal policy evaluation; do not expect immediate deployment or ingestion.
 
 ### Verify inventory for both onboarding paths
 
