@@ -30,12 +30,11 @@ The [current Update Manager overview](https://learn.microsoft.com/en-us/azure/up
 
 1. In the [Azure portal](https://portal.azure.com/), search for **Log Analytics workspaces** and select **Create**, or reuse your workspace from an earlier attempt.
 2. Select your event subscription and **existing participant RG**. Use a name such as `mh-arc-servers-automation-law`.
-3. Choose a workspace region supported by the services in this challenge. Do not copy Sweden Central from an old screenshot if it is unsuitable for your event.
+3. Choose a workspace region. (Where you store logs and metrics is independant of where the meta data of your arc machines is stored. You can choose any region - i.e. the one closest to your onprem VMs.)
 4. Review the settings, create the workspace and record its **resource ID** and **region**.
 
 Keep the workspace, DCRs and Arc machines in your own RG for this lab so the policy assignment identity can be granted permissions at that scope.
 For log collection, a DCR's region must match its destination workspace's region; it is not determined by the RG's metadata location.
-If the coach supplies a workspace outside your RG, the coach must also arrange the necessary access.
 
 References: [Create a Log Analytics workspace](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/quick-create-workspace), [DCR permissions and regional requirements](https://learn.microsoft.com/en-us/azure/azure-monitor/data-collection/data-collection-rule-create-edit).
 
@@ -63,28 +62,93 @@ Create separate log DCRs to make their purpose and OS scope explicit:
 4. Create each rule. Under the DCR's **Resources**, confirm the correct Arc machine is associated.
 5. On each Arc machine, open **Extensions** and confirm `AzureMonitorWindowsAgent` or `AzureMonitorLinuxAgent` is provisioned successfully. An installed agent without a DCR association does not establish the requested collection.
 
-An Arc machine can have several DCR associations. Keep these log rules separate from the VM insights and Change Tracking rules below to avoid duplicate ingestion or overwriting specialized configurations.
+*Please note:* An Arc machine can have several DCR associations. Keep these log rules separate from the VM insights and Change Tracking rules below to avoid duplicate ingestion or overwriting specialized configurations.
 For public-endpoint collection of these sources, a separate DCE is not required merely because the machine is Arc-enabled; private-link designs have additional requirements.
 
 References: [Windows event collection](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/data-collection-windows-events), [Syslog collection](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/data-collection-syslog), [Install and manage AMA](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-manage).
 
 ### Verify actual ingestion
 
-After the extension and associations are ready, generate a test event **inside each guest**:
+#### Recommended: generate the events through Azure Arc Run Command
 
-Windows, from an elevated terminal:
+Use [Run Command for Arc-enabled servers](https://learn.microsoft.com/en-us/azure/azure-arc/servers/run-command) to demonstrate cloud-based administration without an interactive SSH/RDP session or guest credentials.
+Azure RBAC authorizes the operation; the Connected Machine agent executes the script inside the guest.
+This generates log records for AMA to collect normally; it does not force an ingestion flush.
+
+**Prerequisites:** both Arc machines must be connected and use Connected Machine agent **1.33 or later**. Run Command must not be blocked by the agent's extension allow/block list.
+Your participant RG `Owner` role includes `Microsoft.HybridCompute/machines/runCommands/write`; with a restricted role, ask the coach to verify that permission.
+Run Command for Arc is currently **preview** and has **no dedicated Azure portal blade**. Do not use the underlying Azure VM's Run Command.
+
+1. In the Azure portal, open **Cloud Shell** and select **Bash**. Use an existing Cloud Shell environment or a session without storage; do not create an additional lab RG just for shell storage.
+2. Use Azure CLI **2.75.0 or later** (`az version`). The `connectedmachine` CLI extension installs automatically on first use; accept the installation prompt if shown.
+3. Replace the placeholders below with your event subscription, participant RG and the two **Arc resource names** shown under **Azure Arc > Machines**. These are not necessarily the simulated Azure VM names.
+4. Read each Arc resource's metadata location on its **Overview** page and enter it below. This is not the Log Analytics workspace location or necessarily the simulated VM's physical region.
+5. Run the following in Cloud Shell, not in either guest. If a CLI command fails, resolve the error before continuing.
+
+```bash
+subscriptionId="<event-subscription-id>"
+resourceGroup="<your-participant-rg>"
+windowsMachine="<windows-arc-resource-name>"
+linuxMachine="<linux-arc-resource-name>"
+windowsArcLocation="<windows-arc-resource-location>"
+linuxArcLocation="<linux-arc-resource-location>"
+
+runSuffix=$(date -u +%Y%m%d%H%M%S)
+windowsRunName="mh-ama-windows-$runSuffix"
+linuxRunName="mh-ama-linux-$runSuffix"
+
+az connectedmachine run-command create \
+  --subscription "$subscriptionId" --resource-group "$resourceGroup" \
+  --machine-name "$windowsMachine" --location "$windowsArcLocation" \
+  --name "$windowsRunName" \
+  --script 'eventcreate /T INFORMATION /ID 100 /L APPLICATION /SO MicroHack /D "MicroHack AMA Windows test"; exit $LASTEXITCODE'
+
+az connectedmachine run-command create \
+  --subscription "$subscriptionId" --resource-group "$resourceGroup" \
+  --machine-name "$linuxMachine" --location "$linuxArcLocation" \
+  --name "$linuxRunName" \
+  --script 'logger -p user.notice -t MicroHack "MicroHack AMA Linux test"'
+
+az connectedmachine run-command show \
+  --subscription "$subscriptionId" --resource-group "$resourceGroup" \
+  --machine-name "$windowsMachine" --name "$windowsRunName" \
+  --query '{provisioningState:provisioningState,execution:instanceView}' --output json
+
+az connectedmachine run-command show \
+  --subscription "$subscriptionId" --resource-group "$resourceGroup" \
+  --machine-name "$linuxMachine" --name "$linuxRunName" \
+  --query '{provisioningState:provisioningState,execution:instanceView}' --output json
+```
+
+Check that each command's `instanceView` reports execution state **Succeeded** and exit code **0**, and inspect its output/error.
+If execution is still in progress, repeat the corresponding `show` command. Resource provisioning success alone is not proof that the guest command succeeded.
+The timestamped names create distinct executions when you repeat the test and remain within Linux's 36-character Run Command name limit.
+No storage account, script upload or guest password is needed for these inline scripts.
+
+Open the Arc machine's **Activity log** to inspect the Run Command create/update operation and its caller.
+This demonstrates Azure control-plane authorization and auditing while the guest remains reachable through Arc rather than a public administration port.
+See the [current CLI reference](https://learn.microsoft.com/en-us/cli/azure/connectedmachine/run-command?view=azure-cli-latest) for command details.
+
+#### Fallback: generate the same events in a guest session
+
+If Run Command is unavailable or intentionally blocked, agree an alternative with the coach.
+The following local commands generate the same records, but do not demonstrate the Arc-based administration path.
+
+Windows, from an elevated guest terminal:
 
 ```powershell
 eventcreate /T INFORMATION /ID 100 /L APPLICATION /SO MicroHack /D "MicroHack AMA Windows test"
 ```
 
-Linux:
+Linux, from a guest terminal:
 
 ```bash
 logger -p user.notice -t MicroHack "MicroHack AMA Linux test"
 ```
 
-In the workspace's **Logs**, select a suitable time range and run these queries separately:
+#### Verify the records in Log Analytics
+
+Whichever method you used, open the workspace's **Logs**, select a suitable time range and run these queries separately:
 
 ```kusto
 Heartbeat
@@ -106,7 +170,7 @@ Syslog
 | project TimeGenerated, Computer, Facility, SeverityLevel, SyslogMessage
 ```
 
-Initial ingestion is asynchronous. A missing table before its first record or an empty result is **not** proof of success.
+Initial ingestion is asynchronous. It can take several minutes until the logs become visible. A missing table before its first record or an empty result is **not** proof of success.
 Check the selected workspace, DCR resources/destination, event filters, extension status and outbound connectivity before proceeding.
 
 ## Task 3: Enable classic VM insights and enforce it with Azure Policy
@@ -145,10 +209,9 @@ See [Monitor a hybrid machine with VM insights](https://learn.microsoft.com/en-u
 5. Configure the assignment's **system-assigned managed identity** on the **Managed identity** tab (or corresponding identity section), and select its metadata location.
    This is the **policy remediation identity**, not the Arc machine identity or the onboarding service principal.
 6. Review the initiative's required roles. Confirm the assignment identity has those roles at the scopes needed to deploy extensions and associate the DCR. Portal assignment can grant the roles when you have permission; if access is missing, ask the coach. Do not broaden the assignment to subscription scope.
-7. Create the assignment. For these **existing** Arc machines, open **Policy > Remediation**, select the assignment and create remediation tasks for each applicable AMA installation and DCR-association `DeployIfNotExists` definition. Re-evaluate compliance when required.
+7. Create the assignment. *Please note:* For the **existing** Arc machines the policy will not automatically remediate - only newly created arc machines in the assignment scope will automatically be configured. For exising VMs you need to create a remediation task if needed: Open **Policy > Remediation**, select the assignment and create remediation tasks for each applicable AMA installation and DCR-association `DeployIfNotExists` definition. Re-evaluate compliance when required.
 8. Verify individual remediation results and extension/association state. Disabled Dependency Agent definitions do not need remediation.
 
-The old checklist of six fixed policy reference names is not a reliable instruction for current initiative versions.
 Do **not** install Dependency Agent: [VM insights Map and Dependency Agent are deprecated and retire on 2028-06-30](https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vminsights-maps-retirement).
 Their retirement does not retire AMA or the classic performance view.
 
