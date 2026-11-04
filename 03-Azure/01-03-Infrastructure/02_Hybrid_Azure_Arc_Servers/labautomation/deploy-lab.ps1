@@ -14,8 +14,9 @@ param(
 . (Join-Path $PSScriptRoot 'common.ps1')
 Assert-ArcAssets
 Assert-ArcContext
-if ($DeploymentType -ne 'resourcegroup' -or [string]::IsNullOrWhiteSpace($ResourceGroupName)) {
-    throw 'This lab requires resourcegroup deployment into the resource group supplied by the Console.'
+if ($DeploymentType -notin @('resourcegroup', 'resourcegroup-with-subscriptionowner') -or
+    [string]::IsNullOrWhiteSpace($ResourceGroupName)) {
+    throw 'This lab requires resourcegroup or resourcegroup-with-subscriptionowner deployment into the resource group supplied by the Console.'
 }
 if ($AllowedEntraUserIds.Count -ne 1) {
     throw 'Exactly one participant per resource group is required.'

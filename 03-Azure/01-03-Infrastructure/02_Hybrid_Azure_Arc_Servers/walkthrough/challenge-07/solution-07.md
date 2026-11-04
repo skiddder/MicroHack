@@ -75,11 +75,12 @@ Find it here [AddKey.zip](../../labautomation/AddKey.zip).
 
 ### Create the Machine Configuration as Azure Policy
 
-> **Hackbox Console:** The coach must publish the custom policy definition in
-> step 3 at an authorized subscription or management-group scope. Participants
-> cannot create definitions at these scopes with subscription Reader; they can
-> assign the published definition to their own RG. Management-group operations
-> require corresponding management-group permissions, not just subscription Owner.
+> **Hackbox Console:** With the default subscription Owner role, participants can
+> publish custom policy definitions at subscription scope, coordinated with the
+> coach, and assign them to their own RG. The example in step 3 below instead
+> publishes at management-group scope and therefore still requires a coach with
+> corresponding management-group permissions. Subscription Owner does not grant
+> those permissions.
 
 1. You will need to upload the zip file to a Storage Account and create a SAS with read permissions.
 

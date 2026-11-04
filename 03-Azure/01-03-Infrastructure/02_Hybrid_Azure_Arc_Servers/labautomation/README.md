@@ -21,7 +21,7 @@ run cleanup, request quota increases or perform demo Arc onboarding.
 
 ## Console configuration
 
-Import this MicroHack with `deploymentType = resourcegroup`. The Hackbox Console
+Import this MicroHack with `deploymentType = resourcegroup-with-subscriptionowner`. The Hackbox Console
 controls both the participant count and subscription packing. **Configure the
 Console to put all participants in exactly one subscription.** This lab deliberately
 does not set `labsPerSubscription`, a default participant count, or a participant
@@ -34,8 +34,20 @@ Console defaults; the coach can remove, reorder or replace regions to respond
 to subscription restrictions and capacity changes. Both hooks use exactly the
 supplied list, not a hard-coded comparison with those defaults.
 
-Each user receives one resource group with `Owner`, and only `Reader` on the
-subscription. No additional resource group is created by these hooks. No Copilot
+Each user receives one resource group with a direct `Owner` assignment and
+**`Owner` on the shared subscription**, provisioned by the Console. This permits
+RG creation, including service-managed RGs, and subscription-scope deployment
+validation (`Microsoft.Resources/deployments/validate/action`) for Challenge 5.
+**Participant RGs are not authorization boundaries:** every participant can
+modify other participants' resources and subscription-level role assignments.
+Use this only in the disposable event subscription and coordinate shared changes
+with the coach. Subscription Owner does not grant Entra or management-group rights.
+
+The participant hook accepts both this mode and the older `resourcegroup` mode
+for compatibility. The older mode retains the Console's subscription `Reader`
+permissions and does not provide the additional privileges required here.
+Dedicated `subscription` deployments remain unsupported.
+No additional resource group is created by these hooks. No Copilot
 or Microsoft 365 licenses are requested. Cost fields are omitted; the documented
 Console fallback is USD 25 per lab/day, an estimate rather than a spending limit.
 
@@ -70,6 +82,28 @@ The canonical deployment assets have been moved here, not copied:
 
 Re-import the complete folder after updating the Console content. Importing only
 the hook scripts is insufficient.
+
+### Re-import and verify the new event
+
+1. Re-import the complete `labautomation` content and create a **new event**.
+   Verify that the Console selects `resourcegroup-with-subscriptionowner` and
+   packs all participants into exactly one subscription.
+2. After provisioning, check **Access control (IAM)** for a participant:
+   subscription `Owner` and the direct `Owner` assignment on their own RG must
+   both be present. The hooks still check the participant's direct RG ownership
+   before deploying VMs; they do not assign or repair subscription roles.
+3. Use a participant session, allowing for RBAC propagation and refreshing the
+   session if necessary. Verify creation of a uniquely named empty test RG with
+   `SecurityControl=Ignore`, then delete only that test RG.
+4. Verify the subscription-scope deployment validation in Challenge 5 with the
+   participant account, not the coach or deployment service principal.
+
+These are live Console acceptance checks, not guarantees provided by offline
+tests. The new mode does not automatically tag additional service-managed RGs
+or bypass Azure Policy/deny assignments. Coordinate their governance handling
+with the coach before using features that create them.
+It also does not switch Challenge 2 to OpenTelemetry; that migration remains
+tracked in [#11](https://github.com/skiddder/MicroHack/issues/11).
 
 Both hooks verify the Az PowerShell subscription and the active isolated CLI
 subscription before proceeding. Account-context queries use that verified current
@@ -253,12 +287,15 @@ The hooks do not delete resources or perform automatic cleanup.
 
 ## Participant exercises and coach duties
 
-Use the Console-provided resource group in **all** challenges and walkthroughs;
-replace example names such as `mh-arc-servers-rg` with that group. Do not create a
-second group. RG-scoped resource creation, role assignments and policy assignments
-remain participant tasks.
+Use the Console-provided resource group for the participant resources in the
+challenges and walkthroughs; replace example names such as `mh-arc-servers-rg`
+with that group. Create additional RGs only when an approved feature requires
+them, and arrange `SecurityControl=Ignore` for those groups as well.
+RG-scoped resource creation, role assignments and policy assignments remain
+participant tasks. Although participants now have subscription Owner, coordinate
+subscription-wide changes with the coach because they affect the whole event.
 
-The coach handles operations requiring permissions beyond RG `Owner`:
+The coach handles directory/management-group access and coordinates shared settings:
 
 - Create an Entra application/service principal for each user when needed for
   onboarding, and arrange secure delivery of its credentials. The onboarding role
@@ -266,8 +303,9 @@ The coach handles operations requiring permissions beyond RG `Owner`:
 - Confirm resource provider registration (automated by the shared hook).
 - Enable/configure subscription-wide Defender for Servers plans and related
   shared settings for challenge 4, with explicit awareness of the charges.
-- Publish any custom policy definitions at subscription or management-group scope
-  for challenge 7; participants assign them only to their own RG.
+- Coordinate custom policy definitions at subscription scope for challenge 7;
+  participants can publish them with subscription Owner and assign them to their
+  own RG. Publishing at management-group scope still requires separate permissions.
 
 ## Offline validation
 
@@ -278,7 +316,8 @@ pwsh -NoProfile -File .\tests\offline.Tests.ps1
 ```
 
 The tests replace Azure commands and Hackbox helpers with in-process mocks. They
-check PowerShell parsing, configuration/Bash parity, the real template parameter
+check PowerShell parsing, the subscription-owner default and both supported
+RG deployment modes, configuration/Bash parity, the real template parameter
 sets, placement, quota thresholds, credentials, asynchronous commands, failure
 propagation and re-runs. They do **not** validate an actual Azure deployment.
 They also deploy from an isolated copy of only the runtime `labautomation`

@@ -9,6 +9,12 @@ Duration: 20 minutes
 
 Please ensure that you successfully passed [challenge 2](../../Readme.md#challenge-3) before continuing with this challenge, as we need a Log Analytics Workspace for this feature.
 
+> **Hackbox Console:** The default `resourcegroup-with-subscriptionowner` mode
+> grants participants Owner on the shared subscription as well as their own RG.
+> This covers `Microsoft.Resources/deployments/validate/action` at subscription
+> scope for the setup validation below. If validation reports missing permissions,
+> ask the coach to verify the participant's subscription Owner assignment and
+> allow for RBAC propagation. Continue to select your own RG and workspace.
 
 ## Task 1: Set up the Best Practices Assessment for a Windows server
 

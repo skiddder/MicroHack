@@ -11,9 +11,10 @@ Please ensure that you successfully passed [challenge 3](../../Readme.md#challen
 ### Task 1: Verify Defender for Cloud settings
 
 > **Hackbox Console:** Ask the coach to enable/configure the subscription-wide
-> Defender plan and monitoring settings. Participants have subscription Reader
-> and must not change these settings; continue with inspection of your own Arc
-> servers after coach preparation.
+> Defender plan and monitoring settings. Participants have subscription Owner in
+> the default Console mode, but changes affect all participants and can incur
+> charges. Do not change these settings without coach approval; continue with
+> inspection of your own Arc servers after coach preparation.
 
 * In the Defender for Cloud environment settings, click on the subscription your resource group resides in
 ![image](./img/1.png)

@@ -363,7 +363,7 @@ function Invoke-Lab {
     param(
         [string]$User = $users[0],
         [string]$Group = 'rg-01',
-        [string]$Type = 'resourcegroup',
+        [string]$Type = 'resourcegroup-with-subscriptionowner',
         [string[]]$Locations = $regions,
         [string]$LabPath = $labRoot
     )
@@ -378,7 +378,7 @@ foreach ($file in Get-ChildItem $labRoot -Filter '*.ps1' -Recurse) {
     Assert-Test ($errors.Count -eq 0) "PowerShell parsing: $($file.Name): $errors"
 }
 $defaults = Get-Content (Join-Path $labRoot 'lab-defaults.json') -Raw | ConvertFrom-Json -AsHashtable
-Assert-Test ($defaults.deploymentType -eq 'resourcegroup') 'Resource group isolation'
+Assert-Test ($defaults.deploymentType -eq 'resourcegroup-with-subscriptionowner') 'Default requests participant RGs with subscription Owner'
 Assert-Test ($defaults.groups.Count -eq 0) 'No extra licenses'
 Assert-Test (-not $defaults.ContainsKey('labsPerSubscription')) 'Console controls subscription packing'
 Assert-Test (-not $defaults.ContainsKey('estimatedDailyCostsUsd')) 'No invented cost estimate'
@@ -456,6 +456,22 @@ Assert-Test ($defaultRegions.Count -gt 0 -and '' -notin $defaultRegions) 'Defaul
 Assert-Test (($bashRegions -join ',') -eq ($defaultRegions -join ',')) 'Default region order matches verified Bash independently of Console test fixtures'
 Assert-Test ($source -match 'virtualWinMachineSize="Standard_D4ads_v5"') 'Windows SKU matches Bash'
 Assert-Test ($source -match 'virtualLnxMachineSize="Standard_D2ads_v5"') 'Linux SKU matches Bash'
+
+foreach ($mode in @('resourcegroup-with-subscriptionowner', 'resourcegroup')) {
+    Reset-Mock -Count 1
+    Invoke-Shared
+    $credentials = @(Invoke-Lab -Type $mode)
+    Assert-Test ($global:ArcMock.deployments.Count -eq 2) "$mode deploys the same two participant VMs"
+    Assert-Test (@($global:ArcMock.vms | Where-Object { $_.resourceGroup -ne 'rg-01' }).Count -eq 0) "$mode deploys only into the Console-supplied participant RG"
+    Assert-Test ($credentials.Count -eq 5) "$mode returns the same dashboard credentials"
+    Assert-Test (@($global:ArcMock.calls | Where-Object {
+        $_[0] -eq 'role' -and ($_[1] -ne 'assignment' -or $_[2] -ne 'list')
+    }).Count -eq 0) "$mode leaves RBAC provisioning to the Console"
+    Assert-Throws { Invoke-Lab -Type $mode -Group 'rg-someone-else' } 'not owned'
+    Assert-Throws { Invoke-Lab -Type $mode -Group '' } 'requires resourcegroup'
+    Assert-Throws { Invoke-Lab -Type $mode -Group ' ' } 'requires resourcegroup'
+    Assert-Test ($global:ArcMock.deployments.Count -eq 2) "$mode rejects invalid RGs without additional VM deployments"
+}
 
 Reset-Mock
 Invoke-Shared

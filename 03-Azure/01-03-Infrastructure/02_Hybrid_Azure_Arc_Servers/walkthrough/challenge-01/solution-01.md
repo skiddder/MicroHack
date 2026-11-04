@@ -11,8 +11,9 @@ Please ensure that you successfully verified the [General prerequisits](../../Re
 ### Task 1: Create Azure Resource Group
 
 > **Hackbox Console:** Skip RG creation and use your existing user resource group
-> in every task and screenshot example. You have Owner on this group, not on the
-> shared subscription.
+> for this exercise and the screenshot examples. In the default
+> `resourcegroup-with-subscriptionowner` mode, you have Owner on this group and
+> the shared subscription. Do not change other participants' resources.
 
 Sign in to the [Azure Portal](https://portal.azure.com/).
 
@@ -35,7 +36,8 @@ Sign in to the [Azure Portal](https://portal.azure.com/).
 ### Task 3: Enable Service providers
 
 > **Hackbox Console:** The shared deployment hook registers the providers.
-> Registration and subscription-level troubleshooting are coach tasks.
+> Coordinate any further registration or subscription-level troubleshooting with
+> the coach because the subscription is shared.
 
 * Enable Azure Resource Provider
   [Azure Arc Azure resource providers](https://learn.microsoft.com/en-us/azure/azure-arc/servers/prerequisites#azure-resource-providers)

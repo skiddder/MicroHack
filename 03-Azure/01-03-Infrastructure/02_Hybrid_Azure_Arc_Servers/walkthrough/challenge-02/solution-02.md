@@ -8,7 +8,7 @@ Duration: 40 minutes - Allow additional time for policy evaluation, initial data
 
 - Complete [Challenge 1](../../challenges/challenge-01.md). Both servers must appear as **Connected** under **Azure Arc > Machines**, with their system-assigned managed identities enabled.
 - Use the **Arc machine resources** (`Microsoft.HybridCompute/machines`), not the underlying Azure IaaS VMs used to simulate on-premises servers. Their Azure VM guest agents were deliberately disabled; do not re-enable them or remove the IMDS block.
-- In the Hackbox Console, keep everything in your existing participant RG and subscription. You have RG `Owner`, not subscription `Owner`. Keep **`SecurityControl=Ignore`** on the RG. Provider registration, subscription-wide policy and permissions outside your RG are coach tasks.
+- In the Hackbox Console's default `resourcegroup-with-subscriptionowner` mode, you have `Owner` on your participant RG and the shared subscription. Use your participant RG for this walkthrough and keep **`SecurityControl=Ignore`** on it. Coordinate subscription-wide changes or additional managed RGs with the coach; do not modify other participants' resources. Entra and management-group permissions are separate.
 - Verify the [AMA supported operating systems](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-supported-operating-systems), [Change Tracking support matrix](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/change-tracking-inventory-support-matrix) and service availability for your assigned region.
 - Allow the documented outbound connections for [AMA](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-network-configuration), Azure Arc and your OS update sources. This exercise does not require opening additional public inbound ports.
 - Ask the coach to approve service costs and update/reboot timing. Do not activate Windows Server benefits, paid plans or licenses merely to make a portal blade appear.
@@ -180,8 +180,8 @@ Microsoft now recommends [OpenTelemetry metrics-based monitoring](https://learn.
 It stores metrics in an **Azure Monitor workspace**, not the Log Analytics workspace used for this lab's logs.
 Creating that workspace also creates a [managed resource group](https://learn.microsoft.com/en-us/azure/azure-monitor/metrics/azure-monitor-workspace-manage).
 
-This MicroHack deliberately uses the still-supported **logs-based (classic)** VM insights experience to preserve the existing one-RG-per-participant setup and its Log Analytics/Policy learning goals.
-Do not accept portal defaults that create additional workspaces or managed RGs outside your permissions.
+This walkthrough still uses the supported **logs-based (classic)** VM insights experience and its Log Analytics/Policy learning goals. The subscription Owner permission change does not itself migrate monitoring to OpenTelemetry; that work is tracked in [#11](https://github.com/skiddder/MicroHack/issues/11).
+Do not accept portal defaults that create unapproved additional workspaces or managed RGs merely because your new role permits it.
 A coach can arrange an OpenTelemetry alternative with an approved Azure Monitor workspace, access and governance tagging; it is not an implicit prerequisite of this walkthrough.
 
 ### Enable performance collection
