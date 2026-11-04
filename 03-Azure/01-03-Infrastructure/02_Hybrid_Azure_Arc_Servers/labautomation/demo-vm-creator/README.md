@@ -5,7 +5,7 @@ scripts now live in the [labautomation root](..). Both creators
 resolve them relative to their own script location, so they can still be launched
 from this directory or another working directory. Windows Server 2012 R2
 templates and parameters remain here. The Console deployment creates
-only Ubuntu 20.04 and Windows Server 2025, one pair per user resource group.
+only Ubuntu 24.04 LTS and Windows Server 2025, one pair per user resource group.
 Windows Server 2012 R2 is not provisioned. The instructions below describe the
 standalone Bash creator, which still attempts three VMs per participant and
 requires a usable Windows Server 2012 R2 image. The verified source of region/SKU
@@ -19,7 +19,12 @@ Run Command scripts locally from this setup tree instead of downloading them
 from another repository or branch. Its separate authentication, subscription,
 VM sizing and three-VM workflow are unchanged; it is not a Console hook.
 
-For each participant, you will need one Windows 2012 R2, one Windows 2025 and one Linux VM. You can provide the number of participants in the script. The script will then create 1 Windows 2012 R2, 1 Windows 2025 and 1 Ubuntu 24_04-lts-gen2 VM for each participant. 
+For each participant, you will need one Windows 2012 R2, one Windows 2025 and one Linux VM. You can provide the number of participants in the script. The script will then create 1 Windows 2012 R2, 1 Windows 2025 and 1 Ubuntu Server 24.04 LTS x64 Gen2 VM for each participant.
+
+Both standalone creators and the Console hook use the shared
+[Linux template](../template-linux.json), with image
+`Canonical:ubuntu-24_04-lts:server:latest` (standard Ubuntu, not Ubuntu Pro).
+This changes new deployments only; it does not upgrade existing Linux VMs.
 
 ## Deployment instructions
 Both creators set `SecurityControl=Ignore` on new resource groups and merge it

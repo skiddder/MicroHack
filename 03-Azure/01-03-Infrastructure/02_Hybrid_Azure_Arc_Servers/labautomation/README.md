@@ -82,7 +82,7 @@ Per participant, into their existing resource group:
 
 | VM | Image from the existing template | SKU |
 | --- | --- | --- |
-| `vm-linux-mh` | Ubuntu Server 20.04 LTS Gen2 | `Standard_D2ads_v5` |
+| `vm-linux-mh` | Ubuntu Server 24.04 LTS x64 Gen2 (non-Pro) | `Standard_D2ads_v5` |
 | `vm-win2025-mh` | Windows Server 2025 Datacenter Gen2 | `Standard_D4ads_v5` |
 
 Windows Server 2012 R2 is **not** deployed because no usable image is currently
@@ -90,14 +90,25 @@ provided for this automation. Challenge 6 therefore needs a separately supplied
 server, or is skipped. Arc onboarding and the challenge resources remain
 participant exercises.
 
+The shared Linux template uses `Canonical:ubuntu-24_04-lts:server:latest`,
+the [official standard Ubuntu Server x64 Gen2 image](https://ubuntu.com/azure/docs/azure-how-to/instances/find-ubuntu-images/).
+Ubuntu 24.04 is in standard security maintenance, so the Update Manager exercise
+does not require Ubuntu Pro/ESM for standard OS security updates.
+
+**Existing environments:** this image change applies to newly created Linux
+VMs only. Console reruns reuse existing VMs, including Ubuntu 20.04; they do not
+perform an in-place OS upgrade or replace the OS disk. Ask the coach to arrange
+an approved rebuild of an old Linux lab VM before repeating Challenge 2. No
+existing resources are automatically deleted or migrated.
+
 The existing ARM templates, parameter files, public IPs, disks and networking are
 reused. SSH (22), RDP (3389), and Windows WinRM (5985) retain their existing public
 inbound rules. This is a disposable training environment, not a production
 network design. Do not put sensitive data on these VMs.
 
 The baseline is [create_vms.sh](demo-vm-creator/create_vms.sh), not
-the older PowerShell creator. The existing ARM templates, parameter files and
-guest scripts were moved here without changing their contents. The Bash creator
+the older PowerShell creator. ARM templates, parameter files and guest scripts
+are shared from this directory, including the Ubuntu 24.04 image selection. The Bash creator
 now resolves these shared files relative to its own location; its VM creation,
 region/SKU distribution and asynchronous reconfiguration logic are unchanged.
 Its separate Windows Server 2012 R2 template and parameters remain in the

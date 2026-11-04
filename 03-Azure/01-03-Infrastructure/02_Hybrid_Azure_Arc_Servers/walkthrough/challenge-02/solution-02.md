@@ -320,3 +320,5 @@ InsightsMetrics
 
 If data is missing, troubleshoot the relevant service's extension, DCR, association, identity and network path.
 Waiting a fixed ten minutes is not a substitute for checking those results.
+
+You successfully completed challenge 3! 🚀🚀🚀

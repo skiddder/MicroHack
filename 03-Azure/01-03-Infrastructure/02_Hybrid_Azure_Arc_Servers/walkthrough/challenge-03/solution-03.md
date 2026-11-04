@@ -26,6 +26,8 @@ Please ensure that you successfully passed [challenge 2](../../Readme.md#challen
 
 ![image](./img/3_Assign_KeyVault_permissions.jpg)
 
+Then assign the *Key Vault Secrets Officer* role to yourself.
+
 2. Create a new secret called *kv-secret* and give it a value like *This-is-top-secret!!!*.
 
 ![image](./img/4_Create_Secret.png)

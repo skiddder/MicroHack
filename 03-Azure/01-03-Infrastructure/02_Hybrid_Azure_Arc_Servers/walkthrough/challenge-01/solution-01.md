@@ -42,7 +42,7 @@ Sign in to the [Azure Portal](https://portal.azure.com/).
 
 ### Task 4: Prepare on-prem Server OS
 
-> **Hackbox Console:** Ubuntu 20.04 and Windows Server 2025 are provisioned.
+> **Hackbox Console:** Ubuntu 24.04 LTS and Windows Server 2025 are provisioned.
 > Their OS reconfiguration was only submitted asynchronously: verify guest-agent
 > shutdown, IMDS blocking and Windows reboot completion as described in the
 > [automation guide](../../labautomation/README.md#credentials-and-asynchronous-reconfiguration).

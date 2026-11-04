@@ -403,6 +403,14 @@ foreach ($file in Get-ChildItem $labRoot -Filter '*.json' -Recurse) {
     $document = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json -AsHashtable
     Assert-Test ($null -ne $document) "Central setup JSON parses: $($file.Name)"
 }
+$linuxTemplate = Get-Content (Join-Path $labRoot 'template-linux.json') -Raw | ConvertFrom-Json -AsHashtable
+$linuxVm = @($linuxTemplate.resources | Where-Object { $_.type -eq 'Microsoft.Compute/virtualMachines' })
+Assert-Test ($linuxVm.Count -eq 1) 'Shared Linux template defines one VM'
+$linuxImage = $linuxVm[0].properties.storageProfile.imageReference
+Assert-Test ($linuxImage.publisher -ceq 'Canonical') 'Linux image uses the official Canonical publisher'
+Assert-Test ($linuxImage.offer -ceq 'ubuntu-24_04-lts') 'Linux image uses Ubuntu 24.04 LTS'
+Assert-Test ($linuxImage.sku -ceq 'server') 'Linux image uses standard non-Pro x64 Gen2 Server'
+Assert-Test ($linuxImage.version -ceq 'latest') 'Linux image uses the latest Ubuntu 24.04 image version'
 $creatorPath = Join-Path $labRoot 'demo-vm-creator\create_vms.ps1'
 $creatorSource = Get-Content -LiteralPath $creatorPath -Raw
 Assert-Test (-not ($creatorSource -match '-TemplateUri|-SourceScriptUri|raw\.githubusercontent\.com')) 'Legacy PowerShell creator consumes local setup assets rather than remote repository URLs'
