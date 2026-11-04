@@ -219,9 +219,7 @@ References: [VM insights initiatives and their parameters](https://learn.microso
 
 ## Task 4: Assess and install updates with Azure Update Manager
 
-Do not wait for AMA ingestion to enable Update Manager. Its own Arc extensions are installed automatically when you first trigger an update operation.
-It uses Windows Update/WSUS or the configured Linux repositories; it does not supply updates or bypass OS support/subscription requirements.
-For Ubuntu 20.04, check the configured repositories and any Ubuntu Pro/ESM requirements with the coach rather than assuming extended-support packages are available.
+Azure Update Manager uses Windows Update/WSUS or the configured Linux repositories to check for updates; it does not supply updates or bypass OS support/subscription requirements.
 
 1. Open **Azure Update Manager > Machines** and filter to your subscription and RG. Select the **Arc-enabled** Windows and Linux machines.
 2. Select **Check for updates** / **Assess now**. Wait for the assessment status and inspect failures rather than treating an empty update list as a successful assessment.
@@ -229,7 +227,7 @@ For Ubuntu 20.04, check the configured repositories and any Ubuntu Pro/ESM requi
    - Definition: **Configure periodic checking for missing system updates on Azure Arc-enabled servers**.
    - Scope: your participant RG.
    - Parameters: **Assessment mode = AutomaticByPlatform** and **OS Type = Windows**.
-   - Configure the remediation managed identity and required roles, then create a remediation task for the existing machine.
+   - Configure the remediation managed identity and required roles, then **create a remediation task** for the existing machine.
 4. Create a second assignment with **OS Type = Linux** and remediate it as well. Periodic assessment checks approximately every 24 hours; it does **not** install updates.
 5. Back in Update Manager, review missing updates. Select **One-time update** / **Install updates now** to install the approved OS updates, or create a maintenance schedule if the coach has agreed.
 6. Review the selected machines, update selections, maintenance window and reboot settings before starting. Monitor **History** and individual installation results.
@@ -245,13 +243,39 @@ References: [Assess updates](https://learn.microsoft.com/en-us/azure/update-mana
 Use the current **Change Tracking and Inventory** service, not an Automation-account-based onboarding workflow.
 There is no step here to activate Windows Server Azure benefits. Licensing/benefit decisions belong to the coach and are not an agent-installation prerequisite in the current quickstart.
 
+### Manually enable the Windows server
+
 1. Open **Azure Arc > Machines**, select your Windows server and go to **Operations > Change tracking**.
-2. Select **Enable change tracking and inventory feature with AMA**, then **Enable**. Follow the [current Arc quickstart](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/quickstart-monitor-changes-collect-inventory-azure-change-tracking-inventory).
-3. Review any offered workspace settings and select your existing workspace. After deployment, inspect the generated Change Tracking DCR (typically `ct-dcr-...`), its destination and its association. Do not assume it reused the workspace from Task 1.
-4. If the flow cannot select your required workspace, create a dedicated CTI DCR using the current [Change Tracking DCR template procedure](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/create-data-collection-rule), in your participant RG with the Task 1 workspace resource ID. Associate that rule with the Arc machine through **Monitor > Data Collection Rules > your CTI rule > Resources > Add**. Keep **only one CTI DCR association per machine**.
-5. Confirm AMA and the **ChangeTracking-Windows** extension are installed successfully. The [current overview](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/overview-monitoring-agent) requires Change Tracking extension **2.20.0.0 or later**. Do not copy older extension-version examples from historical screenshots.
-6. Repeat for Linux using its Arc resource and **ChangeTracking-Linux**, where supported.
-7. In **Change Tracking and Inventory**, filter to your RG/machines and inspect **Inventory** / software data after initial collection. For policy-based rollout to further machines, use the built-in **Enable Change Tracking and Inventory for Arc-enabled virtual machines** initiative with the dedicated CTI DCR and remediate its applicable definitions.
+2. In the DCR drop down choose "New Default Data Collection rule". Then in the Log Analytics drop down select your own workspace you created earlier in your resource group.
+3. Click the **Enable** button. Follow the [current Arc quickstart](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/quickstart-monitor-changes-collect-inventory-azure-change-tracking-inventory).
+4. After deployment, inspect the generated Change Tracking DCR (typically `ct-dcr-...`), its destination and its association. Do not assume it reused the workspace from Task 1.
+5. If the flow cannot select your required workspace, create a dedicated CTI DCR using the current [Change Tracking DCR template procedure](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/create-data-collection-rule), in your participant RG with the Task 1 workspace resource ID. Associate that rule with the Arc machine through **Monitor > Data Collection Rules > your CTI rule > Resources > Add**. Keep **only one CTI DCR association per machine**.
+6. Confirm AMA and the **ChangeTracking-Windows** extension are installed successfully. The [current overview](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/overview-monitoring-agent) requires Change Tracking extension **2.20.0.0 or later**. Do not copy older extension-version examples from historical screenshots.
+
+### Enable the Linux server at scale with Azure Policy
+
+Do **not** manually enable Change Tracking on Linux. Instead, use an RG-scoped policy initiative to onboard it and demonstrate how the same configuration can be enforced for additional Arc machines.
+
+7. Open the **CTI DCR** created or selected during Windows onboarding and copy its full **resource ID**. Verify that its destination is your workspace from Task 1. Reuse this dedicated CTI rule, not the event/Syslog or VM insights DCR.
+8. Open **Policy > Definitions**, filter to **Initiative** and the **Change Tracking and Inventory** category, and select **Enable ChangeTracking and Inventory for Arc-enabled virtual machines**. Choose the **Arc-enabled** initiative, not the Azure VM or VM scale set variant.
+9. Select **Assign initiative**. Set **Scope** to your event subscription and **participant RG** and use an assignment name such as `mh-cti-arc`. Keep the Linux Arc machine in scope. The already configured Windows Arc machine is also evaluated; existing compliant components do not need remediation.
+10. Under **Parameters**, show all parameters and configure:
+    - **Effect for all constituent policies:** `DeployIfNotExists`.
+    - **Data Collection Rule Resource Id:** the CTI DCR resource ID copied in step 7.
+    - **Applicable Locations:** ensure the list includes the **Azure metadata locations of your Arc machine resources**. These are not necessarily the simulated Azure VMs' physical regions or the workspace region. Keep suitable defaults or select the applicable supported locations.
+11. Configure a **system-assigned managed identity** for the policy assignment and select its metadata location. Review the initiative's required roles and confirm that they are granted to this identity at your participant RG, which contains the Arc machines and DCR. This is the **policy remediation identity**, not a new identity for the Linux guest. If role assignment fails, ask the coach rather than broadening the policy scope.
+12. Review and create the assignment. Because Linux is an **existing** Arc resource, explicitly remediate it:
+    - Open **Policy > Remediation** and select the new assignment.
+    - Re-evaluate resource compliance if the applicable resources are not yet listed.
+    - Create remediation tasks for each **non-compliant Linux `DeployIfNotExists` definition**: AMA installation if missing, Change Tracking extension installation, and CTI DCR association. An initiative assignment alone does not guarantee that all its definitions have been remediated.
+    - AMA should already be present from Task 2. Do not reinstall it manually if its policy is compliant. Inspect individual remediation results and resolve failures before proceeding.
+13. On the **Linux Arc resource**, verify that **ChangeTracking-Linux** is provisioned successfully and meets the extension-version requirement from step 6. In the CTI DCR's **Resources**, confirm that Linux is associated. Keep **only one CTI DCR association per machine**; the separate log and VM insights associations remain in place.
+14. Check policy compliance for both Arc machines. New matching machines added to this RG are covered by the same assignment through normal policy evaluation; do not expect immediate deployment or ingestion.
+
+### Verify inventory for both onboarding paths
+
+In **Change Tracking and Inventory**, filter to your RG/machines and inspect **Inventory** / software data after initial collection.
+Confirm that both the manually enabled **Windows** server and the policy-enabled **Linux** server report data. Successful remediation is not, on its own, proof of inventory ingestion.
 
 Do not add Windows Event Logs or Syslog sources to a CTI DCR using the generic DCR editor; doing so can break Change Tracking. Use the separate rules from Task 2.
 If an unexpected workspace or configuration outside your RG was created, ask the coach to resolve it; do not delete shared resources.
@@ -269,7 +293,7 @@ ConfigurationData
 Change events are stored in `ConfigurationChange`; current inventory is stored in `ConfigurationData`.
 Initial inventory collection can take longer than a short portal refresh. Check the CTI extension, its DCR/association and workspace before concluding that there is no installed software.
 
-References: [CTI overview and supported rollout methods](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/overview-monitoring-agent), [at-scale portal onboarding](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/enable-change-tracking-at-scale-machines-blade), [ConfigurationData schema](https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables/configurationdata).
+References: [CTI overview and supported rollout methods](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/overview-monitoring-agent), [built-in Arc initiative and its parameters](https://github.com/Azure/azure-policy/blob/master/built-in-policies/policySetDefinitions/ChangeTrackingAndInventory/HybridVM.json), [at-scale portal onboarding](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/enable-change-tracking-at-scale-machines-blade), [ConfigurationData schema](https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables/configurationdata).
 
 ## Task 6: Verify guest performance and completion
 
