@@ -30,14 +30,22 @@ if ($placement.Count -ne 1 -or $placement[0].location -notin $regions) {
 $location = $placement[0].location
 $ownerScope = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName"
 $owners = @(Invoke-ArcAz -Arguments @(
-    'role', 'assignment', 'list', '--scope', $ownerScope, '--fill-principal-name', 'false'
+    'role', 'assignment', 'list', '--all', '--fill-principal-name', 'false'
 ))
-if (@($owners | Where-Object {
+$directOwner = @($owners | Where-Object {
     $_.principalId -eq $userId -and $_.roleDefinitionName -eq 'Owner' -and $_.scope -eq $ownerScope
-}).Count -eq 0) {
-    throw "The requested resource group '$ResourceGroupName' is not owned by this participant through a visible direct Owner assignment (user $userId). Verify Console RG/RBAC provisioning and retry after RBAC propagation. Subscription Owner alone does not satisfy this check."
+}).Count -gt 0
+if ($DeploymentType -eq 'resourcegroup-with-subscriptionowner') {
+    if (@($owners | Where-Object {
+        $_.principalId -eq $userId -and $_.roleDefinitionName -eq 'Owner' -and $_.scope -eq "/subscriptions/$SubscriptionId"
+    }).Count -eq 0) {
+        throw "Participant '$userId' has no visible Owner assignment on subscription '$SubscriptionId'. Verify Console RBAC provisioning and propagation."
+    }
+} elseif (-not $directOwner) {
+    throw "The requested resource group '$ResourceGroupName' is not owned by this participant through a visible direct Owner assignment (user $userId). The resourcegroup mode requires direct RG ownership."
 }
-Invoke-ArcAz -Arguments @('group', 'show', '--name', $ResourceGroupName) | Out-Null
+$azureGroup = Invoke-ArcAz -Arguments @('group', 'show', '--name', $ResourceGroupName)
+Assert-ArcAzureResourceGroup -Group $azureGroup -ResourceGroupName $ResourceGroupName -UserId $userId
 Assert-ArcAzureGroupLayout -AzureResourceGroupName $ResourceGroupName -Vms @(
     Invoke-ArcAz -Arguments @('vm', 'list', '--resource-group', $ResourceGroupName)
 )

@@ -83,6 +83,21 @@ function Get-ArcOnPremResourceGroupName {
     return $name
 }
 
+function Assert-ArcAzureResourceGroup {
+    param([object]$Group, [string]$ResourceGroupName, [string]$UserId)
+
+    if (-not $Group -or $Group.name -ne $ResourceGroupName) {
+        throw "Console Azure resource group '$ResourceGroupName' was not found."
+    }
+    if ($Group.PSObject.Properties['tags'] -and $Group.tags) {
+        foreach ($expected in @{ microhackArcPurpose = 'azure'; microhackArcUserId = $UserId }.GetEnumerator()) {
+            if ($Group.tags.PSObject.Properties[$expected.Key] -and $Group.tags.($expected.Key) -ne $expected.Value) {
+                throw "Console Azure resource group '$ResourceGroupName' has conflicting participant or purpose tags. No ownership tags will be overwritten."
+            }
+        }
+    }
+}
+
 function Assert-ArcOnPremResourceGroup {
     param([object]$Group, [string]$AzureResourceGroupName, [string]$UserId)
 
@@ -210,6 +225,9 @@ function Test-ArcCapacity {
     $owners = @($assignments | Where-Object {
         $_.roleDefinitionName -eq 'Owner' -and $_.scope -match '(?i)/resourceGroups/[^/]+$'
     })
+    $subscriptionOwners = @($assignments | Where-Object {
+        $_.roleDefinitionName -eq 'Owner' -and $_.scope -eq "/subscriptions/$SubscriptionId"
+    } | ForEach-Object { $_.principalId })
     $onPremGroups = @($groups | Where-Object {
         $_.PSObject.Properties['tags'] -and $_.tags -and
         $_.tags.PSObject.Properties['microhackArcPurpose'] -and $_.tags.microhackArcPurpose -eq 'onprem'
@@ -220,8 +238,15 @@ function Test-ArcCapacity {
         $ownedGroups = @($owners | Where-Object { $_.principalId -eq $entry.userId } |
             ForEach-Object { ($_.scope -split '/')[-1] } |
             Where-Object { $_ -notin $onPremGroups } | Sort-Object -Unique)
+        if ($ownedGroups.Count -eq 0 -and $entry.userId -in $subscriptionOwners) {
+            $ownedGroups = @($groups | Where-Object {
+                $_.PSObject.Properties['tags'] -and $_.tags -and
+                $_.tags.PSObject.Properties['microhackArcPurpose'] -and $_.tags.microhackArcPurpose -eq 'azure' -and
+                $_.tags.PSObject.Properties['microhackArcUserId'] -and $_.tags.microhackArcUserId -eq $entry.userId
+            } | ForEach-Object { $_.name })
+        }
         if ($ownedGroups.Count -eq 0) {
-            Write-Warning "No Console-provisioned Owner resource group is visible yet for user $($entry.userId). Reserving the full VM and public-IP demand in $($entry.location); resource group tagging, on-prem group creation and mandatory ownership validation are deferred to deploy-lab.ps1."
+            Write-Warning "No directly owned or verified tagged Console Azure resource group is visible yet for user $($entry.userId). Reserving the full VM and public-IP demand in $($entry.location); resource group tagging, on-prem group creation and participant/RG validation are deferred to deploy-lab.ps1."
             foreach ($type in $script:ArcVmTypes) {
                 $key = "$($entry.location)/$type"
                 if (-not $remaining.ContainsKey($key)) { $remaining[$key] = 0 }
@@ -232,12 +257,14 @@ function Test-ArcCapacity {
             continue
         }
         if ($ownedGroups.Count -ne 1) {
-            throw "Expected exactly one Console-provisioned Owner resource group for user $($entry.userId); found $($ownedGroups.Count)."
+            throw "Expected exactly one verified Console Azure resource group for user $($entry.userId); found $($ownedGroups.Count)."
         }
         $groupName = $ownedGroups[0]
         if (@($groups | Where-Object { $_.name -eq $groupName }).Count -ne 1) {
             throw "Participant resource group '$groupName' was not found."
         }
+        Assert-ArcAzureResourceGroup -Group @($groups | Where-Object { $_.name -eq $groupName })[0] `
+            -ResourceGroupName $groupName -UserId $entry.userId
         Assert-ArcAzureGroupLayout -AzureResourceGroupName $groupName -Vms $vms
         Set-ArcResourceGroupSecurityTag -ResourceGroupName $groupName -AdditionalTags @{
             microhackArcPurpose = 'azure'

@@ -31,6 +31,7 @@ function Reset-Mock {
         extraOwners = @()
         consoleGroupsReady = $true
         consoleOwnersReady = $true
+        subscriptionOwnersReady = $true
         invalidGroupExists = $false
         deletedGroups = [System.Collections.Generic.List[string]]::new()
         failRemoval = $false
@@ -261,6 +262,12 @@ function global:az {
         }
         'group show' {
             $name = Get-MockArgument $arguments '--name'
+            $consoleNames = @($global:ArcMock.users | ForEach-Object { "rg-$($_.Substring($_.Length - 2))" })
+            if (-not $global:ArcMock.groupTags.ContainsKey($name) -and
+                (-not $global:ArcMock.consoleGroupsReady -or $name -notin $consoleNames)) {
+                $global:LASTEXITCODE = 3
+                return 'ResourceGroupNotFound'
+            }
             @{ name = $name; tags = if ($global:ArcMock.groupTags.ContainsKey($name)) {
                 $global:ArcMock.groupTags[$name]
             } else { [pscustomobject]@{} } }
@@ -275,6 +282,15 @@ function global:az {
         }
         'role assignment' {
             $mockAssignments = @(
+                if ($global:ArcMock.subscriptionOwnersReady) {
+                    $global:ArcMock.users | ForEach-Object {
+                        @{
+                            principalId = $_
+                            roleDefinitionName = 'Owner'
+                            scope = "/subscriptions/$subscription"
+                        }
+                    }
+                }
                 if ($global:ArcMock.consoleOwnersReady) {
                     $global:ArcMock.users | ForEach-Object {
                         @{
@@ -520,9 +536,6 @@ foreach ($groupsReady in @($false, $true)) {
     Reset-Mock -Count 1
     $global:ArcMock.consoleGroupsReady = $groupsReady
     $global:ArcMock.consoleOwnersReady = $false
-    $global:ArcMock.extraOwners = @(@{
-        principalId = $users[0]; roleDefinitionName = 'Owner'; scope = "/subscriptions/$subscription"
-    })
     $global:ArcMock.quota = 6
     $global:ArcMock.networkQuota = 2
     $warnings = @()
@@ -530,17 +543,19 @@ foreach ($groupsReady in @($false, $true)) {
     Assert-Test (@($warnings | Where-Object { $_ -like '*Reserving the full VM and public-IP demand*' }).Count -eq 1) 'Missing direct RG ownership explicitly reports deferred RG preparation'
     Assert-Test ($global:ArcMock.placement.Count -eq 1) 'Shared stage succeeds before Console RG ownership is visible'
     Assert-Test ($global:ArcMock.groupTags.Count -eq 0) 'Shared stage does not infer, create or tag groups without direct RG ownership'
-    Assert-Throws { Invoke-Lab } 'not owned by this participant'
-    Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Subscription Owner alone cannot bypass participant RG ownership validation'
-    Assert-Test ($global:ArcMock.groupTags.Count -eq 0) 'Participant ownership failure happens before RG writes'
+    Assert-Throws { Invoke-Lab -Type 'resourcegroup' } 'not owned by this participant'
+    Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Legacy RG mode still requires direct ownership even for subscription Owners'
+    Assert-Test ($global:ArcMock.groupTags.Count -eq 0) 'Legacy ownership failure happens before RG writes'
     $global:ArcMock.consoleGroupsReady = $true
-    $global:ArcMock.consoleOwnersReady = $true
     Invoke-Lab | Out-Null
-    Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Participant stage deploys both VMs after Console provisioning'
+    Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Subscription Owner mode deploys both VMs without direct RG Owner'
     Assert-Test ($global:ArcMock.groupTags.Count -eq 2) 'Participant stage prepares both groups when shared preparation was deferred'
     Assert-Test (@($global:ArcMock.groupTags.Values | Where-Object { $_.SecurityControl -cne 'Ignore' }).Count -eq 0) 'Deferred preparation still tags both groups before deploying resources'
+    $global:ArcMock.used = 6
+    $global:ArcMock.networkUsed = '2'
+    $global:ArcMock.totalNetworkUsed = '2'
     Invoke-Shared
-    Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Shared rerun reuses the prepared layout after deferred setup'
+    Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Shared rerun reuses tagged groups without direct RG Owner at exactly exhausted VM/IP quota'
 }
 foreach ($limitedQuota in @('cores', 'ips')) {
     Reset-Mock -Count 1
@@ -573,11 +588,60 @@ foreach ($mode in @('resourcegroup-with-subscriptionowner', 'resourcegroup')) {
     Assert-Test (@($global:ArcMock.calls | Where-Object {
         $_[0] -eq 'role' -and ($_[1] -ne 'assignment' -or $_[2] -ne 'list')
     }).Count -eq 0) "$mode leaves RBAC provisioning to the Console"
-    Assert-Throws { Invoke-Lab -Type $mode -Group 'rg-someone-else' } 'not owned'
+    $failure = if ($mode -eq 'resourcegroup') { 'not owned' } else { 'ResourceGroupNotFound' }
+    Assert-Throws { Invoke-Lab -Type $mode -Group 'rg-someone-else' } $failure
     Assert-Throws { Invoke-Lab -Type $mode -Group '' } 'requires resourcegroup'
     Assert-Throws { Invoke-Lab -Type $mode -Group ' ' } 'requires resourcegroup'
     Assert-Test ($global:ArcMock.deployments.Count -eq 2) "$mode rejects invalid RGs without additional VM deployments"
 }
+
+Reset-Mock -Count 1
+$global:ArcMock.consoleOwnersReady = $false
+Invoke-Shared
+$global:ArcMock.subscriptionOwnersReady = $false
+Assert-Throws { Invoke-Lab } 'no visible Owner assignment on subscription'
+Assert-Test ($global:ArcMock.groupTags.Count -eq 0 -and $global:ArcMock.deployments.Count -eq 0) 'Missing subscription Owner stops before any RG writes'
+$global:ArcMock.subscriptionOwnersReady = $true
+$global:ArcMock.consoleGroupsReady = $false
+Assert-Throws { Invoke-Lab } 'ResourceGroupNotFound'
+Assert-Test ($global:ArcMock.groupTags.Count -eq 0) 'A missing Console RG is never created or inferred by the participant hook'
+
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.subscriptionOwnersReady = $false
+Assert-Throws { Invoke-Lab } 'no visible Owner assignment on subscription'
+Invoke-Lab -Type 'resourcegroup' | Out-Null
+Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Legacy direct RG Owner mode does not require subscription Owner'
+
+foreach ($tag in @('microhackArcPurpose', 'microhackArcUserId')) {
+    Reset-Mock -Count 1
+    $global:ArcMock.consoleOwnersReady = $false
+    Invoke-Shared
+    $global:ArcMock.groupTags['rg-01'] = [pscustomobject]@{
+        microhackArcPurpose = 'azure'; microhackArcUserId = $users[0]; keep = 'unchanged'
+    }
+    $global:ArcMock.groupTags['rg-01'].$tag = 'conflict'
+    Assert-Throws { Invoke-Lab } 'conflicting participant or purpose tags'
+    Assert-Test ($global:ArcMock.groupTags['rg-01'].$tag -eq 'conflict' -and
+        $global:ArcMock.groupTags.Count -eq 1 -and $global:ArcMock.deployments.Count -eq 0) 'Conflicting Console RG tags cannot be adopted through subscription Owner'
+}
+
+Reset-Mock -Count 2
+Invoke-Shared
+Assert-Throws { Invoke-Lab -Group 'rg-02' } 'conflicting participant or purpose tags'
+Assert-Test ($global:ArcMock.groupTags['rg-02'].microhackArcUserId -eq $users[1] -and
+    $global:ArcMock.deployments.Count -eq 0) 'Subscription Owner cannot overwrite another tagged participant RG'
+$global:ArcMock.consoleOwnersReady = $false
+$global:ArcMock.groupTags['duplicate-azure'] = [pscustomobject]@{
+    microhackArcPurpose = 'azure'; microhackArcUserId = $users[0]
+}
+Assert-Throws { Invoke-Shared } 'found 2'
+
+Reset-Mock -Count 1
+Invoke-Shared
+$global:ArcMock.groupTags['rg-01'].microhackArcUserId = $users[1]
+Assert-Throws { Invoke-Shared } 'conflicting participant or purpose tags'
+Assert-Test ($global:ArcMock.groupTags['rg-01'].microhackArcUserId -eq $users[1]) 'Shared direct-Owner discovery also rejects conflicting existing Azure RG tags'
 
 Reset-Mock
 Invoke-Shared -Locations $defaults.preferredLocation
@@ -901,7 +965,7 @@ $global:ArcMock.vms[0].tags.microhackArcUserId = $users[0]
 $global:ArcMock.vms[0].location = 'westus2'
 Assert-Throws { Invoke-Lab } 'No VM will be moved'
 Assert-Throws { Invoke-Lab -Type subscription } 'requires resourcegroup'
-Assert-Throws { Invoke-Lab -Group 'rg-someone-else' } 'not owned'
+Assert-Throws { Invoke-Lab -Group 'rg-someone-else' } 'ResourceGroupNotFound'
 Reset-Mock -Count 2
 Invoke-Shared
 $global:ArcMock.users = @($users[1])

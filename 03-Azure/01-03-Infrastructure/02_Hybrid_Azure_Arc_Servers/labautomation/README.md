@@ -41,8 +41,9 @@ event setup. Re-import the content to load the updated defaults, and check the
 Console's selection: previously saved event selections are not automatically
 rewritten by this repository change. Remove West India there before deployment.
 
-Each user receives one resource group with a direct `Owner` assignment and
-**`Owner` on the shared subscription**, provisioned by the Console. This permits
+Each user receives one resource group and **`Owner` on the shared subscription**,
+provisioned by the Console. A direct RG `Owner` assignment is not required in
+this mode; RG access is inherited from the subscription. This permits
 RG creation, including service-managed RGs, and subscription-scope deployment
 validation (`Microsoft.Resources/deployments/validate/action`) for Challenge 5.
 **Participant RGs are not authorization boundaries:** every participant can
@@ -61,8 +62,9 @@ Console fallback is USD 25 per lab/day, an estimate rather than a spending limit
 Every lab/demo resource group must carry **`SecurityControl=Ignore`** so MCAPS
 Governance does not disable the training environment's public-IP access. The
 shared hook merges this tag into the Console-provisioned Azure RGs and creates
-the on-prem RGs with the tag already present when direct RG ownership is already
-visible. Otherwise, this preparation is deferred to the participant hook, which
+the on-prem RGs with the tag already present when direct RG ownership or a
+previously tagged Azure RG plus subscription Owner is visible. Otherwise,
+this preparation is deferred to the participant hook, which
 always confirms both groups before VM creation. Tag API failures or
 missing confirmation stop the deployment. Only participant RGs are tagged, not
 the `McapsGovernance` RG or unrelated subscription groups.
@@ -98,9 +100,10 @@ the hook scripts is insufficient.
    Verify that the Console selects `resourcegroup-with-subscriptionowner` and
    packs all participants into exactly one subscription.
 2. After provisioning, check **Access control (IAM)** for a participant:
-   subscription `Owner` and the direct `Owner` assignment on their own RG must
-   both be present. The hooks still check the participant's direct RG ownership
-   before deploying VMs; they do not assign or repair subscription roles.
+   subscription `Owner` must be present. RG access may be inherited; a second
+   direct RG assignment is not necessary. The hook checks subscription Owner
+   and validates the Console-supplied user/RG pair against existing ownership
+   tags before deploying VMs. It does not assign or repair roles.
 3. Use a participant session, allowing for RBAC propagation and refreshing the
    session if necessary. Verify creation of a uniquely named empty test RG with
    `SecurityControl=Ignore`, then delete only that test RG.
@@ -147,12 +150,15 @@ Unrelated tags are preserved.
 
 No extra direct Owner role is added to the on-prem RG: participants inherit
 access from subscription Owner. Tagged on-prem groups are excluded when the
-shared preflight identifies the Console RG by direct Owner assignment.
-If no direct RG assignment is visible during the shared stage, it reserves the
-full demand for that participant without inferring a group name or changing any
-groups. The participant hook uses the Console-supplied RG name and must confirm
-direct ownership before preparing either group. Multiple matching RGs remain an
-error in the shared stage.
+shared preflight identifies the Console RG by direct Owner assignment, or by
+matching `microhackArcPurpose=azure` and `microhackArcUserId` tags when the user
+has subscription Owner. If neither association is visible, it reserves the
+full demand without inferring a group name or changing any groups. The
+participant hook trusts the Console-supplied user/RG pair, verifies subscription
+Owner, checks that the RG exists, and rejects conflicting participant/purpose
+tags before any writes. Unmarked Console RGs are initialized with the ownership
+tags. The older `resourcegroup` mode still requires direct RG Owner.
+Multiple matching RGs remain an error in the shared stage.
 This remains an organizational split, not an access boundary.
 An Azure Monitor workspace can create another service-managed RG; these two
 groups do not replace it or implement the OpenTelemetry migration.
@@ -212,19 +218,18 @@ standalone creator directory and are not part of this Console deployment.
    Existing compatible VMs with the expected lab names, including unmarked VMs
    eligible for the approved reuse policy below, are not counted as new VM/core
    demand.
-   When direct RG ownership is visible, the Console Azure RG is tagged and its
+   When a verified RG association is visible, the Console Azure RG is tagged and its
    matching on-prem RG is created/reused with `SecurityControl=Ignore` before
    VM/core demand is validated. An empty
    tagged on-prem RG can therefore remain if a later quota/SKU check fails.
    Existing VMs and IPs are checked in the on-prem RG; incompatible VMs still
    fail validation.
-   If the Console RG or its direct Owner assignment is not yet visible, the
+   If no direct or previously tagged RG association is visible, the
    shared stage warns and counts both VMs (6 vCPUs) and both public IPs as new
-   demand. It does not assume that subscription-wide RBAC listing already
-   reflects Console provisioning.
-   Existing resources cannot be discounted for that participant until direct
-   ownership is visible; a retry after Console provisioning can resolve an
-   overly conservative quota failure. Failed Azure API calls are still fatal.
+   demand. It does not derive RG names from usernames. Existing resources can
+   be discounted on subsequent runs using the participant hook's matching Azure
+   RG tags and verified subscription Owner, even without direct RG assignments.
+   Failed Azure API calls are still fatal.
    Public IP limits and current usage come from `az network list-usages`: both
    the overall `PublicIPAddresses` counter and the
    `IPv4StandardSkuPublicIpAddresses` counter must have capacity. These names were
@@ -244,10 +249,10 @@ standalone creator directory and are not part of this Console deployment.
    nested PowerShell objects. The file contains only placement metadata, no
    credentials, and is removed in `finally` on success or failure.
 
-The Console Azure RGs and their direct `Owner` assignments must already exist,
-as guaranteed by the Console. The shared stage uses these assignments and the
-tagged RG-purpose distinction to identify each corresponding on-prem RG during
-quota validation. Ambiguous ownership,
+The Console Azure RGs and participant RBAC must exist before the participant
+hook runs. The shared stage uses direct assignments or existing Azure RG tags
+with subscription Owner to identify each corresponding on-prem RG during quota
+validation; otherwise it defers RG preparation. Ambiguous ownership,
 missing quota information, unavailable/restricted SKUs or insufficient quotas
 fail explicitly. No quotas are raised and no alternate SKU or region is selected.
 Beyond the paired RG creation/tagging, provider registration is the only
@@ -255,7 +260,9 @@ subscription preparation performed; Defender plans, custom policies and service
 principals are not configured.
 
 [deploy-lab.ps1](deploy-lab.ps1) reads the saved mapping and checks that the
-supplied user directly owns the supplied Console Azure RG. It validates/reuses
+supplied user has subscription Owner in the default mode, or direct RG Owner
+in the legacy mode. Existing contradictory Azure RG ownership/purpose tags
+are rejected, not overwritten. It validates/reuses
 the matching tagged on-prem RG and deploys both VMs there, in that user's assigned
 region regardless of either resource group's metadata location.
 
@@ -455,8 +462,8 @@ fails before Azure access.
 Two-RG creation/reuse, ownership conflicts, legacy-layout rejection, dashboard
 RG names and targeted cleanup/WhatIf are covered with mocks.
 The tests also cover the shared stage before Console RG/Owner visibility,
-full quota accounting in that state, and mandatory direct ownership and RG
-tagging in the later participant stage.
+full quota accounting in that state, subscription-Owner-only deployments,
+tag-based shared reruns, conflicting Azure RG tags and legacy direct ownership.
 The centralized legacy PowerShell creator's parameter sets are also checked
 against its three local templates.
 
@@ -484,12 +491,18 @@ hook second; do not add interactive login to either platform hook.
 
 ### Troubleshooting missing Console RG ownership
 
-The Console provisions participant scopes and RBAC before running the hooks, but
-the shared subscription-wide inventory may not yet show a direct RG `Owner`
-assignment. This now produces a warning and conservative quota accounting, not
-the former `Expected exactly one Console-provisioned Owner resource group ...
-found 0` failure. Re-import the complete updated content and retry deployment.
-If the participant hook then reports missing direct ownership, verify the
-Console-supplied RG and its participant's direct `Owner` assignment in IAM,
-allow for RBAC propagation and retry. Subscription `Owner` alone is not a
-replacement for that check. The hooks do not repair missing Console RBAC.
+In `resourcegroup-with-subscriptionowner` mode, the Console may assign Owner
+only at subscription scope. This is sufficient and does not require a second
+direct RG assignment. The initial shared run then warns and uses conservative
+quota accounting until the participant hook initializes the Console-supplied
+RG's tags. Subsequent shared runs recognize those tags with subscription Owner.
+
+If an older imported hook reports `Subscription Owner alone does not satisfy
+this check`, re-import the complete updated content and retry the failed
+deployment with the updated script version, not an older imported snapshot.
+No additional role assignments or RG migration are required. Verify that the
+event actually uses `resourcegroup-with-subscriptionowner`. In the older
+`resourcegroup` mode, a direct RG Owner assignment remains mandatory. Missing
+subscription Owner in the new mode, contradictory ownership tags and failed
+Azure API calls still stop deployment. The hooks never repair RBAC or
+overwrite conflicting ownership tags.
