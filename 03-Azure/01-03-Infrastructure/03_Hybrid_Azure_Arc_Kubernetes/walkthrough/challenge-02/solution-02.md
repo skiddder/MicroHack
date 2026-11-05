@@ -9,34 +9,60 @@ Duration: 30-45 min
 * Verify the firewall requirements in addition to the Azure Arc-enabled Kubernetes network requirements.
 * A Log Analytics workspace (law). Both Console and Terraform deployments create one per participant.
 * You must be logged in to az cli (az login)
-* For Console labs, run `source ~/.microhack-k8s.env` in WSL before these commands.
+* For Console labs, use the exact resource names from **HB Console > Credentials**, including leading zeros.
 * Task 2 requires subscription-level permissions. The default Console configuration grants subscription Owner.
   If your coach selected resource-group-only access, the coach must configure the Defender plan instead.
 
 ## Task 1 - Enable Azure Monitor for k8s
-Execute the following commands in your bash shell to install the container log extension with default settings:
-```bash
-# Extract user number from Azure username before '@' (e.g., LabUser-37@... or hackuser-067@... -> 37 or 67)
-azure_user=$(az account show --query user.name --output tsv)
-user_number="${user_number:-$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')}"
-echo $user_number
+Use your workstation's Ubuntu/WSL shell. Replace the two placeholders below with
+**Arc Resource Group** and **Log Analytics Workspace** from your **HB Console Credentials**:
 
-# if you are running this in a non-microhack env, adjust the values to match your env
-export arc_resource_group="${arc_resource_group:-${user_number}-k8s-arc}"
-export arc_cluster_name="${arc_cluster_name:-${user_number}-k8s-arc-enabled}"
-export workspace_name="${workspace_name:-${user_number}-law}"
-export law_resource_id=$(az monitor log-analytics workspace show --resource-group $arc_resource_group --workspace-name "$workspace_name" --query 'id' -o tsv)
+| Variable | HB example for `labuser-0009` |
+| --- | --- |
+| `arc_resource_group` | `rg-labuser-0009` |
+| `workspace_name` | `labuser-0009-law` |
+
+Do not derive these names from a numeric user number or remove leading zeros.
+The script queries Azure for the actual Arc cluster name created in challenge 1;
+it does not assume that the cluster has the same name as your workstation.
+There should be exactly one Arc cluster in your exercise RG. If you have connected
+more than one, replace the cluster-discovery section below with
+`export arc_cluster_name="<actual cluster name from the Azure portal>"`.
+For the manual Terraform fallback, enter the original names instead, for example
+`37-k8s-arc` and `37-law`.
+
+Run the following to install the container log extension with default settings:
+```bash
+# Copy the complete names from HB Console Credentials
+export arc_resource_group="<Arc Resource Group>"
+export workspace_name="<Log Analytics Workspace>"
+
+arc_cluster_names=$(az connectedk8s list --resource-group "$arc_resource_group" --query '[].name' --output tsv) || exit 1
+if [[ -z "$arc_cluster_names" || "$arc_cluster_names" == *$'\n'* ]]; then
+    echo "Error: Expected exactly one Arc cluster in '$arc_resource_group'. Check the connected clusters in the Azure portal." >&2
+    exit 1
+fi
+export arc_cluster_name="$arc_cluster_names"
+export user_number="${arc_cluster_name%-k8s-arc-enabled}"
+law_resource_id=$(az monitor log-analytics workspace show --resource-group "$arc_resource_group" --workspace-name "$workspace_name" --query 'id' -o tsv) || exit 1
+export law_resource_id
+
+echo "Using RG: $arc_resource_group; cluster: $arc_cluster_name; workspace: $workspace_name"
 
 az k8s-extension create \
     --name azuremonitor-containers \
-    --cluster-name $arc_cluster_name \
-    --resource-group $arc_resource_group \
+    --cluster-name "$arc_cluster_name" \
+    --resource-group "$arc_resource_group" \
     --cluster-type connectedClusters  \
     --extension-type Microsoft.AzureMonitor.Containers \
-    --configuration-settings azure-monitor-workspace-resource-id=$law_resource_id
+    --configuration-settings "azure-monitor-workspace-resource-id=$law_resource_id"
 
 ```
-The output should look roughly like this:
+Keep this WSL session open for the remaining tasks; they reuse these variables.
+`user_number` is retained as a policy-assignment suffix derived from the actual
+cluster name, not as the basis for resource-group or workspace names.
+
+The output should look roughly like this (the resource names depend on your lab):
 ```bash
 Ignoring name, release-namespace and scope parameters since microsoft.azuremonitor.containers only supports cluster scope and single instance of this extension.
 Defaulting to extension name 'azuremonitor-containers' and release-namespace 'azuremonitor-containers'
@@ -48,7 +74,7 @@ Defaulting to extension name 'azuremonitor-containers' and release-namespace 'az
   "plan": null,
   "provisioningState": "Succeeded",
   "releaseTrain": "Stable",
-  "resourceGroup": "37-k8s-arc",
+  "resourceGroup": "rg-labuser-0009",
   "scope": {
     "cluster": {
       "releaseNamespace": "azuremonitor-containers"
@@ -97,8 +123,8 @@ If auto‑provisioning is enabled in the portal (the toggle “Defender sensor�
 # Check current extensions
 echo "Checking current Arc extensions:"
 az k8s-extension list \
-  --cluster-name $arc_cluster_name \
-  --resource-group $arc_resource_group \
+  --cluster-name "$arc_cluster_name" \
+  --resource-group "$arc_resource_group" \
   --cluster-type connectedClusters \
   --query '[].{Name:name, Type:extensionType, State:provisioningState}' \
   -o table
@@ -118,10 +144,10 @@ If it's not yet present or you want to force it (recommended), use:
 az k8s-extension create \
   --name microsoft.azuredefender.kubernetes \
   --cluster-type connectedClusters \
-  --cluster-name $arc_cluster_name \
-  --resource-group $arc_resource_group \
+  --cluster-name "$arc_cluster_name" \
+  --resource-group "$arc_resource_group" \
   --extension-type microsoft.azuredefender.kubernetes \
-  --configuration-settings logAnalyticsWorkspaceResourceID=$law_resource_id
+  --configuration-settings "logAnalyticsWorkspaceResourceID=$law_resource_id"
 ```
 
 If you run into an error telling you "Helm installation failed : Resource already existing in your cluster" this means that the Defender for Cloud policy already installed the extension successfully.
@@ -153,7 +179,7 @@ gatekeeper-controller-manager-7655d54c66-pcp26   1/1     Running   0          17
 
 Check Policy recommendations in Defender for Cloud: 
 * In the Azure Portal > Defender for Cloud > General > Inventory
-* In the search bar filter for your arc-enabled k8s cluster's name - i.e. 37-k8s-arc-enabled
+* In the search bar filter for your actual Arc-enabled Kubernetes cluster name, shown by `echo "$arc_cluster_name"`.
 ![alt text](img/05_defender.png)
 * Click on the name of your cluster and view the recommendations and alerts
 
@@ -163,8 +189,8 @@ For Arc-enabled Kubernetes clusters, Azure Policy requires installing the Azure 
 ```bash
 # Installing Azure Policy extension on Arc cluster...
 az k8s-extension create \
-    --cluster-name $arc_cluster_name \
-    --resource-group $arc_resource_group \
+    --cluster-name "$arc_cluster_name" \
+    --resource-group "$arc_resource_group" \
     --cluster-type connectedClusters \
     --extension-type Microsoft.PolicyInsights \
     --name azurepolicy
@@ -185,7 +211,7 @@ az k8s-extension create \
   "plan": null,
   "provisioningState": "Succeeded",
   "releaseTrain": "Stable",
-  "resourceGroup": "37-k8s-arc",
+  "resourceGroup": "rg-labuser-0009",
   "scope": {
     "cluster": {
       "releaseNamespace": "kube-system"
@@ -243,7 +269,7 @@ else
     az extension update --name connectedk8s
 fi
 
-cluster_resource_id=$(az connectedk8s show --name $arc_cluster_name --resource-group $arc_resource_group --query id -o tsv)
+cluster_resource_id=$(az connectedk8s show --name "$arc_cluster_name" --resource-group "$arc_resource_group" --query id -o tsv)
 echo "Cluster Resource ID: $cluster_resource_id"
 
 policy_id="/providers/Microsoft.Authorization/policySetDefinitions/a8640138-9b0a-4a28-b8cb-1666c838647d"
@@ -259,13 +285,13 @@ az policy assignment create \
 {
   "definitionVersion": "1.*.*",
   "description": "Enforces pod security baseline standards on Arc-enabled Kubernetes cluster",
-  "displayName": "Kubernetes Pod Security Baseline for cluster 37-k8s-arc-enabled",
+  "displayName": "Kubernetes Pod Security Baseline for cluster k8s7bbc1170d029-k8s-arc-enabled",
   "enforcementMode": "Default",
  [...]
-  "name": "k8s-pod-security-baseline-37",
+  "name": "k8s-pod-security-baseline-k8s7bbc1170d029",
   "policyDefinitionId": "/providers/Microsoft.Authorization/policySetDefinitions/a8640138-9b0a-4a28-b8cb-1666c838647d",
-  "resourceGroup": "37-k8s-arc",
-  "scope": "/subscriptions/a271110f-4e09-47aa-9d1c-743b520ccbca/resourceGroups/37-k8s-arc/providers/Microsoft.Kubernetes/connectedClusters/37-k8s-arc-enabled",
+  "resourceGroup": "rg-labuser-0009",
+  "scope": "/subscriptions/a271110f-4e09-47aa-9d1c-743b520ccbca/resourceGroups/rg-labuser-0009/providers/Microsoft.Kubernetes/connectedClusters/k8s7bbc1170d029-k8s-arc-enabled",
  [...]
   "type": "Microsoft.Authorization/policyAssignments"
 }
@@ -326,7 +352,7 @@ az policy assignment show \
 #expected output:
 Name                          DisplayName                                                      EnforcementMode    PolicyDefinitionId
 ----------------------------  ---------------------------------------------------------------  -----------------  --------------------------------------------------------------------------------------------
-k8s-pod-security-baseline-37  Kubernetes Pod Security Baseline for cluster 37-k8s-arc-enabled  Default            /providers/Microsoft.Authorization/policySetDefinitions/a8640138-9b0a-4a28-b8cb-1666c838647d
+k8s-pod-security-baseline-k8s7bbc1170d029  Kubernetes Pod Security Baseline for cluster k8s7bbc1170d029-k8s-arc-enabled  Default            /providers/Microsoft.Authorization/policySetDefinitions/a8640138-9b0a-4a28-b8cb-1666c838647d
 
 # Policy compliance state
 az policy state list \
@@ -338,11 +364,11 @@ az policy state list \
 PolicyDefinitionName                  PolicyAssignmentName                                             ComplianceState
 ------------------------------------  ---------------------------------------------------------------  -----------------
 [...]
-098fc59e-46c7-4d99-9b16-64990e543d75  k8s-pod-security-baseline-37                                     NonCompliant
-47a1ee2f-2a2a-4576-bf2a-e0e36709c2b8  k8s-pod-security-baseline-37                                     Compliant
-82985f06-dc18-4a48-bc1c-b9f4f0098cfe  k8s-pod-security-baseline-37                                     NonCompliant
-95edb821-ddaf-4404-9732-666045e056b4  k8s-pod-security-baseline-37                                     Compliant
-c26596ff-4d70-4e6a-9a30-c2506bd2f80c  k8s-pod-security-baseline-37                                     NonCompliant
+098fc59e-46c7-4d99-9b16-64990e543d75  k8s-pod-security-baseline-k8s7bbc1170d029                         NonCompliant
+47a1ee2f-2a2a-4576-bf2a-e0e36709c2b8  k8s-pod-security-baseline-k8s7bbc1170d029                         Compliant
+82985f06-dc18-4a48-bc1c-b9f4f0098cfe  k8s-pod-security-baseline-k8s7bbc1170d029                         NonCompliant
+95edb821-ddaf-4404-9732-666045e056b4  k8s-pod-security-baseline-k8s7bbc1170d029                         Compliant
+c26596ff-4d70-4e6a-9a30-c2506bd2f80c  k8s-pod-security-baseline-k8s7bbc1170d029                         NonCompliant
 ```
 Some policies should show as 'Compliant' and some as 'NonCompliant'.
 

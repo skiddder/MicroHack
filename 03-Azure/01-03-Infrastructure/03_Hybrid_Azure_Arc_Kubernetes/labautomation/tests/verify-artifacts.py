@@ -81,7 +81,13 @@ for challenge in ("02", "04"):
     walkthrough = (
         root.parent / "walkthrough" / f"challenge-{challenge}" / f"solution-{challenge}.md"
     ).read_text(encoding="utf-8")
-    assert 'export workspace_name="${workspace_name:-${user_number}-law}"' in walkthrough
+    if challenge == "02":
+        assert 'export workspace_name="<Log Analytics Workspace>"' in walkthrough
+        assert 'export arc_resource_group="<Arc Resource Group>"' in walkthrough
+        assert "sed 's/^0*//'" not in walkthrough
+        monitoring = re.search(r"```bash\n(.*?)```", walkthrough, re.S).group(1)
+    else:
+        assert 'export workspace_name="${workspace_name:-${user_number}-law}"' in walkthrough
     workspace_commands = [
         line for line in walkthrough.splitlines()
         if "az monitor log-analytics workspace " in line
@@ -121,7 +127,7 @@ master_command = (
 location_command = "group show --name rg-labuser-0009 --query location --output tsv"
 
 with tempfile.TemporaryDirectory(prefix="microhack-k8s-onboarding-") as directory:
-    def check_onboarding(name, responses, expected=None, context=None, error=None):
+    def check_onboarding(name, responses, expected=None, context=None, error=None, script=None):
         home = pathlib.Path(directory) / name
         home.mkdir()
         if context:
@@ -146,7 +152,7 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-onboarding-") as director
             environment.pop(key, None)
         result = subprocess.run(
             [bash, "-s", "--", home.as_posix()],
-            input=stub + setup + '\nprintf "RESULT=%s|%s|%s|%s\\n" "$onprem_resource_group" "$arc_resource_group" "$arc_cluster_name" "$location"\n',
+            input=stub + "set -e\n" + (setup if script is None else script) + '\nprintf "RESULT=%s|%s|%s|%s\\n" "$onprem_resource_group" "$arc_resource_group" "$arc_cluster_name" "$location"\n',
             text=True,
             encoding="utf-8",
             capture_output=True,
@@ -211,4 +217,42 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-onboarding-") as director
     check_onboarding("location-denied", {**hb, location_command: (1, "AuthorizationFailed")}, error="AuthorizationFailed")
     check_onboarding("account-denied", {account_command: (1, "Please run az login")}, error="Please run az login")
 
-print("Validated Ansible YAML, guest Python, inventory, RG context, node readiness and 11 onboarding discovery cases.")
+    subprocess.run([bash, "-n"], input=monitoring, text=True, encoding="utf-8", check=True)
+    for label, group, workspace, cluster in (
+        ("hb-0009", "rg-labuser-0009", "labuser-0009-law", "k8s7bbc1170d029-k8s-arc-enabled"),
+        ("hb-0020", "rg-labuser-0020", "labuser-0020-law", "k8sc8833ecff6dd-k8s-arc-enabled"),
+        ("terraform", "37-k8s-arc", "37-law", "37-k8s-arc-enabled"),
+    ):
+        monitoring_script = monitoring.replace("<Arc Resource Group>", group).replace("<Log Analytics Workspace>", workspace)
+        list_command = f"connectedk8s list --resource-group {group} --query [].name --output tsv"
+        workspace_command = f"monitor log-analytics workspace show --resource-group {group} --workspace-name {workspace} --query id -o tsv"
+        workspace_id = f"/subscriptions/test/resourceGroups/{group}/providers/Microsoft.OperationalInsights/workspaces/{workspace}"
+        extension_command = (
+            f"k8s-extension create --name azuremonitor-containers --cluster-name {cluster} "
+            f"--resource-group {group} --cluster-type connectedClusters "
+            "--extension-type Microsoft.AzureMonitor.Containers --configuration-settings "
+            f"azure-monitor-workspace-resource-id={workspace_id}"
+        )
+        responses = {list_command: cluster, workspace_command: workspace_id, extension_command: "{}"}
+        check_onboarding(
+            f"monitoring-{label}", responses,
+            ("", group, cluster, ""),
+            script=monitoring_script + f"\n[ \"$user_number\" = {shlex.quote(cluster.removesuffix('-k8s-arc-enabled'))} ]\n",
+        )
+        if label == "hb-0009":
+            for case, response, error in (
+                ("no-cluster", "", "Expected exactly one Arc cluster"),
+                ("multiple-clusters", cluster + "\nother-cluster", "Expected exactly one Arc cluster"),
+                ("denied", (1, "AuthorizationFailed"), "AuthorizationFailed"),
+            ):
+                check_onboarding(
+                    f"monitoring-{case}", {list_command: response},
+                    error=error, script=monitoring_script,
+                )
+            check_onboarding(
+                "monitoring-workspace-denied",
+                {list_command: cluster, workspace_command: (1, "AuthorizationFailed")},
+                error="AuthorizationFailed", script=monitoring_script,
+            )
+
+print("Validated Ansible YAML, guest Python, inventory, RG context, node readiness, 11 onboarding and 7 monitoring cases.")
