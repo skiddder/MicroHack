@@ -2,28 +2,66 @@
 Duration: 15-30 minutes
 
 ## Prerequisites
-For Hackbox Console labs, use the **On-prem Resource Group**, **Arc Resource Group** and shared
-Bastion shown in your dashboard, not the numeric resource group names in the fallback examples below.
-In workstation WSL, run `source ~/.microhack-k8s.env`; kubeconfig is already installed.
-Run `kubectl get nodes` and proceed to Task 2 after logging in to Azure. The onboarding script
-loads this environment automatically. For challenges 2-5, keep using this WSL session or
-source the environment file again.
+For Hackbox Console labs, first [connect to your workstation](#connect-to-your-workstation-hackbox-console).
+Use the **On-prem Resource Group**, **Arc Resource Group** and shared Bastion shown in your
+dashboard, not the numeric resource group names in the manual fallback examples below.
 
 Please ensure that you successfully verified 
 * the [general prerequisites](../../Readme.md#general-prerequisites) before starting this challenge.
-* that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem".
+* that you can see your two resource groups in the [Azure portal](https://portal.azure.com). Use the names from the HB Console; for the manual fallback, LabUser-37 uses "37-k8s-arc" and "37-k8s-onprem".
 * that you can successfully connect to all [required Azure endpoints](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/network-requirements?tabs=azure-cloud)
 
 💡*Hint*: There are several connectivity-check scripts available [here](../../lab/scripts/).
 
+## Connect to your workstation (Hackbox Console)
+
+1. Wait until your deployment has completed successfully. In the **HB Console**, open
+   your lab's **Credentials** and locate:
+
+   | Credential | Purpose |
+   | --- | --- |
+   | **Workstation VM** | Your Windows VM, for example `labuser-0020` |
+   | **On-prem Resource Group** | The VM's resource group, for example `rg-labuser-0020-onprem` |
+   | **VM Admin Username** / **VM Admin Password** | Credentials for signing in to Windows |
+   | **Bastion Name** / **Bastion Resource Group** | The shared Bastion used to access your VM |
+
+2. Sign in to the [Azure portal](https://portal.azure.com) with your assigned
+   **LabUser Azure account**. These are your Azure account credentials, not the VM
+   administrator credentials.
+3. Open the **On-prem Resource Group**, select your **Workstation VM**, then select
+   **Connect > Bastion**. Use the existing shared Bastion identified in the HB Console;
+   do **not** create another Bastion or assign a public IP to the VM.
+4. Connect using **RDP**, port **3389**, and **VM Password** authentication. Enter
+   **VM Admin Username** (normally `mhadmin`) and **VM Admin Password** exactly as
+   shown in the HB Console. Do not use your LabUser Azure password here.
+5. Select **Connect** to open the Windows desktop in your browser. Allow pop-ups for
+   the Azure portal if the session opens in a new tab.
+6. On the workstation, open **Windows Terminal** and select the **Ubuntu** profile.
+   Alternatively, run `wsl -d Ubuntu` from PowerShell. Run the following in this
+   **Ubuntu/WSL shell**, not in PowerShell or Azure Cloud Shell:
+
+   ```bash
+   source ~/.microhack-k8s.env
+   kubectl get nodes
+   ```
+
+   All three Kubernetes nodes should report **Ready**. The tools and kubeconfig are
+   already installed; no manual kubeconfig download or SSH tunnel is required.
+
+Continue with Task 1 below in the same WSL session. For challenges 2-5, keep using
+this session or run `source ~/.microhack-k8s.env` again.
+
 ## Task 1 - Login to Azure
-In your shell environment, login to Azure using the account you got assigned during the microhack.
+In your workstation's Ubuntu/WSL shell, login to Azure using the account you got assigned during the microhack.
 ```bash
 az logout # only required if you are logged in with another user from a previous session
 
 az login # browser popup opens with credential prompt. Provide the user credentials you got from your microhack coach
 ```
 In case you are prompted to select a subscription, please do so. In the microhack environment you just can hit enter as you only have one subscription available.
+
+**Hackbox Console labs:** your cluster connection was verified above. Continue
+directly with **Task 2**; the remaining steps in Task 1 are only for the manual fallback.
 
 Validate that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem". 
 Click on your onprem resource group's name (i.e. 37-k8s-onprem).
