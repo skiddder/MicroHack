@@ -41,12 +41,8 @@ Please ensure that you successfully verified
    **Ubuntu/WSL shell**, not in PowerShell or Azure Cloud Shell:
 
    ```bash
-   source ~/.microhack-k8s.env
-   kubectl get nodes
+   lsb_release -a
    ```
-
-   All three Kubernetes nodes should report **Ready**. The tools and kubeconfig are
-   already installed; no manual kubeconfig download or SSH tunnel is required.
 
 Continue with Task 1 below in the same WSL session. For challenges 2-5, keep using
 this session or run `source ~/.microhack-k8s.env` again.
@@ -56,36 +52,44 @@ In your workstation's Ubuntu/WSL shell, login to Azure using the account you got
 ```bash
 az logout # only required if you are logged in with another user from a previous session
 
-az login # browser popup opens with credential prompt. Provide the user credentials you got from your microhack coach
+az login # Sign in with your assigned LabUser Azure account, not the VM administrator account
 ```
 In case you are prompted to select a subscription, please do so. In the microhack environment you just can hit enter as you only have one subscription available.
 
-**Hackbox Console labs:** your cluster connection was verified above. Continue
-directly with **Task 2**; the remaining steps in Task 1 are only for the manual fallback.
-
-Validate that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem". 
-Click on your onprem resource group's name (i.e. 37-k8s-onprem).
-There should be 4 VMs in this resource group (master, worker1, worker2, workstation). Make sure that all VMs are in state 'running'. 
+Validate that you can see the **Arc Resource Group** and **On-prem Resource Group**
+listed in your **HB Console Credentials** in the [Azure portal](https://portal.azure.com).
+For example, `labuser-0020` uses `rg-labuser-0020` and `rg-labuser-0020-onprem`.
+Open your **On-prem Resource Group**. There should be four VMs (master, worker1,
+worker2 and workstation). The workstation is named `labuser-0020` in this example;
+the K3s node names still use a generated prefix. Make sure that all VMs are running.
 ![img-start-vm](img/vm-start.png)
 
-To connect to your k8s cluster, we first need to merge the cluster credentials into your local ~/.kube/config file. You can use the following bash script for this:
+In the Bash block below, replace the placeholders with **VM Admin Username** and
+**On-prem Resource Group** from your **HB Console Credentials**. When `scp` prompts
+for a password, enter **VM Admin Password**, not your LabUser Azure password.
+The script discovers the master VM in your on-prem RG, copies its kubeconfig into
+`~/.kube/config` and then checks the cluster connection.
+
+For the manual Terraform fallback, use the administrator username provided by your
+coach and your original on-prem RG name (for example `37-k8s-onprem`) instead.
 
 ```bash
-# Set admin username (use the admin_user value provided by your coach)
-admin_user="${admin_user:-<replace-with-admin_user-from-fixtures.tfvars>}"
+# Replace these values with the corresponding HB Console Credentials
+admin_user="<VM Admin Username>"
+onprem_resource_group="<On-prem Resource Group>"
 
-# Extract trailing number from Azure username before '@' (e.g., LabUser-37@... or hackuser-067@... -> 37 or 67)
-azure_user=$(az account show --query user.name --output tsv | tr -d '\r')
-user_number="${user_number:-$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')}"
-
-# Get private IP of master node
-master_ip=$(az vm show --resource-group "${onprem_resource_group:-${user_number}-k8s-onprem}" --name "${user_number}-k8s-master" --show-details --query privateIps --output tsv)
+# Discover the master VM without assuming a LabUser-based node name
+master_vm_name=$(az vm list --resource-group "$onprem_resource_group" --query "[?ends_with(name, '-k8s-master')].name | [0]" --output tsv)
+master_ip=$(az vm show --resource-group "$onprem_resource_group" --name "$master_vm_name" --show-details --query privateIps --output tsv)
+scp_port=""
 
 # ── Optional: only if working from your LOCAL machine instead of the workstation VM ──
-# Uncomment the following lines to tunnel SSH and the K3s API through Azure Bastion:
-# master_vm_id=$(az vm show --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query id --output tsv)
-# az network bastion tunnel --name mh-bastion --resource-group mh-bastion --target-resource-id "$master_vm_id" --resource-port 22 --port 2222 &
-# az network bastion tunnel --name mh-bastion --resource-group mh-bastion --target-resource-id "$master_vm_id" --resource-port 6443 --port 6443 &
+# Uncomment and fill in the shared Bastion credentials from the HB Console:
+# bastion_name="<Bastion Name>"
+# bastion_resource_group="<Bastion Resource Group>"
+# master_vm_id=$(az vm show --resource-group "$onprem_resource_group" --name "$master_vm_name" --query id --output tsv)
+# az network bastion tunnel --name "$bastion_name" --resource-group "$bastion_resource_group" --target-resource-id "$master_vm_id" --resource-port 22 --port 2222 &
+# az network bastion tunnel --name "$bastion_name" --resource-group "$bastion_resource_group" --target-resource-id "$master_vm_id" --resource-port 6443 --port 6443 &
 # sleep 5 ; master_ip="127.0.0.1" ; scp_port="-P 2222"
 # ── End optional block ──
 
@@ -93,7 +97,8 @@ master_ip=$(az vm show --resource-group "${onprem_resource_group:-${user_number}
 mkdir -p ~/.kube
 
 # Copy the kubeconfig to standard location
-scp ${scp_port:-} $admin_user@$master_ip:~/.kube/config ~/.kube/config
+scp ${scp_port:-} "$admin_user@$master_ip:~/.kube/config" ~/.kube/config
+chmod 600 ~/.kube/config
 
 # Replace localhost address with the master IP
 sed -i "s/127.0.0.1/$master_ip/g" ~/.kube/config
@@ -103,6 +108,8 @@ kubectl get nodes
 ```
 
 💡 **How does this work?** From the workstation VM, `master_ip` is the private IP and all traffic stays on the VNet. If the optional block is uncommented, `master_ip` is overridden to `127.0.0.1` — SCP goes through the SSH tunnel (port 2222) and the sed becomes a no-op, so `kubectl` talks to `127.0.0.1:6443` through the K3s API tunnel.
+
+All three Kubernetes nodes should now report **Ready**. Only then continue with Task 2.
 
 ## Task 2 - Connect K8s cluster using script
 
