@@ -83,6 +83,13 @@ if ($groups | Where-Object { $_.ResourceGroupName -eq $ResourceGroupName }) {
         throw "Cleanup required before deployment: legacy exercise resource(s) '$($oldExerciseResources.name -join ', ')' conflict with the participant naming scheme. No replacement registry or workspace was created."
     }
 }
+$hubId = "/subscriptions/$SubscriptionId/resourceGroups/$script:SharedGroupName/providers/Microsoft.Network/virtualNetworks/mh-k8s-hub"
+$spokeId = "/subscriptions/$SubscriptionId/resourceGroups/$onpremGroupName/providers/Microsoft.Network/virtualNetworks/$prefix-k8s-vnet"
+$lockName = 'k8s-hub-' + (Get-MhhStableHash -Value $SubscriptionId -Length 24)
+Invoke-MhhSynchronized -Name $lockName -ScriptBlock {
+    Write-Host "[peering] Checking hub peering for '$prefix' before infrastructure deployment."
+    Repair-K8sHubPeering -SubscriptionId $SubscriptionId -LabPrefix $prefix -SpokeVnetId $spokeId
+} | Out-Null
 $exercise = Invoke-MhhDeploymentWithRegionFallback -PreferredLocations $regions `
     -ResourceGroupName $ResourceGroupName -RgOwnerEntraObjectIds $AllowedEntraUserIds `
     -TemplateFile (Join-Path $PSScriptRoot 'exercise.bicep') `
@@ -103,7 +110,6 @@ $tokenText = New-MhhStablePassword -Purpose 'k3s-token'
 $tokenBytes = [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($tokenText))
 $token = [Convert]::ToHexString($tokenBytes).ToLowerInvariant()
 $masterIp = "10.$index.1.10"
-$hubId = "/subscriptions/$SubscriptionId/resourceGroups/$script:SharedGroupName/providers/Microsoft.Network/virtualNetworks/mh-k8s-hub"
 $configuration = @{
     admin_user = 'mhadmin'
     admin_password = $password
@@ -143,20 +149,9 @@ if (-not $result.Success) {
 Invoke-K8sWorkstationSetup -SubscriptionId $SubscriptionId -ResourceGroupName $onpremGroupName `
     -LabPrefix $prefix -SetupScript (Get-K8sWorkstationScript) -Configuration $configuration
 
-$lockName = 'k8s-hub-' + (Get-MhhStableHash -Value $SubscriptionId -Length 24)
 Invoke-MhhSynchronized -Name $lockName -ScriptBlock {
     Update-MhhToken | Out-Null
-    $peerings = @(Invoke-K8sAz @(
-        'network', 'vnet', 'peering', 'list',
-        '--resource-group', $script:SharedGroupName, '--vnet-name', 'mh-k8s-hub'
-    ))
-    $oldPeering = @($peerings | Where-Object { $_.name -eq "to-$prefix" })
-    if ($oldPeering.Count -gt 0 -and $oldPeering[0].peeringState -eq 'Disconnected') {
-        Invoke-K8sAz @(
-            'network', 'vnet', 'peering', 'delete', '--resource-group', $script:SharedGroupName,
-            '--vnet-name', 'mh-k8s-hub', '--name', "to-$prefix"
-        ) | Out-Null
-    }
+    Repair-K8sHubPeering -SubscriptionId $SubscriptionId -LabPrefix $prefix -SpokeVnetId $result.Outputs.spokeVnetId
     $peering = New-AzResourceGroupDeployment -ResourceGroupName $script:SharedGroupName `
         -Name "peering-$prefix" -TemplateFile (Join-Path $PSScriptRoot 'hub-peering.bicep') `
         -TemplateParameterObject @{ spokeVnetId = $result.Outputs.spokeVnetId; labPrefix = $prefix } -ErrorAction Stop

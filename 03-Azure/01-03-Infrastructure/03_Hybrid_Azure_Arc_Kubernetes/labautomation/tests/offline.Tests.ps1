@@ -79,6 +79,8 @@ $global:K8sTestState = @{
     DropSubmission = $false; SleepCalls = @(); ExitCodeOverride = $null; GuestRevisionOverride = $null; ExistingVms = @()
     GuestAttemptOverride = $null; GuestStateOverride = $null; UsedStandaloneCompiler = $false
     ExistingExerciseResources = @()
+    HubPeerings = @(); DeletedPeerings = @(); PeeringDeletionCallCounts = @()
+    VnetResponses = @{}; PeeringDeleteFailure = $false; PeeringDeletePersists = $false
 }
 
 function Get-AzContext { return @{ Subscription = @{ Id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' } } }
@@ -137,7 +139,10 @@ function Invoke-AzRestMethod {
         }
         return @{ StatusCode = 201; Content = '{}' }
     }
-    if ($Path -match '/providers/Microsoft.Resources/deployments/') {
+    if ($Path -match '/providers/Microsoft.Network/virtualNetworks/') {
+        $status = $(if ($global:K8sTestState.VnetResponses.ContainsKey($Path)) { $global:K8sTestState.VnetResponses[$Path] } else { 404 })
+        return @{ StatusCode = $status; Content = '{"id":"existing-vnet"}' }
+    } elseif ($Path -match '/providers/Microsoft.Resources/deployments/') {
         $record = $global:K8sTestState.Deployments[$Path]
         if (-not $record) { return @{ StatusCode = 404; Content = '{}' } }
         if ($global:K8sTestState.StateSteps.Count -gt 0) {
@@ -182,7 +187,7 @@ function Invoke-MhhDeploymentWithRegionFallback {
         'shared.bicep' { @{ bastionName = 'mh-k8s-bastion' } }
         'exercise.bicep' { @{ acrName = $TemplateParameterObject.acrName; workspaceName = $TemplateParameterObject.workspaceName } }
         'main.bicep' { @{
-            spokeVnetId = 'test-spoke'
+            spokeVnetId = "/subscriptions/$($global:K8sTestState.Subscription)/resourceGroups/$ResourceGroupName/providers/Microsoft.Network/virtualNetworks/$($TemplateParameterObject.labPrefix)-k8s-vnet"
             workstationId = "/subscriptions/$($global:K8sTestState.Subscription)/resourceGroups/$ResourceGroupName/providers/Microsoft.Compute/virtualMachines/$($TemplateParameterObject.workstationName)"
         } }
     }
@@ -211,6 +216,19 @@ function global:az {
     if ($args -contains 'bicep') { '{"resources":[]}' }
     elseif ($args -contains 'vm' -and $args -contains 'list') { ConvertTo-Json -InputObject @($global:K8sTestState.ExistingVms) -Depth 10 -Compress }
     elseif ($args -contains 'resource' -and $args -contains 'list') { ConvertTo-Json -InputObject @($global:K8sTestState.ExistingExerciseResources) -Depth 10 -Compress }
+    elseif ($args -contains 'peering' -and $args -contains 'list') { ConvertTo-Json -InputObject @($global:K8sTestState.HubPeerings) -Depth 10 -Compress }
+    elseif ($args -contains 'peering' -and $args -contains 'delete') {
+        if ($global:K8sTestState.PeeringDeleteFailure) {
+            $global:LASTEXITCODE = 1
+            return
+        }
+        $name = $args[([array]::IndexOf($args, '--name') + 1)]
+        $global:K8sTestState.DeletedPeerings += $name
+        $global:K8sTestState.PeeringDeletionCallCounts += $global:K8sTestState.Calls.Count
+        if (-not $global:K8sTestState.PeeringDeletePersists) {
+            $global:K8sTestState.HubPeerings = @($global:K8sTestState.HubPeerings | Where-Object { $_.name -ne $name })
+        }
+    }
     elseif ($args -contains 'show') { '{"peeringState":"Connected"}' }
     else { '[]' }
     $global:LASTEXITCODE = 0
@@ -261,6 +279,57 @@ try {
         $global:K8sTestState.GuestFailure = $false
     }
     Assert-Test ($prefixes[0] -ne $prefixes[1]) 'Participant resource names must be distinct.'
+    $peerName = "to-$($prefixes[1])"
+    $legacyVnetId = "/subscriptions/$script:subscription/resourceGroups/$($prefixes[1])-onprem/providers/Microsoft.Network/virtualNetworks/$($prefixes[1])-k8s-vnet"
+    $currentVnetId = "/subscriptions/$script:subscription/resourceGroups/$($parameters.ResourceGroupName)-onprem/providers/Microsoft.Network/virtualNetworks/$($prefixes[1])-k8s-vnet"
+    $legacyVnetPath = "${legacyVnetId}?api-version=2024-05-01"
+    $otherPeer = @{ name = "to-$($prefixes[0])"; peeringState = 'Connected'; remoteVirtualNetwork = @{ id = 'other-participant' } }
+    foreach ($state in @('Disconnected', 'Connected')) {
+        $global:K8sTestState.HubPeerings = @(
+            $otherPeer
+            @{ name = $peerName; peeringState = $state; remoteVirtualNetwork = @{ id = $legacyVnetId } }
+        )
+        $beforeRepair = $global:K8sTestState.Calls.Count
+        $beforeDeletions = $global:K8sTestState.DeletedPeerings.Count
+        $null = & (Join-Path $root 'deploy-lab.ps1') @parameters
+        Assert-Test ($global:K8sTestState.DeletedPeerings.Count -eq $beforeDeletions + 1) 'A legacy hub reference to a confirmed missing VNet must be removed, including a cached Connected state.'
+        Assert-Test ($global:K8sTestState.PeeringDeletionCallCounts[-1] -eq $beforeRepair) 'Orphan peering removal must happen before any infrastructure deployment.'
+        Assert-Test ($global:K8sTestState.HubPeerings.Count -eq 1 -and $global:K8sTestState.HubPeerings[0].name -eq $otherPeer.name) 'Peering repair must preserve another participant connection.'
+    }
+    $global:K8sTestState.HubPeerings = @(@{ name = $peerName; peeringState = 'Disconnected'; remoteVirtualNetwork = @{ id = $legacyVnetId } })
+    $global:K8sTestState.VnetResponses[$legacyVnetPath] = 200
+    $beforeRepair = $global:K8sTestState.Calls.Count
+    $beforeDeletions = $global:K8sTestState.DeletedPeerings.Count
+    Assert-Throws { & (Join-Path $root 'deploy-lab.ps1') @parameters } 'existing legacy VNet'
+    Assert-Test ($global:K8sTestState.Calls.Count -eq $beforeRepair -and $global:K8sTestState.DeletedPeerings.Count -eq $beforeDeletions) 'A live legacy VNet must fail preflight without writes, even when its peering is Disconnected.'
+    foreach ($status in @(403, 503)) {
+        $global:K8sTestState.VnetResponses[$legacyVnetPath] = $status
+        Assert-Throws { & (Join-Path $root 'deploy-lab.ps1') @parameters } "HTTP $status"
+        Assert-Test ($global:K8sTestState.Calls.Count -eq $beforeRepair -and $global:K8sTestState.DeletedPeerings.Count -eq $beforeDeletions) 'A failed VNet read must not be interpreted as a missing VNet.'
+    }
+    $global:K8sTestState.VnetResponses.Clear()
+    $global:K8sTestState.HubPeerings[0].remoteVirtualNetwork.id = 'unrecognized-network'
+    Assert-Throws { & (Join-Path $root 'deploy-lab.ps1') @parameters } 'Unexpected hub peering target'
+    Assert-Test ($global:K8sTestState.Calls.Count -eq $beforeRepair -and $global:K8sTestState.DeletedPeerings.Count -eq $beforeDeletions) 'An unrecognized peering target must never be deleted or deployed over.'
+    $global:K8sTestState.HubPeerings[0].remoteVirtualNetwork.id = $currentVnetId
+    $global:K8sTestState.HubPeerings[0].peeringState = 'Connected'
+    $null = & (Join-Path $root 'deploy-lab.ps1') @parameters
+    Assert-Test ($global:K8sTestState.DeletedPeerings.Count -eq $beforeDeletions) 'A healthy current connection must be preserved.'
+    $global:K8sTestState.HubPeerings[0].peeringState = 'Disconnected'
+    $beforeRepair = $global:K8sTestState.Calls.Count
+    $global:K8sTestState.PeeringDeleteFailure = $true
+    Assert-Throws { & (Join-Path $root 'deploy-lab.ps1') @parameters } 'Azure CLI command'
+    $global:K8sTestState.PeeringDeleteFailure = $false
+    Assert-Test ($global:K8sTestState.Calls.Count -eq $beforeRepair) 'A failed peering delete must prevent infrastructure deployment.'
+    $global:K8sTestState.PeeringDeletePersists = $true
+    $beforeWait = $global:K8sTestState.SleepCalls.Count
+    Assert-Throws { & (Join-Path $root 'deploy-lab.ps1') @parameters } 'still present'
+    Assert-Test ($global:K8sTestState.Calls.Count -eq $beforeRepair) 'A peering still present after deletion must block infrastructure deployment.'
+    Assert-Test ($global:K8sTestState.SleepCalls.Count - $beforeWait -eq 29) 'Peering deletion observation must have a bounded wait.'
+    $global:K8sTestState.PeeringDeletePersists = $false
+    $null = & (Join-Path $root 'deploy-lab.ps1') @parameters
+    Assert-Test ($global:K8sTestState.PeeringDeletionCallCounts[-1] -eq $beforeRepair) 'A disconnected current peering must also be repaired before infrastructure deployment.'
+    $global:K8sTestState.HubPeerings = @()
     $global:K8sTestState.ExistingVms = @(@{ name = "$($prefixes[1])-workstation"; tags = @{ Role = 'workstation' } })
     $beforeConflict = $global:K8sTestState.Calls.Count
     Assert-Throws { & (Join-Path $root 'deploy-lab.ps1') @parameters } 'workstation VM(s)'
@@ -417,6 +486,10 @@ try {
     $workstationVm = @($template.resources | Where-Object { $_.type -eq 'Microsoft.Compute/virtualMachines' -and -not $_.copy })
     Assert-Test ($workstationVm.Count -eq 1 -and $workstationVm[0].name -eq "[parameters('workstationName')]") 'Windows VM resource must use the explicit workstation name.'
     Assert-Test ($template.variables.vmNames.Contains("parameters('workstationName')")) 'Shutdown schedules must include the renamed workstation.'
+    $shutdown = @($template.resources | Where-Object { $_.type -eq 'Microsoft.DevTestLab/schedules' })
+    Assert-Test ($shutdown.Count -eq 1 -and $shutdown[0].copy.count -eq "[length(variables('vmNames'))]") 'Every participant VM must have a shutdown schedule.'
+    Assert-Test ($shutdown[0].dependsOn -contains "[resourceId('Microsoft.Compute/virtualMachines', parameters('workstationName'))]") 'Shutdown schedules must wait for the renamed workstation VM.'
+    Assert-Test ($shutdown[0].dependsOn -contains 'nodes') 'Shutdown schedules must wait for the node VM collection.'
     $guestTemplate = Get-Content (Join-Path $temporary 'workstation-setup.json') -Raw | ConvertFrom-Json
     Assert-Test ($guestTemplate.parameters.configuration.type -eq 'secureObject') 'Guest configuration must be a secure object.'
     $runCommand = @($guestTemplate.resources | Where-Object { $_.type -eq 'Microsoft.Compute/virtualMachines/runCommands' })

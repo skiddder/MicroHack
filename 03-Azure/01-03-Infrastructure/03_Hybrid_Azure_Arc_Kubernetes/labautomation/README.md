@@ -70,8 +70,18 @@ exercise region. The guest configuration and shared hub peering use normal incre
 and fail explicitly if they cannot complete. The workstation ARM deployment is
 submitted through a short REST PUT and observed through separate GET requests;
 the Console no longer holds a synchronous connection for the entire Ansible run.
-A disconnected reverse peering left
-by an on-prem RG recycle is removed and rebuilt under the hub lock.
+Before either participant RG deployment, the script checks the participant's
+reverse hub peering under the subscription-specific hub lock. A stale peering
+to the old hash-named VNet is removed only after an ARM GET confirms that VNet
+no longer exists (HTTP 404), even if the cached peering state still says Connected.
+A Disconnected peering to the current spoke is also removed. Deletion is
+observed for up to five minutes before infrastructure submission, avoiding an
+address-space conflict with the old hub reference. Existing legacy VNets and
+unrecognized targets cause an explicit failure; other participants' peerings
+and healthy current connections are not modified. Authorization/read failures
+never count as evidence that a VNet is missing.
+The same check runs again before publishing the reverse peering after guest
+setup, handling disconnected references left by an on-prem RG recycle.
 
 Passwords and the K3s token are stable across retries and are passed in secure
 ARM parameters and protected guest configuration, never public template outputs.

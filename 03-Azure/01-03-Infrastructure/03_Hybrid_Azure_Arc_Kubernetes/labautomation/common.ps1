@@ -162,6 +162,47 @@ function Invoke-K8sArmRequest {
     }
 }
 
+function Repair-K8sHubPeering {
+    param(
+        [string]$SubscriptionId,
+        [string]$LabPrefix,
+        [string]$SpokeVnetId
+    )
+    $arguments = @(
+        'network', 'vnet', 'peering', 'list',
+        '--resource-group', $script:SharedGroupName, '--vnet-name', 'mh-k8s-hub'
+    )
+    $name = "to-$LabPrefix"
+    $peerings = @(Invoke-K8sAz $arguments)
+    $peering = $peerings | Where-Object { $_.name -eq $name }
+    if (-not $peering) { return }
+    $remoteId = [string]$peering.remoteVirtualNetwork.id
+    $legacyId = "/subscriptions/$SubscriptionId/resourceGroups/$LabPrefix-onprem/providers/Microsoft.Network/virtualNetworks/$LabPrefix-k8s-vnet"
+    if ($remoteId -notin @($SpokeVnetId, $legacyId)) {
+        throw "Unexpected hub peering target '$remoteId' for '$name'. Refusing to modify an unrecognized network."
+    }
+    if ($remoteId -eq $legacyId) {
+        $legacyVnet = Invoke-K8sArmRequest -Path "${remoteId}?api-version=2024-05-01" -AllowNotFound
+        if ($legacyVnet) {
+            throw "Cleanup required before deployment: hub peering '$name' still references existing legacy VNet '$remoteId'. No legacy network or peering was deleted."
+        }
+    } elseif ($peering.peeringState -ne 'Disconnected') {
+        Write-Host "[peering] Keeping '$name' targeting the current spoke (state=$($peering.peeringState))."
+        return
+    }
+    Write-Host "[peering] Removing stale hub peering '$name' targeting '$remoteId' before deploying its replacement."
+    Invoke-K8sAz @(
+        'network', 'vnet', 'peering', 'delete', '--resource-group', $script:SharedGroupName,
+        '--vnet-name', 'mh-k8s-hub', '--name', $name
+    ) | Out-Null
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        $remaining = @(Invoke-K8sAz $arguments | Where-Object { $_.name -eq $name })
+        if ($remaining.Count -eq 0) { return }
+        if ($attempt -lt 30) { Start-Sleep -Seconds 10 }
+    }
+    throw "Hub peering '$name' is still present after waiting for deletion. No replacement deployment was submitted by this phase."
+}
+
 function Invoke-K8sWorkstationSetup {
     param(
         [string]$SubscriptionId,
