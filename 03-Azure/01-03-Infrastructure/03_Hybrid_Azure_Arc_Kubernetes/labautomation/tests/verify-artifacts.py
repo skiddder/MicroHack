@@ -301,6 +301,22 @@ assert not re.search(r"\bexit\s+1\b", "\n".join(data_blocks))
 for block in data_blocks:
     subprocess.run([bash, "-n"], input=block, text=True, encoding="utf-8", check=True)
 data_setup, data_parameters = data_blocks[:2]
+assert data_setup.startswith(
+    'export arc_resource_group="<EXERCISE_RESOURCE_GROUP>"\n'
+    'export arc_cluster_name="<ARC_CLUSTER_NAME>"\n'
+    'export workspace_name="<LOG_ANALYTICS_WORKSPACE_NAME>"\n'
+)
+assert not re.search(r"\breturn\b|\bsource\b|\w+\(\)\s*\{", data_setup)
+
+
+def configure_data_setup(group, cluster, workspace):
+    return (
+        data_setup.replace("<EXERCISE_RESOURCE_GROUP>", group)
+        .replace("<ARC_CLUSTER_NAME>", cluster)
+        .replace("<LOG_ANALYTICS_WORKSPACE_NAME>", workspace)
+    )
+
+
 sqlmi_setup = next(
     line for block in data_blocks for line in block.splitlines()
     if line.startswith("export sqlmi_name=")
@@ -338,7 +354,7 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-data-names-") as director
         ]
         stub = (
             'set -e\nexport HOME="$1"\ncd "$HOME"\n'
-            f"export arc_resource_group={shlex.quote(group)} arc_cluster_name={shlex.quote(cluster)} workspace_name={shlex.quote(workspace)}\n"
+            "export arc_resource_group=stale-group arc_cluster_name=stale-cluster workspace_name=stale-workspace\n"
             # A stale numeric value must not affect the new names.
             "export user_number=9 location=westeurope\nunset onprem_resource_group\n"
             'az() { case "$*" in\n' + "\n".join(cases)
@@ -349,7 +365,7 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-data-names-") as director
         )
         result = subprocess.run(
             [bash, "-s", "--", home.as_posix()],
-            input=stub + data_setup + data_parameters + "\n" + sqlmi_setup + "\n" + data_connection
+            input=stub + configure_data_setup(group, cluster, workspace) + data_parameters + "\n" + sqlmi_setup + "\n" + data_connection
                 + '\nprintf "RESULT=%s|%s|%s|%s\\n" "$data_controller_name" "$sqlmi_name" "$master_vm_name" "$master_ip,$node_port"\n',
             text=True, encoding="utf-8", capture_output=True,
         )
@@ -453,7 +469,7 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-region-errors-") as direc
         )
         result = subprocess.run(
             [bash, "-s", "--", pathlib.Path(directory).as_posix()],
-            input=stub + "set -eu\n" + data_setup + "\necho SHELL_STILL_RUNNING\n",
+            input=stub + "set -eu\n" + configure_data_setup("rg-labuser-0009", "test-cluster", "labuser-0009-law") + "\necho SHELL_STILL_RUNNING\n",
             text=True, encoding="utf-8", capture_output=True,
         )
         assert result.returncode == 0
@@ -470,6 +486,11 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-interactive-errors-") as 
         "invalid-name",
         "workspace-denied",
         "key-denied",
+        "workspace-empty",
+        "key-empty",
+        "placeholder-arc_resource_group",
+        "placeholder-arc_cluster_name",
+        "placeholder-workspace_name",
     ):
         context = {
             "arc_resource_group": "rg-labuser-0009",
@@ -478,6 +499,8 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-interactive-errors-") as 
         }
         if scenario.startswith("missing-"):
             context.pop(scenario.removeprefix("missing-"))
+        if scenario.startswith("placeholder-"):
+            context[scenario.removeprefix("placeholder-")] = "<REPLACE_ME>"
         if scenario == "invalid-name":
             context["arc_resource_group"] = "rg-invalid_name"
         stub = (
@@ -486,18 +509,28 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-interactive-errors-") as 
             + '\naz() { case "$*" in\n'
             + "'connectedk8s show '*) echo swedencentral ;;\n"
             + "'monitor log-analytics workspace show '*) "
-            + ('echo AuthorizationFailed >&2; return 1' if scenario == "workspace-denied" else 'echo test-workspace-id')
-            + " ;;\n'monitor log-analytics workspace get-shared-keys '*) echo AuthorizationFailed >&2; return 1 ;;\n"
+            + (
+                "echo AuthorizationFailed >&2; return 1" if scenario == "workspace-denied"
+                else "return 0" if scenario == "workspace-empty"
+                else "echo test-workspace-id"
+            )
+            + " ;;\n'monitor log-analytics workspace get-shared-keys '*) "
+            + ("return 0" if scenario == "key-empty" else "echo AuthorizationFailed >&2; return 1")
+            + " ;;\n"
             + '*) echo UNEXPECTED_LOOKUP >&2; return 98 ;; esac; }\n'
         )
         result = subprocess.run(
             [bash, "-s", "--", pathlib.Path(directory).as_posix()],
-            input=stub + data_setup + "\necho SHELL_STILL_RUNNING\n",
+            input=stub + configure_data_setup(
+                context.get("arc_resource_group", ""),
+                context.get("arc_cluster_name", ""),
+                context.get("workspace_name", ""),
+            ) + "\necho SHELL_STILL_RUNNING\n",
             text=True, encoding="utf-8", capture_output=True,
         )
         assert result.returncode == 0, result
         assert "SHELL_STILL_RUNNING" in result.stdout
-        assert "Step 1 failed" in result.stderr
+        assert "Error:" in result.stderr
         assert "Your values:" not in result.stdout
         assert "Step 1 completed" not in result.stdout
         assert "UNEXPECTED_LOOKUP" not in result.stderr

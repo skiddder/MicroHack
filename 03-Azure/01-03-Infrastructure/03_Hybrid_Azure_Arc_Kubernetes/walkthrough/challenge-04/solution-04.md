@@ -20,57 +20,43 @@ The deployment uses ARM templates as this is the most robust way for deployment 
 
 ### Step 1: Gather required values
 
-Use the same WSL session as in challenge 2, where `arc_resource_group`,
-`arc_cluster_name` and `workspace_name` were set to the actual resource names.
-Alternatively, load `~/.microhack-k8s.env` if it is available.
+Replace the three placeholders at the beginning of the block with your actual
+exercise resource group, Arc-enabled Kubernetes cluster and Log Analytics
+workspace names from HB Credentials or challenge 2. No variables from an earlier
+shell session or environment file are required.
 The new resource names are derived from the exercise RG, **not** from the numeric
 `user_number`: `rg-labuser-0009` supplies the prefix `labuser-0009`, retaining the
 leading zeros. The original Terraform RG `37-k8s-arc` retains the prefix `37`.
 
 ```bash
-prepare_arc_data_values() {
-    local required_variable
-    if [ -f "$HOME/.microhack-k8s.env" ]; then
-        source "$HOME/.microhack-k8s.env" || return 1
-    fi
-    for required_variable in arc_resource_group arc_cluster_name workspace_name; do
-        if [ -z "${!required_variable:-}" ]; then
-            echo "Error: '$required_variable' is missing. Set the actual resource names from challenge 2 or load the HB environment file." >&2
-            return 1
-        fi
-    done
+export arc_resource_group="<EXERCISE_RESOURCE_GROUP>"
+export arc_cluster_name="<ARC_CLUSTER_NAME>"
+export workspace_name="<LOG_ANALYTICS_WORKSPACE_NAME>"
 
-    export resource_group="$arc_resource_group"
-    export connected_cluster_name="$arc_cluster_name"
-    participant_name="${resource_group#rg-}"
-    if [[ "$resource_group" =~ ^[0-9]+-k8s-arc$ ]]; then
-        participant_name="${resource_group%-k8s-arc}"
-        export onprem_resource_group="${onprem_resource_group:-${participant_name}-k8s-onprem}"
-    else
-        export onprem_resource_group="${onprem_resource_group:-${resource_group}-onprem}"
-    fi
-    if [[ ! "$participant_name" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
-        echo "Error: Cannot derive a Kubernetes-compatible participant name from '$resource_group'." >&2
-        return 1
-    fi
-    export participant_name
-    export extension_name="${participant_name}-arc-data-controller-ext"
-    export namespace="${participant_name}-arc-data-controller"
-    export custom_location_name="${participant_name}-arc-data-controller"
-    export data_controller_name="${participant_name}-dc"
+export resource_group="$arc_resource_group" connected_cluster_name="$arc_cluster_name"
+participant_name="${resource_group#rg-}"
+if [[ "$resource_group" =~ ^[0-9]+-k8s-arc$ ]]; then
+    participant_name="${resource_group%-k8s-arc}"
+    export onprem_resource_group="${onprem_resource_group:-${participant_name}-k8s-onprem}"
+else
+    export onprem_resource_group="${onprem_resource_group:-${resource_group}-onprem}"
+fi
+export participant_name extension_name="${participant_name}-arc-data-controller-ext" \
+    namespace="${participant_name}-arc-data-controller" \
+    custom_location_name="${participant_name}-arc-data-controller" data_controller_name="${participant_name}-dc"
 
-    location=$(az connectedk8s show --resource-group "$resource_group" --name "$connected_cluster_name" --query location --output tsv) || return 1
-    if [ -z "$location" ]; then
-        echo "Error: Could not determine the Azure region of '$connected_cluster_name'." >&2
-        return 1
-    fi
-    export location
-
-    # Get Log Analytics workspace details
-    log_analytics_workspace_id=$(az monitor log-analytics workspace show -g "$resource_group" -n "$workspace_name" --query customerId -o tsv) || return 1
-    log_analytics_primary_key=$(az monitor log-analytics workspace get-shared-keys -g "$resource_group" -n "$workspace_name" --query primarySharedKey -o tsv) || return 1
-    export log_analytics_workspace_id log_analytics_primary_key
-
+if [[ -z "$arc_resource_group" || -z "$arc_cluster_name" || -z "$workspace_name" ||
+      "$arc_resource_group$arc_cluster_name$workspace_name" == *"<"* ]]; then
+    echo "Error: Replace all three placeholders with your actual resource names before running Step 1." >&2
+elif [[ ! "$participant_name" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
+    echo "Error: Cannot derive a Kubernetes-compatible participant name from '$resource_group'." >&2
+elif location=$(az connectedk8s show --resource-group "$resource_group" --name "$connected_cluster_name" --query location --output tsv) &&
+    [ -n "$location" ] &&
+    log_analytics_workspace_id=$(az monitor log-analytics workspace show -g "$resource_group" -n "$workspace_name" --query customerId -o tsv) &&
+    [ -n "$log_analytics_workspace_id" ] &&
+    log_analytics_primary_key=$(az monitor log-analytics workspace get-shared-keys -g "$resource_group" -n "$workspace_name" --query primarySharedKey -o tsv) &&
+    [ -n "$log_analytics_primary_key" ]; then
+    export location log_analytics_workspace_id log_analytics_primary_key
     echo "Your values:"
     echo "RESOURCE_GROUP: $resource_group"
     echo "CONNECTED_CLUSTER_NAME: $connected_cluster_name"
@@ -80,17 +66,15 @@ prepare_arc_data_values() {
     echo "CUSTOM_LOCATION_NAME: $custom_location_name"
     echo "DATA_CONTROLLER_NAME: $data_controller_name"
     echo "LOG_ANALYTICS_WORKSPACE_ID: $log_analytics_workspace_id"
-}
-
-if prepare_arc_data_values; then
     echo "Step 1 completed. Continue with Step 2."
 else
-    echo "Error: Step 1 failed. Do not continue with Step 2; correct the error above and rerun this block." >&2
+    echo "Error: Step 1 failed. Check the cluster region, workspace details and any Azure error above before continuing." >&2
 fi
 ```
 
-Paste the complete block into the current WSL shell. Failed checks return from
-the function without closing your terminal, even if `set -e` is enabled.
+After replacing the placeholders, paste the complete block into your WSL shell.
+Failed checks display an error without closing your terminal, even if `set -e`
+is enabled.
 Only proceed when the values and `Step 1 completed` are shown; successful exports
 remain available to the following steps in the same shell.
 
