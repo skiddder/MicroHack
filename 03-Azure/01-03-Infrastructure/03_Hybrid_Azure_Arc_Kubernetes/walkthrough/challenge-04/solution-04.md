@@ -28,54 +28,71 @@ The new resource names are derived from the exercise RG, **not** from the numeri
 leading zeros. The original Terraform RG `37-k8s-arc` retains the prefix `37`.
 
 ```bash
-if [ -f "$HOME/.microhack-k8s.env" ]; then
-    source "$HOME/.microhack-k8s.env"
-fi
-: "${arc_resource_group:?Set arc_resource_group to the Arc Resource Group from HB Console Credentials}"
-: "${arc_cluster_name:?Set arc_cluster_name to the actual cluster name from challenge 1}"
-: "${workspace_name:?Set workspace_name to the Log Analytics Workspace from HB Console Credentials}"
+prepare_arc_data_values() {
+    local required_variable
+    if [ -f "$HOME/.microhack-k8s.env" ]; then
+        source "$HOME/.microhack-k8s.env" || return 1
+    fi
+    for required_variable in arc_resource_group arc_cluster_name workspace_name; do
+        if [ -z "${!required_variable:-}" ]; then
+            echo "Error: '$required_variable' is missing. Set the actual resource names from challenge 2 or load the HB environment file." >&2
+            return 1
+        fi
+    done
 
-export resource_group="$arc_resource_group"
-export connected_cluster_name="$arc_cluster_name"
-participant_name="${resource_group#rg-}"
-if [[ "$resource_group" =~ ^[0-9]+-k8s-arc$ ]]; then
-    participant_name="${resource_group%-k8s-arc}"
-    export onprem_resource_group="${onprem_resource_group:-${participant_name}-k8s-onprem}"
+    export resource_group="$arc_resource_group"
+    export connected_cluster_name="$arc_cluster_name"
+    participant_name="${resource_group#rg-}"
+    if [[ "$resource_group" =~ ^[0-9]+-k8s-arc$ ]]; then
+        participant_name="${resource_group%-k8s-arc}"
+        export onprem_resource_group="${onprem_resource_group:-${participant_name}-k8s-onprem}"
+    else
+        export onprem_resource_group="${onprem_resource_group:-${resource_group}-onprem}"
+    fi
+    if [[ ! "$participant_name" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
+        echo "Error: Cannot derive a Kubernetes-compatible participant name from '$resource_group'." >&2
+        return 1
+    fi
+    export participant_name
+    export extension_name="${participant_name}-arc-data-controller-ext"
+    export namespace="${participant_name}-arc-data-controller"
+    export custom_location_name="${participant_name}-arc-data-controller"
+    export data_controller_name="${participant_name}-dc"
+
+    location=$(az connectedk8s show --resource-group "$resource_group" --name "$connected_cluster_name" --query location --output tsv) || return 1
+    if [ -z "$location" ]; then
+        echo "Error: Could not determine the Azure region of '$connected_cluster_name'." >&2
+        return 1
+    fi
+    export location
+
+    # Get Log Analytics workspace details
+    log_analytics_workspace_id=$(az monitor log-analytics workspace show -g "$resource_group" -n "$workspace_name" --query customerId -o tsv) || return 1
+    log_analytics_primary_key=$(az monitor log-analytics workspace get-shared-keys -g "$resource_group" -n "$workspace_name" --query primarySharedKey -o tsv) || return 1
+    export log_analytics_workspace_id log_analytics_primary_key
+
+    echo "Your values:"
+    echo "RESOURCE_GROUP: $resource_group"
+    echo "CONNECTED_CLUSTER_NAME: $connected_cluster_name"
+    echo "LOCATION: $location"
+    echo "EXTENSION_NAME: $extension_name"
+    echo "NAMESPACE: $namespace"
+    echo "CUSTOM_LOCATION_NAME: $custom_location_name"
+    echo "DATA_CONTROLLER_NAME: $data_controller_name"
+    echo "LOG_ANALYTICS_WORKSPACE_ID: $log_analytics_workspace_id"
+}
+
+if prepare_arc_data_values; then
+    echo "Step 1 completed. Continue with Step 2."
 else
-    export onprem_resource_group="${onprem_resource_group:-${resource_group}-onprem}"
+    echo "Error: Step 1 failed. Do not continue with Step 2; correct the error above and rerun this block." >&2
 fi
-if [[ ! "$participant_name" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
-    echo "Error: Cannot derive a Kubernetes-compatible participant name from '$resource_group'." >&2
-    exit 1
-fi
-export participant_name
-export extension_name="${participant_name}-arc-data-controller-ext"
-export namespace="${participant_name}-arc-data-controller"
-export custom_location_name="${participant_name}-arc-data-controller"
-export data_controller_name="${participant_name}-dc"
-
-location=$(az connectedk8s show --resource-group "$resource_group" --name "$connected_cluster_name" --query location --output tsv) || exit 1
-if [ -z "$location" ]; then
-    echo "Error: Could not determine the Azure region of '$connected_cluster_name'." >&2
-    exit 1
-fi
-export location
-
-# Get Log Analytics workspace details
-log_analytics_workspace_id=$(az monitor log-analytics workspace show -g "$resource_group" -n "$workspace_name" --query customerId -o tsv) || exit 1
-log_analytics_primary_key=$(az monitor log-analytics workspace get-shared-keys -g "$resource_group" -n "$workspace_name" --query primarySharedKey -o tsv) || exit 1
-export log_analytics_workspace_id log_analytics_primary_key
-
-echo "Your values:"
-echo "RESOURCE_GROUP: $resource_group"
-echo "CONNECTED_CLUSTER_NAME: $connected_cluster_name"
-echo "LOCATION: $location"
-echo "EXTENSION_NAME: $extension_name"
-echo "NAMESPACE: $namespace"
-echo "CUSTOM_LOCATION_NAME: $custom_location_name"
-echo "DATA_CONTROLLER_NAME: $data_controller_name"
-echo "LOG_ANALYTICS_WORKSPACE_ID: $log_analytics_workspace_id"
 ```
+
+Paste the complete block into the current WSL shell. Failed checks return from
+the function without closing your terminal, even if `set -e` is enabled.
+Only proceed when the values and `Step 1 completed` are shown; successful exports
+remain available to the following steps in the same shell.
 
 For `rg-labuser-0009`, the new values are:
 
@@ -216,15 +233,12 @@ kubectl get pods -n "$namespace" -l "app.kubernetes.io/name=$sqlmi_name"
 
 ```bash
 # Discover the actual master VM and its private IP in the on-prem RG
-master_vm_name=$(az vm list --resource-group "$onprem_resource_group" --query "[?ends_with(name, '-k8s-master')].name | [0]" --output tsv) || exit 1
-if [ -z "$master_vm_name" ]; then
-    echo "Error: No K3s master VM found in '$onprem_resource_group'." >&2
-    exit 1
-fi
-master_ip=$(az vm list-ip-addresses --resource-group "$onprem_resource_group" --name "$master_vm_name" --query "[0].virtualMachine.network.privateIpAddresses[0]" --output tsv) || exit 1
-
-# Get the NodePort assigned to SQL MI
-node_port=$(kubectl get svc "${sqlmi_name}-external-svc" -n "$namespace" -o jsonpath='{.spec.ports[0].nodePort}')
+if master_vm_name=$(az vm list --resource-group "$onprem_resource_group" --query "[?ends_with(name, '-k8s-master')].name | [0]" --output tsv) &&
+    [ -n "$master_vm_name" ] &&
+    master_ip=$(az vm list-ip-addresses --resource-group "$onprem_resource_group" --name "$master_vm_name" --query "[0].virtualMachine.network.privateIpAddresses[0]" --output tsv) &&
+    [ -n "$master_ip" ] &&
+    node_port=$(kubectl get svc "${sqlmi_name}-external-svc" -n "$namespace" -o jsonpath='{.spec.ports[0].nodePort}') &&
+    [ -n "$node_port" ]; then
 
 echo "Connection details:"
 echo "Server: $master_ip,$node_port"
@@ -233,6 +247,9 @@ echo "Password: <your-sql-password>"
 echo ""
 echo "Connection string:"
 echo "Server=$master_ip,$node_port;Database=master;User Id=sa;Password=<your-password>;TrustServerCertificate=true;"
+else
+    echo "Error: Could not retrieve the master VM, private IP or SQL MI NodePort. Check the error above and the resources in '$onprem_resource_group' and namespace '$namespace'." >&2
+fi
 ```
 
 ### Connect using VS Code SQL Server extension

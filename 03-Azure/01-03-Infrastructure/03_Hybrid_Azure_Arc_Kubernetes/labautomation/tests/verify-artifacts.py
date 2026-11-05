@@ -297,6 +297,7 @@ data_walkthrough = (
     root.parent / "walkthrough" / "challenge-04" / "solution-04.md"
 ).read_text(encoding="utf-8")
 data_blocks = re.findall(r"```bash\n(.*?)```", data_walkthrough, re.S)
+assert not re.search(r"\bexit\s+1\b", "\n".join(data_blocks))
 for block in data_blocks:
     subprocess.run([bash, "-n"], input=block, text=True, encoding="utf-8", check=True)
 data_setup, data_parameters = data_blocks[:2]
@@ -305,7 +306,7 @@ sqlmi_setup = next(
     if line.startswith("export sqlmi_name=")
 )
 data_connection = next(
-    block.split('echo "Connection details:"', 1)[0]
+    block
     for block in data_blocks if "master_vm_name=$(az vm list" in block
 )
 source_parameters = (
@@ -368,6 +369,36 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-data-names-") as director
         }.items():
             assert parameters[key]["value"] == value, (key, parameters[key]["value"])
 
+for scenario in ("master-denied", "master-empty", "ip-denied", "ip-empty", "port-denied", "port-empty"):
+    responses = {}
+    for lookup, value in (("master", "test-k8s-master"), ("ip", "10.2.1.10"), ("port", "31433")):
+        if scenario == f"{lookup}-denied":
+            responses[lookup] = "echo AuthorizationFailed >&2; return 1"
+        elif scenario == f"{lookup}-empty":
+            responses[lookup] = "return 0"
+        else:
+            responses[lookup] = f"echo {shlex.quote(value)}"
+    stub = (
+        "set -eu\nonprem_resource_group=rg-labuser-0009-onprem\n"
+        "sqlmi_name=sqlmi-labuser-0009-1\nnamespace=labuser-0009-arc-data-controller\n"
+        'az() { case "$*" in\n'
+        + "'vm list '*) echo MASTER_LOOKUP >&2; " + responses["master"] + " ;;\n"
+        + "'vm list-ip-addresses '*) echo IP_LOOKUP >&2; " + responses["ip"] + " ;;\n"
+        + "*) echo UNEXPECTED_LOOKUP >&2; return 98 ;; esac; }\n"
+        + "kubectl() { echo PORT_LOOKUP >&2; " + responses["port"] + "; }\n"
+    )
+    result = subprocess.run(
+        [bash, "-s"], input=stub + data_connection + "\necho SHELL_STILL_RUNNING\n",
+        text=True, encoding="utf-8", capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "SHELL_STILL_RUNNING" in result.stdout
+    assert "Connection details:" not in result.stdout
+    assert "Error: Could not retrieve" in result.stderr
+    assert "UNEXPECTED_LOOKUP" not in result.stderr
+    assert ("IP_LOOKUP" in result.stderr) == (not scenario.startswith("master-"))
+    assert ("PORT_LOOKUP" in result.stderr) == scenario.startswith("port-")
+
 data_template = json.loads(
     (root.parent / "walkthrough" / "challenge-04" / "templates" / "template.json").read_text(encoding="utf-8")
 )
@@ -422,11 +453,53 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-region-errors-") as direc
         )
         result = subprocess.run(
             [bash, "-s", "--", pathlib.Path(directory).as_posix()],
-            input=stub + data_setup,
+            input=stub + "set -eu\n" + data_setup + "\necho SHELL_STILL_RUNNING\n",
             text=True, encoding="utf-8", capture_output=True,
         )
-        assert result.returncode != 0
+        assert result.returncode == 0
+        assert "SHELL_STILL_RUNNING" in result.stdout
+        assert "Step 1 failed" in result.stderr
         assert "UNEXPECTED_LOOKUP" not in result.stderr
         assert "Your values:" not in result.stdout
+
+with tempfile.TemporaryDirectory(prefix="microhack-k8s-interactive-errors-") as directory:
+    for scenario in (
+        "missing-arc_resource_group",
+        "missing-arc_cluster_name",
+        "missing-workspace_name",
+        "invalid-name",
+        "workspace-denied",
+        "key-denied",
+    ):
+        context = {
+            "arc_resource_group": "rg-labuser-0009",
+            "arc_cluster_name": "test-cluster",
+            "workspace_name": "labuser-0009-law",
+        }
+        if scenario.startswith("missing-"):
+            context.pop(scenario.removeprefix("missing-"))
+        if scenario == "invalid-name":
+            context["arc_resource_group"] = "rg-invalid_name"
+        stub = (
+            'set -eu\nexport HOME="$1"\nunset arc_resource_group arc_cluster_name workspace_name\n'
+            + "\n".join(f"export {key}={shlex.quote(value)}" for key, value in context.items())
+            + '\naz() { case "$*" in\n'
+            + "'connectedk8s show '*) echo swedencentral ;;\n"
+            + "'monitor log-analytics workspace show '*) "
+            + ('echo AuthorizationFailed >&2; return 1' if scenario == "workspace-denied" else 'echo test-workspace-id')
+            + " ;;\n'monitor log-analytics workspace get-shared-keys '*) echo AuthorizationFailed >&2; return 1 ;;\n"
+            + '*) echo UNEXPECTED_LOOKUP >&2; return 98 ;; esac; }\n'
+        )
+        result = subprocess.run(
+            [bash, "-s", "--", pathlib.Path(directory).as_posix()],
+            input=stub + data_setup + "\necho SHELL_STILL_RUNNING\n",
+            text=True, encoding="utf-8", capture_output=True,
+        )
+        assert result.returncode == 0, result
+        assert "SHELL_STILL_RUNNING" in result.stdout
+        assert "Step 1 failed" in result.stderr
+        assert "Your values:" not in result.stdout
+        assert "Step 1 completed" not in result.stdout
+        assert "UNEXPECTED_LOOKUP" not in result.stderr
 
 print("Validated guest artifacts, onboarding, monitoring, Ollama readiness and 3 data-service naming/template cases.")
