@@ -54,6 +54,13 @@ export namespace="${participant_name}-arc-data-controller"
 export custom_location_name="${participant_name}-arc-data-controller"
 export data_controller_name="${participant_name}-dc"
 
+location=$(az connectedk8s show --resource-group "$resource_group" --name "$connected_cluster_name" --query location --output tsv) || exit 1
+if [ -z "$location" ]; then
+    echo "Error: Could not determine the Azure region of '$connected_cluster_name'." >&2
+    exit 1
+fi
+export location
+
 # Get Log Analytics workspace details
 log_analytics_workspace_id=$(az monitor log-analytics workspace show -g "$resource_group" -n "$workspace_name" --query customerId -o tsv) || exit 1
 log_analytics_primary_key=$(az monitor log-analytics workspace get-shared-keys -g "$resource_group" -n "$workspace_name" --query primarySharedKey -o tsv) || exit 1
@@ -62,6 +69,7 @@ export log_analytics_workspace_id log_analytics_primary_key
 echo "Your values:"
 echo "RESOURCE_GROUP: $resource_group"
 echo "CONNECTED_CLUSTER_NAME: $connected_cluster_name"
+echo "LOCATION: $location"
 echo "EXTENSION_NAME: $extension_name"
 echo "NAMESPACE: $namespace"
 echo "CUSTOM_LOCATION_NAME: $custom_location_name"
@@ -80,6 +88,11 @@ DATA_CONTROLLER_NAME: labuser-0009-dc
 
 The Log Analytics workspace ID here is its `customerId` UUID, not the Azure
 resource ID used in challenge 2. Do not print or share the workspace primary key.
+The region is read from the existing Arc cluster, overriding any stale shell
+value. Custom location, resource sync rule and data controller use this region.
+Do not leave a fixed `westeurope` in the parameter file or select an unrelated
+fallback region. The selected subscription must permit these resource types
+in the cluster's region.
 
 ### Step 2: Update parameters.json
 
@@ -98,6 +111,7 @@ cp parameters.json parameters-my.json
 escaped_key=$(printf '%s\n' "$log_analytics_primary_key" | sed 's/[\/&]/\\&/g')
 
 sed -i "s/<CONNECTED_CLUSTER_NAME>/$connected_cluster_name/g" parameters-my.json
+sed -i "s/<LOCATION>/$location/g" parameters-my.json
 sed -i "s/<EXTENSION_NAME>/$extension_name/g" parameters-my.json
 sed -i "s/<NAMESPACE>/$namespace/g" parameters-my.json
 sed -i "s/<CUSTOM_LOCATION_NAME>/$custom_location_name/g" parameters-my.json
@@ -109,6 +123,7 @@ sed -i "s/<DC_DASHBOARD_USERNAME>/mhadmin/g" parameters-my.json
 # Alternative: manual replacement
 # Edit parameters-my.json and replace:
 #   <CONNECTED_CLUSTER_NAME> with the name of your arc-enabled connected cluster
+#   <LOCATION> with the Azure region of the existing connected cluster
 #   <EXTENSION_NAME> with the desired extension name
 #   <NAMESPACE> with the Kubernetes namespace for arc data services
 #   <CUSTOM_LOCATION_NAME> with the custom location name
@@ -128,9 +143,9 @@ az deployment group validate \
   --resource-group "$resource_group" \
   --template-file template.json \
   --parameters parameters-my.json \
-  --parameters dataController_metricsAndLogsDashboardPassword="$DC_PASSWORD"
+  --parameters dataController_metricsAndLogsDashboardPassword="$DC_PASSWORD" &&
 
-# Deploy (you'll be prompted for the dashboard password)
+# Deploy only if validation succeeded
 az deployment group create \
   --resource-group "$resource_group" \
   --template-file template.json \
@@ -139,6 +154,14 @@ az deployment group create \
   --verbose
 ```
 *NOTE*: At the time of writing there is a bug in the az cli command to create the arc data controller. This is why we are using a workaround based on an ARM template deployment.
+
+If validation reports `RequestDisallowedByAzure` / `locationineligible`, Azure is
+rejecting the selected region for that subscription. Check that the generated
+parameter file contains the `LOCATION` reported in Step 1. If that region is
+still rejected, stop and ask the coach/platform administrator to check regional
+eligibility and service availability; renaming resources does not resolve it.
+After updating this walkthrough, rerun Steps 1 and 2 to regenerate an existing
+parameter file before retrying validation.
 
 The deployment takes 10-15 minutes. You can monitor progress with:
 

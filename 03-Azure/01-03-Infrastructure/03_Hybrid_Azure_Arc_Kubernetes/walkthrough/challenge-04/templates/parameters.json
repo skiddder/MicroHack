@@ -12,7 +12,7 @@
             "value": "<NAMESPACE>"
         },
         "location": {
-            "value": "westeurope"
+            "value": "<LOCATION>"
         },
         "customLocationName": {
             "value": "<CUSTOM_LOCATION_NAME>"

@@ -312,10 +312,10 @@ source_parameters = (
     root.parent / "walkthrough" / "challenge-04" / "templates" / "parameters.json"
 ).read_text(encoding="utf-8")
 with tempfile.TemporaryDirectory(prefix="microhack-k8s-data-names-") as directory:
-    for label, group, workspace, prefix, master, onprem in (
-        ("hb-0009", "rg-labuser-0009", "labuser-0009-law", "labuser-0009", "k8s7bbc1170d029-k8s-master", "rg-labuser-0009-onprem"),
-        ("hb-0020", "rg-labuser-0020", "labuser-0020-law", "labuser-0020", "k8sc8833ecff6dd-k8s-master", "rg-labuser-0020-onprem"),
-        ("terraform", "37-k8s-arc", "37-law", "37", "37-k8s-master", "37-k8s-onprem"),
+    for label, group, workspace, prefix, master, onprem, region in (
+        ("hb-0009", "rg-labuser-0009", "labuser-0009-law", "labuser-0009", "k8s7bbc1170d029-k8s-master", "rg-labuser-0009-onprem", "swedencentral"),
+        ("hb-0020", "rg-labuser-0020", "labuser-0020-law", "labuser-0020", "k8sc8833ecff6dd-k8s-master", "rg-labuser-0020-onprem", "germanywestcentral"),
+        ("terraform", "37-k8s-arc", "37-law", "37", "37-k8s-master", "37-k8s-onprem", "westeurope"),
     ):
         home = pathlib.Path(directory) / label
         parameters_directory = home / "walkthrough" / "challenge-04" / "templates"
@@ -325,6 +325,7 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-data-names-") as director
         cluster = master.removesuffix("-k8s-master") + "-k8s-arc-enabled"
         workspace_id = "00000000-0000-0000-0000-000000000001"
         responses = {
+            f"connectedk8s show --resource-group {group} --name {cluster} --query location --output tsv": region,
             f"monitor log-analytics workspace show -g {group} -n {workspace} --query customerId -o tsv": workspace_id,
             f"monitor log-analytics workspace get-shared-keys -g {group} -n {workspace} --query primarySharedKey -o tsv": "TEST/KEY&ONLY",
             f"vm list --resource-group {onprem} --query [?ends_with(name, '-k8s-master')].name | [0] --output tsv": master,
@@ -338,7 +339,7 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-data-names-") as director
             'set -e\nexport HOME="$1"\ncd "$HOME"\n'
             f"export arc_resource_group={shlex.quote(group)} arc_cluster_name={shlex.quote(cluster)} workspace_name={shlex.quote(workspace)}\n"
             # A stale numeric value must not affect the new names.
-            "export user_number=9\nunset onprem_resource_group\n"
+            "export user_number=9 location=westeurope\nunset onprem_resource_group\n"
             'az() { case "$*" in\n' + "\n".join(cases)
             + '\n*) echo "Unexpected Azure command: $*" >&2; return 98 ;; esac; }\n'
             + 'kubectl() { case "$*" in\n'
@@ -357,6 +358,7 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-data-names-") as director
         parameters = json.loads((parameters_directory / "parameters-my.json").read_text(encoding="utf-8"))["parameters"]
         for key, value in {
             "connectedClusterName": cluster,
+            "location": region,
             "k8sExtensionName": f"{prefix}-arc-data-controller-ext",
             "namespace": f"{prefix}-arc-data-controller",
             "customLocationName": f"{prefix}-arc-data-controller",
@@ -365,5 +367,66 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-data-names-") as director
             "dataController_logAnalyticsPrimaryKey": "TEST/KEY&ONLY",
         }.items():
             assert parameters[key]["value"] == value, (key, parameters[key]["value"])
+
+data_template = json.loads(
+    (root.parent / "walkthrough" / "challenge-04" / "templates" / "template.json").read_text(encoding="utf-8")
+)
+assert "defaultValue" not in data_template["parameters"]["location"]
+assert json.loads(source_parameters)["parameters"]["location"]["value"] == "<LOCATION>"
+for resource in data_template["resources"]:
+    if resource["type"] in (
+        "Microsoft.ExtendedLocation/customLocations",
+        "Microsoft.ExtendedLocation/customLocations/resourceSyncRules",
+        "Microsoft.AzureArcData/dataControllers",
+    ):
+        assert resource["location"] == "[parameters('location')]"
+
+deployment_script = next(
+    block for block in data_blocks if "az deployment group validate" in block
+)
+deployment_script = "\n".join(
+    line for line in deployment_script.splitlines()
+    if not line.startswith("read -s ")
+)
+for validation_status in (0, 1):
+    stub = f"""
+resource_group=rg-labuser-0009
+DC_PASSWORD=TEST-ONLY
+az() {{
+    case "$*" in
+        'deployment group validate '*)
+            echo VALIDATION_CHECK
+            return {validation_status} ;;
+        'deployment group create '*)
+            echo CREATE_CHECK
+            return 0 ;;
+        *) echo "Unexpected Azure command: $*" >&2; return 98 ;;
+    esac
+}}
+"""
+    result = subprocess.run(
+        [bash, "-s"], input=stub + deployment_script,
+        text=True, encoding="utf-8", capture_output=True,
+    )
+    assert result.returncode == validation_status, result
+    assert ("CREATE_CHECK" in result.stdout) == (validation_status == 0)
+
+with tempfile.TemporaryDirectory(prefix="microhack-k8s-region-errors-") as directory:
+    for status, response in ((1, "AuthorizationFailed"), (0, "")):
+        stub = (
+            'export HOME="$1"\n'
+            "arc_resource_group=rg-labuser-0009\narc_cluster_name=test-cluster\nworkspace_name=labuser-0009-law\n"
+            'az() { case "$*" in\n'
+            + f"'connectedk8s show '*) printf '%s\\n' {shlex.quote(response)}; return {status} ;;\n"
+            + '*) echo "UNEXPECTED_LOOKUP" >&2; return 98 ;; esac; }\n'
+        )
+        result = subprocess.run(
+            [bash, "-s", "--", pathlib.Path(directory).as_posix()],
+            input=stub + data_setup,
+            text=True, encoding="utf-8", capture_output=True,
+        )
+        assert result.returncode != 0
+        assert "UNEXPECTED_LOOKUP" not in result.stderr
+        assert "Your values:" not in result.stdout
 
 print("Validated guest artifacts, onboarding, monitoring, Ollama readiness and 3 data-service naming/template cases.")
