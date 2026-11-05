@@ -26,7 +26,9 @@ The Log Analytics workspace uses **`labuser-0020-law`**. The globally named
 container registry uses **`acrlabuser0020<8-character-hash>`**: the participant
 name is lowercased with hyphens removed, followed by a stable suffix derived
 from the subscription ID and exercise RG. The ACR participant stem is limited
-to 39 characters so the full name fits Azure's 50-character limit. A global
+to 39 characters so the full name fits Azure's 50-character limit. The Console
+hash helper requires at least 12 characters; the deployment requests 12 and
+uses the first eight for the ACR suffix. A global
 name collision fails deployment rather than choosing an unstable alternative.
 The dashboard and WSL context expose the actual names; challenges 2 and 4 use
 `workspace_name`, retaining their original name defaults for the Terraform fallback.

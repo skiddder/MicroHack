@@ -96,11 +96,12 @@ function Remove-MhhResourceGroup {
     return @{ ManifestCaptured = $true; Errors = @(); SoftDeletedResidual = @() }
 }
 function Get-MhhStableHash {
-    param([string[]]$Value, [int]$Length)
+    param([string[]]$Value, [ValidateRange(12, [int]::MaxValue)][int]$Length)
     return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
         [Text.Encoding]::UTF8.GetBytes(($Value -join '|'))
     )).ToLowerInvariant().Substring(0, $Length)
 }
+Assert-Throws { Get-MhhStableHash -Value 'test' -Length 8 } 'Length'
 function New-MhhStablePassword { param($Purpose) return "Test-Password1!$Purpose" }
 function Invoke-MhhSynchronized { param($Name, $ScriptBlock) & $ScriptBlock }
 function New-AzResourceGroupDeployment {
@@ -234,7 +235,7 @@ try {
         $expectedWorkstation = $parameters.ResourceGroupName -replace '^rg-', ''
         Assert-Test ($calls[1].Parameters.workstationName -eq $expectedWorkstation) 'Workstation VM must use the labuser name.'
         $expectedAcr = 'acr' + ($expectedWorkstation -replace '-', '') +
-            (Get-MhhStableHash -Value @($script:subscription, $parameters.ResourceGroupName) -Length 8)
+            (Get-MhhStableHash -Value @($script:subscription, $parameters.ResourceGroupName) -Length 12).Substring(0, 8)
         $expectedWorkspace = "$expectedWorkstation-law"
         Assert-Test ($calls[0].Parameters.acrName -eq $expectedAcr) 'ACR must use the readable participant name and stable eight-character suffix.'
         Assert-Test ($calls[0].Parameters.acrName -cmatch '^acr[a-z0-9]{2,47}$') 'ACR name must satisfy Azure character and length limits.'

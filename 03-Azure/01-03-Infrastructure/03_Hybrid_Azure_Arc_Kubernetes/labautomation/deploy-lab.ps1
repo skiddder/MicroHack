@@ -46,7 +46,8 @@ if ($acrStem.Length -gt 39) {
     Write-Warning 'The ACR participant name is shortened to 39 characters to fit the Azure name limit.'
     $acrStem = $acrStem.Substring(0, 39)
 }
-$acrName = 'acr' + $acrStem + (Get-MhhStableHash -Value @($SubscriptionId, $ResourceGroupName) -Length 8)
+$acrSuffix = (Get-MhhStableHash -Value @($SubscriptionId, $ResourceGroupName) -Length 12).Substring(0, 8)
+$acrName = 'acr' + $acrStem + $acrSuffix
 $groups = @(Get-AzResourceGroup -ErrorAction Stop)
 $conflicts = @($groups | Where-Object {
     $_.ResourceGroupName -ne $onpremGroupName -and (
