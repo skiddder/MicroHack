@@ -36,14 +36,8 @@ Run the following to install the container log extension with default settings:
 # Copy the complete names from HB Console Credentials
 export arc_resource_group="<Arc Resource Group>"
 export workspace_name="<Log Analytics Workspace>"
+export arc_cluster_name="<name of your arc-enabled-k8s-cluster>"
 
-arc_cluster_names=$(az connectedk8s list --resource-group "$arc_resource_group" --query '[].name' --output tsv) || exit 1
-if [[ -z "$arc_cluster_names" || "$arc_cluster_names" == *$'\n'* ]]; then
-    echo "Error: Expected exactly one Arc cluster in '$arc_resource_group'. Check the connected clusters in the Azure portal." >&2
-    exit 1
-fi
-export arc_cluster_name="$arc_cluster_names"
-export user_number="${arc_cluster_name%-k8s-arc-enabled}"
 law_resource_id=$(az monitor log-analytics workspace show --resource-group "$arc_resource_group" --workspace-name "$workspace_name" --query 'id' -o tsv) || exit 1
 export law_resource_id
 

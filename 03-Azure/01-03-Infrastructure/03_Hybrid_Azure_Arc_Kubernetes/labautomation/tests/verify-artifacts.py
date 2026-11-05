@@ -255,4 +255,40 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-onboarding-") as director
                 error="AuthorizationFailed", script=monitoring_script,
             )
 
-print("Validated Ansible YAML, guest Python, inventory, RG context, node readiness, 11 onboarding and 7 monitoring cases.")
+llm_walkthrough = (
+    root.parent / "walkthrough" / "challenge-03" / "solution-03.md"
+).read_text(encoding="utf-8")
+llm_blocks = re.findall(r"```bash\n(.*?)```", llm_walkthrough, re.S)
+for block in llm_blocks:
+    subprocess.run([bash, "-n"], input=block, text=True, encoding="utf-8", check=True)
+install_blocks = [block for block in llm_blocks if block.startswith("helm install ")]
+assert len(install_blocks) == 2
+for block in install_blocks:
+    arguments = shlex.split(block.replace("\\\n", ""))
+    assert "--wait" in arguments
+    assert arguments[arguments.index("--timeout") + 1] == "20m"
+step_one = llm_walkthrough.split("### Step 1:", 1)[1].split("### Step 2:", 1)[0]
+readiness = re.findall(r"```bash\n(.*?)```", step_one, re.S)[1]
+assert "--timeout=20m &&" in readiness
+for rollout_status, model_status in ((0, 0), (1, 0), (0, 1)):
+    stub = f"""
+kubectl() {{
+    case "$*" in
+        'rollout status deployment/ollama --namespace aimh --timeout=20m')
+            echo ROLLOUT_CHECK
+            return {rollout_status} ;;
+        'exec --namespace aimh deployment/ollama -- ollama show phi4-mini:latest')
+            echo MODEL_CHECK
+            return {model_status} ;;
+        *) echo "Unexpected kubectl command: $*" >&2; return 98 ;;
+    esac
+}}
+"""
+    result = subprocess.run(
+        [bash, "-s"], input=stub + readiness,
+        text=True, encoding="utf-8", capture_output=True,
+    )
+    assert result.returncode == (rollout_status or model_status), result
+    assert ("MODEL_CHECK" in result.stdout) == (rollout_status == 0)
+
+print("Validated guest artifacts, 11 onboarding, 7 monitoring and 3 Ollama readiness cases; both Helm installs wait up to 20 minutes.")
