@@ -2,9 +2,12 @@ import ast
 import base64
 import io
 import json
+import os
 import pathlib
 import re
 import shlex
+import shutil
+import subprocess
 import sys
 import tempfile
 from unittest import mock
@@ -101,4 +104,111 @@ for count, ready, should_pass in ((3, True, True), (2, True, False), (3, False, 
             failed = True
     assert failed != should_pass
 
-print("Validated Ansible YAML, guest Python, inventory, separate RG context and exact node readiness.")
+onboarding = (
+    root.parent / "walkthrough" / "challenge-01" / "az_connect_k8s.sh"
+).read_text(encoding="utf-8")
+git_bash = pathlib.Path(r"C:\Program Files\Git\bin\bash.exe")
+bash = str(git_bash) if os.name == "nt" and git_bash.exists() else shutil.which("bash")
+assert bash, "Bash is required to validate the onboarding script."
+subprocess.run([bash, "-n"], input=onboarding, text=True, encoding="utf-8", check=True)
+setup = onboarding.split("# Registering Azure Arc providers", 1)[0]
+account_command = "account show --query user.name --output tsv"
+exists_command = "group exists --name rg-labuser-0009"
+master_command = (
+    "vm list --resource-group rg-labuser-0009-onprem "
+    "--query [?ends_with(name, '-k8s-master')].name | [0] --output tsv"
+)
+location_command = "group show --name rg-labuser-0009 --query location --output tsv"
+
+with tempfile.TemporaryDirectory(prefix="microhack-k8s-onboarding-") as directory:
+    def check_onboarding(name, responses, expected=None, context=None, error=None):
+        home = pathlib.Path(directory) / name
+        home.mkdir()
+        if context:
+            (home / ".microhack-k8s.env").write_text(
+                "\n".join(f"export {key}={shlex.quote(value)}" for key, value in context.items()),
+                encoding="utf-8",
+            )
+        cases = []
+        for command, response in responses.items():
+            status, output = response if isinstance(response, tuple) else (0, response)
+            redirect = " >&2" if status else ""
+            cases.append(
+                f"{shlex.quote(command)}) printf '%s\\n' {shlex.quote(output)}{redirect}; return {status} ;;"
+            )
+        stub = (
+            'export HOME="$1"\naz() { case "$*" in\n'
+            + "\n".join(cases)
+            + '\n*) echo "Unexpected Azure command: $*" >&2; return 98 ;; esac; }\n'
+        )
+        environment = os.environ.copy()
+        for key in ("user_number", "onprem_resource_group", "arc_resource_group", "arc_cluster_name", "location"):
+            environment.pop(key, None)
+        result = subprocess.run(
+            [bash, "-s", "--", home.as_posix()],
+            input=stub + setup + '\nprintf "RESULT=%s|%s|%s|%s\\n" "$onprem_resource_group" "$arc_resource_group" "$arc_cluster_name" "$location"\n',
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            env=environment,
+        )
+        if error:
+            assert result.returncode != 0 and error in result.stdout + result.stderr, result
+            assert "RESULT=" not in result.stdout
+        else:
+            assert result.returncode == 0, result.stderr
+            assert f"RESULT={'|'.join(expected)}" in result.stdout, result.stdout
+
+    hb = {
+        account_command: "labuser-0009@german.microhack.cloud",
+        exists_command: "true",
+        master_command: "k8stest-k8s-master",
+        location_command: "swedencentral",
+    }
+    expected_hb = ("rg-labuser-0009-onprem", "rg-labuser-0009", "k8stest-k8s-arc-enabled", "swedencentral")
+    check_onboarding("hb-no-context", hb, expected_hb)
+    check_onboarding("hb-uppercase", {**hb, account_command: "LabUser-0009@german.microhack.cloud"}, expected_hb)
+    check_onboarding(
+        "context-priority",
+        {account_command: hb[account_command]},
+        ("custom-onprem", "custom-exercise", "custom-cluster", "francecentral"),
+        context={
+            "user_number": "k8scontext",
+            "onprem_resource_group": "custom-onprem",
+            "arc_resource_group": "custom-exercise",
+            "arc_cluster_name": "custom-cluster",
+            "location": "francecentral",
+        },
+    )
+    check_onboarding(
+        "hb-partial-context",
+        {account_command: hb[account_command], location_command: "swedencentral"},
+        ("rg-labuser-0009-onprem", "rg-labuser-0009", "supplied-cluster", "swedencentral"),
+        context={"arc_resource_group": "rg-labuser-0009", "arc_cluster_name": "supplied-cluster"},
+    )
+    check_onboarding(
+        "terraform-fallback",
+        {
+            account_command: "LabUser-37@example.test",
+            "group exists --name rg-labuser-37": "false",
+            "group exists --name 37-k8s-arc": "true",
+            "group show --name 37-k8s-arc --query location --output tsv": "westeurope",
+        },
+        ("37-k8s-onprem", "37-k8s-arc", "37-k8s-arc-enabled", "westeurope"),
+    )
+    check_onboarding(
+        "missing-groups",
+        {account_command: hb[account_command], exists_command: "false", "group exists --name 9-k8s-arc": "false"},
+        error="Neither 'rg-labuser-0009' nor '9-k8s-arc' exists",
+    )
+    check_onboarding("missing-master", {**hb, master_command: ""}, error="No K3s master VM")
+    check_onboarding("empty-location", {**hb, location_command: ""}, error="Could not determine the location")
+    check_onboarding(
+        "lookup-denied",
+        {account_command: hb[account_command], exists_command: (1, "AuthorizationFailed")},
+        error="AuthorizationFailed",
+    )
+    check_onboarding("location-denied", {**hb, location_command: (1, "AuthorizationFailed")}, error="AuthorizationFailed")
+    check_onboarding("account-denied", {account_command: (1, "Please run az login")}, error="Please run az login")
+
+print("Validated Ansible YAML, guest Python, inventory, RG context, node readiness and 11 onboarding discovery cases.")

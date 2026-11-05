@@ -43,6 +43,14 @@ Please ensure that you successfully verified
    ```bash
    lsb_release -a
    ```
+   Expected output is something like this:
+   ```bash
+   No LSB modules are available.
+   Distributor ID: Ubuntu
+   Description:    Ubuntu 26.04.1 LTS
+   Release:        26.04
+   Codename:       resolute
+   ```
 
 Continue with Task 1 below in the same WSL session. For challenges 2-5, keep using
 this session or run `source ~/.microhack-k8s.env` again.
@@ -111,9 +119,26 @@ kubectl get nodes
 
 All three Kubernetes nodes should now report **Ready**. Only then continue with Task 2.
 
+Expected output is something similar to this:
+```bash
+NAME                          STATUS   ROLES                       AGE    VERSION
+k8s7bbc1170d029-k8s-master    Ready    control-plane,etcd,master   151m   v1.33.6+k3s1
+k8s7bbc1170d029-k8s-worker1   Ready    <none>                      147m   v1.33.6+k3s1
+k8s7bbc1170d029-k8s-worker2   Ready    <none>                      148m   v1.33.6+k3s1
+```
+
 ## Task 2 - Connect K8s cluster using script
 
-* In your shell go to the folder where you cloned the microhack repository
+The script loads `~/.microhack-k8s.env` when available. Without that file, it
+checks for the actual HB exercise RG using your complete Azure account name:
+`labuser-0009` maps to `rg-labuser-0009`, with `rg-labuser-0009-onprem` for the
+VMs. Leading zeros are preserved. The master VM supplies the default Arc cluster
+prefix, and the exercise RG supplies the region. The old numeric RG names are
+used only when the corresponding Terraform fallback exercise RG actually exists.
+Explicitly supplied environment values take precedence.
+
+* In your shell go to your home folder
+* Clone the microhack repo so you have the scripts locally on this machine 
 * Change to the sub-folder '03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/challenge-01'
 * Execute the script to
     * register required resource providers in your subscription (this step may take several minutes if the resource providers have not been registered before):
@@ -133,10 +158,10 @@ All three Kubernetes nodes should now report **Ready**. Only then continue with 
 ```bash
 # Clone only the Arc Kubernetes microhack using sparse-checkout
 cd ~
-git clone --no-checkout --filter=blob:none https://github.com/microsoft/MicroHack.git
+git clone --depth 1 --filter=blob:none --sparse https://github.com/microsoft/MicroHack.git
 cd MicroHack
+
 git sparse-checkout set 03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes
-git checkout
 cd 03-Azure/01-03-Infrastructure/03_Hybrid_Azure_Arc_Kubernetes/walkthrough/challenge-01
 
 # Make the script executable and run it

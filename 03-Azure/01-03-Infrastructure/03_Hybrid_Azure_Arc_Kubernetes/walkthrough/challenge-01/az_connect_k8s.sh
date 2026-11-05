@@ -10,7 +10,10 @@ if [ -f "$HOME/.microhack-k8s.env" ]; then
 fi
 
 # Extract user number from Azure username (e.g., LabUser-37 -> 37)
-azure_user=$(az account show --query user.name --output tsv | tr -d '\r')
+azure_user=$(az account show --query user.name --output tsv)
+azure_user="${azure_user//$'\r'/}"
+lab_user="${azure_user%%@*}"
+hb_resource_group="rg-${lab_user,,}"
 user_number="${user_number:-$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')}"
 
 if [ -z "$user_number" ]; then
@@ -21,11 +24,45 @@ fi
 
 echo "Detected user number: $user_number"
 
-# Set variables based on detected user number
-export onprem_resource_group="${onprem_resource_group:-${user_number}-k8s-onprem}"
-export arc_resource_group="${arc_resource_group:-${user_number}-k8s-arc}"
+if [ -z "${arc_resource_group:-}" ]; then
+    hb_group_exists=$(az group exists --name "$hb_resource_group")
+    if [ "$hb_group_exists" = "true" ]; then
+        arc_resource_group="$hb_resource_group"
+    else
+        legacy_resource_group="${user_number}-k8s-arc"
+        legacy_group_exists=$(az group exists --name "$legacy_resource_group")
+        if [ "$legacy_group_exists" != "true" ]; then
+            echo "Error: Neither '$hb_resource_group' nor '$legacy_resource_group' exists in the selected subscription." >&2
+            echo "Set arc_resource_group and onprem_resource_group to the names from your HB Console Credentials." >&2
+            exit 1
+        fi
+        arc_resource_group="$legacy_resource_group"
+    fi
+fi
+
+if [ "$arc_resource_group" = "$hb_resource_group" ]; then
+    export onprem_resource_group="${onprem_resource_group:-${arc_resource_group}-onprem}"
+    if [ -z "${arc_cluster_name:-}" ]; then
+        master_vm_name=$(az vm list --resource-group "$onprem_resource_group" --query "[?ends_with(name, '-k8s-master')].name | [0]" --output tsv)
+        if [ -z "$master_vm_name" ]; then
+            echo "Error: No K3s master VM found in '$onprem_resource_group'; cannot derive the Arc cluster name." >&2
+            exit 1
+        fi
+        arc_cluster_name="${master_vm_name%-k8s-master}-k8s-arc-enabled"
+    fi
+else
+    export onprem_resource_group="${onprem_resource_group:-${user_number}-k8s-onprem}"
+fi
+export arc_resource_group
 export arc_cluster_name="${arc_cluster_name:-${user_number}-k8s-arc-enabled}"
-export location="${location:-westeurope}"
+if [ -z "${location:-}" ]; then
+    location=$(az group show --name "$arc_resource_group" --query location --output tsv)
+fi
+export location
+if [ -z "$location" ]; then
+    echo "Error: Could not determine the location of '$arc_resource_group'." >&2
+    exit 1
+fi
 
 echo "Using resource groups: $onprem_resource_group (onprem) and $arc_resource_group (arc)"
 
@@ -59,9 +96,9 @@ fi
 echo ""
 
 echo "Connecting the cluster to Azure Arc"
-az connectedk8s connect --name $arc_cluster_name \
-    --resource-group $arc_resource_group \
-    --location $location \
+az connectedk8s connect --name "$arc_cluster_name" \
+    --resource-group "$arc_resource_group" \
+    --location "$location" \
     --infrastructure 'generic' \
     --distribution 'k3s'
 
@@ -72,4 +109,4 @@ echo ""
 echo "Summary:"
 echo "   - Resource Group: $arc_resource_group" 
 echo "   - Status:"
-az connectedk8s show --resource-group $arc_resource_group --name $arc_cluster_name --query "{name:name, connectivityStatus:connectivityStatus}"
+az connectedk8s show --resource-group "$arc_resource_group" --name "$arc_cluster_name" --query "{name:name, connectivityStatus:connectivityStatus}"
