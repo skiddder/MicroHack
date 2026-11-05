@@ -24,7 +24,8 @@ echo $user_number
 # if you are running this in a non-microhack env, adjust the values to match your env
 export arc_resource_group="${arc_resource_group:-${user_number}-k8s-arc}"
 export arc_cluster_name="${arc_cluster_name:-${user_number}-k8s-arc-enabled}"
-export law_resource_id=$(az monitor log-analytics workspace show --resource-group $arc_resource_group --workspace-name "${user_number}-law" --query 'id' -o tsv)
+export workspace_name="${workspace_name:-${user_number}-law}"
+export law_resource_id=$(az monitor log-analytics workspace show --resource-group $arc_resource_group --workspace-name "$workspace_name" --query 'id' -o tsv)
 
 az k8s-extension create \
     --name azuremonitor-containers \

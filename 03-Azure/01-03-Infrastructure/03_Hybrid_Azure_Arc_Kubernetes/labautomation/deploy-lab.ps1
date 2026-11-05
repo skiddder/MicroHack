@@ -29,18 +29,65 @@ if (-not $shared.Tags -or $shared.Tags['microhack'] -ne 'arc-kubernetes' -or
     throw 'No valid participant network assignment exists. Run shared-deploy-lab.ps1 first.'
 }
 $prefix = 'k8s' + (Get-MhhStableHash -Value $userId -Length 12)
-$onpremGroupName = "$prefix-onprem"
-$onpremGroup = Get-AzResourceGroup -Name $onpremGroupName -ErrorAction SilentlyContinue
+$onpremGroupName = "$ResourceGroupName-onprem"
+if ($onpremGroupName.Length -gt 90) {
+    throw "Exercise resource group '$ResourceGroupName' is too long to append '-onprem' (Azure limit: 90 characters)."
+}
+$workstationName = $ResourceGroupName -replace '^rg-', ''
+if ($workstationName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
+    throw "Cannot derive a valid workstation VM name from exercise resource group '$ResourceGroupName' (maximum 64 characters)."
+}
+$workspaceName = "$workstationName-law"
+if ($workspaceName -notmatch '^[A-Za-z0-9][A-Za-z0-9-]{2,61}[A-Za-z0-9]$') {
+    throw "Cannot derive a valid Log Analytics workspace name '$workspaceName' (4-63 characters, letters, digits and hyphens only)."
+}
+$acrStem = $workstationName.ToLowerInvariant() -replace '[^a-z0-9]', ''
+if ($acrStem.Length -gt 39) {
+    Write-Warning 'The ACR participant name is shortened to 39 characters to fit the Azure name limit.'
+    $acrStem = $acrStem.Substring(0, 39)
+}
+$acrName = 'acr' + $acrStem + (Get-MhhStableHash -Value @($SubscriptionId, $ResourceGroupName) -Length 8)
+$groups = @(Get-AzResourceGroup -ErrorAction Stop)
+$conflicts = @($groups | Where-Object {
+    $_.ResourceGroupName -ne $onpremGroupName -and (
+        $_.ResourceGroupName -eq "$prefix-onprem" -or
+        ($_.Tags -and $_.Tags['microhackExerciseGroup'] -eq $ResourceGroupName)
+    )
+})
+if ($conflicts.Count -gt 0) {
+    throw "Cleanup required before deployment: existing on-prem resource group(s) '$($conflicts.ResourceGroupName -join ', ')' conflict with '$onpremGroupName'. No resource groups were deleted or created. Clean up the old lab before retrying."
+}
+$onpremGroup = $groups | Where-Object { $_.ResourceGroupName -eq $onpremGroupName }
 if ($onpremGroup -and (-not $onpremGroup.Tags -or $onpremGroup.Tags['microhackUserId'] -ne $userId -or
     $onpremGroup.Tags['microhackExerciseGroup'] -ne $ResourceGroupName)) {
     throw "Resource group '$onpremGroupName' already exists but is not assigned to this participant and exercise group."
+}
+if ($onpremGroup) {
+    $oldWorkstations = @(Invoke-K8sAz @('vm', 'list', '--resource-group', $onpremGroupName) | Where-Object {
+        $_.name -ne $workstationName -and (
+            $_.name -eq "$prefix-workstation" -or ($_.tags -and $_.tags.Role -eq 'workstation')
+        )
+    })
+    if ($oldWorkstations.Count -gt 0) {
+        throw "Cleanup required before deployment: workstation VM(s) '$($oldWorkstations.name -join ', ')' conflict with '$workstationName'. Azure VMs cannot be renamed; no replacement VM was created."
+    }
+}
+if ($groups | Where-Object { $_.ResourceGroupName -eq $ResourceGroupName }) {
+    $legacyAcrName = 'mh' + (Get-MhhStableHash -Value @($SubscriptionId, $ResourceGroupName) -Length 18)
+    $oldExerciseResources = @(Invoke-K8sAz @('resource', 'list', '--resource-group', $ResourceGroupName) | Where-Object {
+        ($_.type -eq 'Microsoft.ContainerRegistry/registries' -and $_.name -eq $legacyAcrName) -or
+        ($_.type -eq 'Microsoft.OperationalInsights/workspaces' -and $_.name -eq "$prefix-law")
+    })
+    if ($oldExerciseResources.Count -gt 0) {
+        throw "Cleanup required before deployment: legacy exercise resource(s) '$($oldExerciseResources.name -join ', ')' conflict with the participant naming scheme. No replacement registry or workspace was created."
+    }
 }
 $exercise = Invoke-MhhDeploymentWithRegionFallback -PreferredLocations $regions `
     -ResourceGroupName $ResourceGroupName -RgOwnerEntraObjectIds $AllowedEntraUserIds `
     -TemplateFile (Join-Path $PSScriptRoot 'exercise.bicep') `
     -TemplateParameterObject @{
-        labPrefix = $prefix
-        acrName = 'mh' + (Get-MhhStableHash -Value @($SubscriptionId, $ResourceGroupName) -Length 18)
+        workspaceName = $workspaceName
+        acrName = $acrName
     } -Tag @{
         SecurityControl = 'Ignore'
         microhack = 'arc-kubernetes'
@@ -75,6 +122,7 @@ $result = Invoke-MhhDeploymentWithRegionFallback -PreferredLocations $regions `
     -TemplateFile (Join-Path $PSScriptRoot 'main.bicep') `
     -TemplateParameterObject @{
         labPrefix = $prefix
+        workstationName = $workstationName
         networkIndex = $index
         hubVnetId = $hubId
         adminPassword = $password
@@ -91,17 +139,8 @@ if (-not $result.Success) {
     throw 'The participant deployment did not succeed.'
 }
 
-Update-MhhToken | Out-Null
-$workstation = New-AzResourceGroupDeployment -ResourceGroupName $onpremGroupName `
-    -Name "workstation-$prefix" -TemplateFile (Join-Path $PSScriptRoot 'workstation-setup.bicep') `
-    -TemplateParameterObject @{
-        masterVmName = "$prefix-k8s-master"
-        setupScript = Get-K8sWorkstationScript
-        configuration = $configuration
-    } -ErrorAction Stop
-if ($workstation.ProvisioningState -ne 'Succeeded') {
-    throw 'Workstation provisioning and readiness verification did not succeed.'
-}
+Invoke-K8sWorkstationSetup -SubscriptionId $SubscriptionId -ResourceGroupName $onpremGroupName `
+    -LabPrefix $prefix -SetupScript (Get-K8sWorkstationScript) -Configuration $configuration
 
 $lockName = 'k8s-hub-' + (Get-MhhStableHash -Value $SubscriptionId -Length 24)
 Invoke-MhhSynchronized -Name $lockName -ScriptBlock {
@@ -139,7 +178,7 @@ Invoke-MhhSynchronized -Name $lockName -ScriptBlock {
 
 @{ HackboxCredential = @{ name = 'VM Admin Username'; value = 'mhadmin'; note = 'Windows workstation and K3s nodes' } }
 @{ HackboxCredential = @{ name = 'VM Admin Password'; value = $password; note = 'Windows workstation and K3s nodes' } }
-@{ HackboxCredential = @{ name = 'Workstation VM'; value = "$prefix-workstation"; note = $onpremGroupName } }
+@{ HackboxCredential = @{ name = 'Workstation VM'; value = $workstationName; note = $onpremGroupName } }
 @{ HackboxCredential = @{ name = 'Workstation Resource ID'; value = $result.Outputs.workstationId; note = 'Connect using the shared Bastion' } }
 @{ HackboxCredential = @{ name = 'K3s Master IP'; value = $masterIp; note = 'Private address; reachable from WSL on the workstation' } }
 @{ HackboxCredential = @{ name = 'On-prem Resource Group'; value = $onpremGroupName; note = 'Four VMs, participant network and outbound NAT' } }

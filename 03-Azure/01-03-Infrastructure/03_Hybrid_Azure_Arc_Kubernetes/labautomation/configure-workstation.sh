@@ -10,6 +10,7 @@ mkdir -p "$work/ansible" "$work/scripts"
 trap 'rm -f /opt/microhack/workstation/config.json /opt/microhack/workstation/ansible/inventory.json /opt/microhack/workstation/ansible/extra-vars.json /opt/microhack/workstation/ansible/kubeconfig' EXIT
 printf '%s' "${MICROHACK_CONFIG:?Missing protected Run Command configuration}" | base64 -d > "$work/config.json"
 unset MICROHACK_CONFIG
+echo "MICROHACK_PHASE=Install Ansible dependencies"
 printf '%s' '__PLAYBOOK__' | base64 -d > "$work/ansible/playbook-workstation.yml"
 printf '%s' '__COLLECTIONS__' | base64 -d > "$work/ansible/requirements.yml"
 printf '%s' '__WSL_TOOLS__' | base64 -d > "$work/scripts/setup-wsl-tools.sh"
@@ -67,9 +68,12 @@ kubeconfig = pathlib.Path("/etc/rancher/k3s/k3s.yaml").read_text().replace("127.
 PY
 
 cd "$work/ansible"
+echo "MICROHACK_PHASE=Configure Windows and WSL"
 "$work/venv/bin/ansible-playbook" -i inventory.json playbook-workstation.yml
+echo "MICROHACK_PHASE=Verify workstation"
 "$work/venv/bin/ansible-playbook" -i inventory.json verify-workstation.yml --extra-vars @extra-vars.json
 
+echo "MICROHACK_PHASE=Verify three Ready K3s nodes"
 deadline=$((SECONDS + 600))
 while ! kubectl get nodes -o json | python3 -c '
 import json, sys

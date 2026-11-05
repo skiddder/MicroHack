@@ -1,5 +1,9 @@
 param location string = resourceGroup().location
-param labPrefix string
+@minLength(4)
+@maxLength(63)
+param workspaceName string
+@minLength(5)
+@maxLength(50)
 param acrName string
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -14,7 +18,7 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
 }
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
-  name: '${labPrefix}-law'
+  name: workspaceName
   location: location
   properties: {
     sku: {

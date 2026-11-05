@@ -34,8 +34,9 @@ export custom_location_name="$user_number-arc-data-controller"
 export data_controller_name="$user_number-dc"
 
 # Get Log Analytics workspace details
-export log_analytics_workspace_id=$(az monitor log-analytics workspace show -g $resource_group -n "$user_number-law" --query customerId -o tsv)
-export log_analytics_primary_key=$(az monitor log-analytics workspace get-shared-keys -g $resource_group -n "$user_number-law" --query primarySharedKey -o tsv)
+export workspace_name="${workspace_name:-${user_number}-law}"
+export log_analytics_workspace_id=$(az monitor log-analytics workspace show -g $resource_group -n "$workspace_name" --query customerId -o tsv)
+export log_analytics_primary_key=$(az monitor log-analytics workspace get-shared-keys -g $resource_group -n "$workspace_name" --query primarySharedKey -o tsv)
 
 echo "Your values:"
 echo "RESOURCE_GROUP: $resource_group"

@@ -1,5 +1,8 @@
 param location string = resourceGroup().location
 param labPrefix string
+@minLength(1)
+@maxLength(64)
+param workstationName string
 @minValue(1)
 @maxValue(199)
 param networkIndex int
@@ -17,7 +20,7 @@ param vmSize string = 'Standard_D4ds_v6'
 var nodeNames = ['master', 'worker1', 'worker2']
 var nodeIps = [10, 11, 12]
 var nodeVmNames = [for node in nodeNames: '${labPrefix}-k8s-${node}']
-var vmNames = concat(nodeVmNames, ['${labPrefix}-workstation'])
+var vmNames = concat(nodeVmNames, [workstationName])
 var tags = {
   microhack: 'arc-kubernetes'
 }
@@ -92,7 +95,7 @@ resource nodeNsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
 }
 
 resource workstationNsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
-  name: '${labPrefix}-workstation-nsg'
+  name: '${workstationName}-nsg'
   location: location
   properties: {
     securityRules: [{
@@ -241,7 +244,7 @@ resource nodes 'Microsoft.Compute/virtualMachines@2024-07-01' = [for (node, i) i
 }]
 
 resource workstationNic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
-  name: '${labPrefix}-workstation-nic'
+  name: '${workstationName}-nic'
   location: location
   properties: {
     ipConfigurations: [{
@@ -258,7 +261,7 @@ resource workstationNic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
 }
 
 resource workstation 'Microsoft.Compute/virtualMachines@2024-07-01' = {
-  name: '${labPrefix}-workstation'
+  name: workstationName
   location: location
   tags: union(tags, { Role: 'workstation' })
   properties: {

@@ -12,11 +12,25 @@ then [deploy-lab.ps1](deploy-lab.ps1) once per participant in parallel.
 | --- | --- |
 | Shared RG `mh-k8s-shared` | Standard Bastion, hub VNet and public IP |
 | Exercise RG supplied by Console | ACR, Log Analytics workspace, later Arc/exercise resources |
-| Separate `<lab-prefix>-onprem` RG | Three K3s VMs, Windows workstation, spoke VNet, NSGs, NAT gateway and outbound public IP |
+| Separate `<exercise-rg>-onprem` RG | Three K3s VMs, Windows workstation, spoke VNet, NSGs, NAT gateway and outbound public IP |
 
 The lab prefix is derived from the participant's Entra object ID, not a guessed
-LabUser number. Both participant RG names and all access information are
-returned to the dashboard. No participant VM has a public IP or public
+LabUser number. K3s VM and cluster network names retain this prefix, but the on-prem RG name is
+derived from the Console exercise RG: `rg-labuser-0020` becomes
+`rg-labuser-0020-onprem`. Both participant RG names and all access information are
+returned to the dashboard. The workstation Azure VM name is derived by removing
+the leading `rg-`: **`labuser-0020`**, with `labuser-0020-nic` and
+`labuser-0020-nsg`. Its shutdown schedule and returned resource ID reference
+this name; the Windows computer name remains `mhworkstation`.
+The Log Analytics workspace uses **`labuser-0020-law`**. The globally named
+container registry uses **`acrlabuser0020<8-character-hash>`**: the participant
+name is lowercased with hyphens removed, followed by a stable suffix derived
+from the subscription ID and exercise RG. The ACR participant stem is limited
+to 39 characters so the full name fits Azure's 50-character limit. A global
+name collision fails deployment rather than choosing an unstable alternative.
+The dashboard and WSL context expose the actual names; challenges 2 and 4 use
+`workspace_name`, retaining their original name defaults for the Terraform fallback.
+No participant VM has a public IP or public
 management port. NAT provides explicit outbound connectivity for package and
 container downloads, including subscriptions where default outbound access is disabled.
 
@@ -51,15 +65,41 @@ Infrastructure RG deployments use `Invoke-MhhDeploymentWithRegionFallback`, pass
 participant IDs for Owner restoration on both participant groups. Exercise and
 VM resources may fall back independently; the WSL context records the actual
 exercise region. The guest configuration and shared hub peering use normal incremental deployments
-and fail explicitly if they cannot complete. A disconnected reverse peering left
+and fail explicitly if they cannot complete. The workstation ARM deployment is
+submitted through a short REST PUT and observed through separate GET requests;
+the Console no longer holds a synchronous connection for the entire Ansible run.
+A disconnected reverse peering left
 by an on-prem RG recycle is removed and rebuilt under the hub lock.
 
 Passwords and the K3s token are stable across retries and are passed in secure
 ARM parameters and protected guest configuration, never public template outputs.
-K3s bootstrap commands are bounded to 30 minutes. The synchronous managed
-Run Command for workstation configuration is bounded to 60 minutes and uses
-`treatFailureAsDeploymentFailure`; a failed playbook or readiness check fails
-the lab rather than publishing credentials for an unready workstation.
+K3s bootstrap commands are bounded to 30 minutes. The managed Run Command remains
+bounded to 60 minutes and uses `treatFailureAsDeploymentFailure`, so Azure ARM
+only reports completion after the guest is done. Console polls ARM and the guest
+every 30 seconds, refreshes credentials before requests and reports state/elapsed
+time. Observation is bounded to 75 minutes and does not cancel server-side work.
+A failed playbook, failed readiness check or nonzero guest exit code fails the
+lab rather than publishing credentials for an unready workstation.
+
+Transient read failures (transport errors, HTTP 408/429/500/502/503/504) get
+bounded retries. An interrupted submission response is reconciled using its
+execution ID; it is never blindly resubmitted. A re-run recognizes matching
+active or successful setup content and resumes observation without re-executing
+Ansible. Changed content is not submitted over an active older execution.
+Only after matching ARM **and** guest success with exit code zero does the script
+repair/create hub peering and publish dashboard credentials.
+
+**Existing hash-named RGs:** the script checks for `<lab-prefix>-onprem` and
+other on-prem RGs tagged as belonging to this exercise RG before making changes.
+If found, it stops with a cleanup-required message. It does not rename/delete
+the old RG or create a second on-prem environment. Use the existing
+[cleanup script](cleanup.ps1) via the old exercise RG reference tags before
+deploying the new naming scheme. Azure resource groups cannot be renamed.
+An existing hash-named workstation in the desired on-prem RG is also rejected
+before deployment, preventing an incremental ARM update from leaving two workstations.
+The same preflight rejects the previous hash-named ACR and workspace in the
+exercise RG. It does not silently leave old resources behind or automatically
+delete them. The old lab must be cleaned up before switching naming schemes.
 
 The VM sizes remain `Standard_D4ds_v6` (four VMs / **16 vCPUs per participant**),
 with Ubuntu 22.04, Windows 11 24H2 Pro and K3s `v1.33.6+k3s1`.
@@ -85,12 +125,17 @@ environment against the workstation's private WinRM HTTPS endpoint. Only that
 master IP is allowed to reach WinRM. The existing relative layout of the
 playbook and [WSL setup script](../lab/scripts/setup-wsl-tools.sh) is preserved
 on the guest. [requirements.txt](requirements.txt) pins Python dependencies
-compatible with Ubuntu 22.04; the existing collection requirements are retained.
+compatible with Ubuntu 22.04. [collections.yml](collections.yml) pins
+`ansible.windows` 2.8.0 and `chocolatey.chocolatey` 1.5.3, both requiring
+Ansible >=2.15 and supporting the pinned 2.17.14 core.
+The Console adapter pins WSL kubectl to `v1.33.6`, matching K3s, instead of
+downloading the latest incompatible client. The original source assets remain unchanged.
 
 [configure-workstation.sh](configure-workstation.sh) adds an inventory and then
 runs [verify-workstation.yml](verify-workstation.yml) after the original playbook.
 This ensures VS Code's WSL extension is installed after the provisioning reboots
-(the original playbook tolerates failure of that task), checks Git and the WSL CLI tools, installs
+(the original playbook tolerates failure of that task), checks Git, the WSL CLI tools
+and kubectl's minor version, installs
 kubeconfig for the interactive WSL user, and writes `~/.microhack-k8s.env`.
 Finally, exactly three K3s nodes must be `Ready`. The cluster is **not** connected
 to Arc: that remains challenge 1.
@@ -108,7 +153,8 @@ the archive:
 
 The packaging step does not modify any file in `lab`. Only bootstrap rendering
 removes Terraform escaping, substitutes the original parameters and makes
-GPG key creation non-interactive for retries.
+GPG key creation non-interactive for retries. WSL script rendering additionally
+replaces the latest-kubectl lookup with the matching K3s client version.
 
 ## Participant access
 
@@ -131,7 +177,9 @@ GPG key creation non-interactive for retries.
 
 Offline tests parse every PowerShell file, compile every Bicep template, check
 archive/source equality, simulate the shared and participant hooks and verify
-scope separation, credential output, stable network assignments and error paths.
+scope separation, credential output, stable network assignments, legacy naming
+conflicts, interrupted submissions, transient status errors, recovery without
+duplicate guest execution, and failure/timeout paths.
 They require PowerShell 7 and Azure CLI with Bicep installed.
 
 For a platform-like local test use the

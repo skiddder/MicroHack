@@ -29,6 +29,11 @@
         wsl -d Ubuntu -- bash -lc
         "set -e; git --version; az version; kubectl version --client; helm version --short"
 
+    - name: Verify kubectl matches the Kubernetes server minor version
+      ansible.windows.win_command: >-
+        wsl -d Ubuntu -- bash -lc
+        "set -euo pipefail; kubectl version --client -o yaml | grep -Eq 'gitVersion: v1[.]33[.]'"
+
     - name: Install participant environment
       ansible.windows.win_command: >-
         wsl -d Ubuntu -- bash -lc
