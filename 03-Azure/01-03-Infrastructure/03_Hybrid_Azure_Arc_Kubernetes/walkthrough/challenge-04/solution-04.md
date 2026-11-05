@@ -20,23 +20,44 @@ The deployment uses ARM templates as this is the most robust way for deployment 
 
 ### Step 1: Gather required values
 
-For Console labs, run `source ~/.microhack-k8s.env` in WSL first.
+Use the same WSL session as in challenge 2, where `arc_resource_group`,
+`arc_cluster_name` and `workspace_name` were set to the actual resource names.
+Alternatively, load `~/.microhack-k8s.env` if it is available.
+The new resource names are derived from the exercise RG, **not** from the numeric
+`user_number`: `rg-labuser-0009` supplies the prefix `labuser-0009`, retaining the
+leading zeros. The original Terraform RG `37-k8s-arc` retains the prefix `37`.
 
 ```bash
-# Get current user's number (e.g., LabUser-37@... or hackuser-067@... -> 37 or 67)
-export azure_user=$(az account show --query user.name --output tsv)
-export user_number="${user_number:-$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')}"
-export resource_group="${arc_resource_group:-$user_number-k8s-arc}"
-export connected_cluster_name="${arc_cluster_name:-$user_number-k8s-arc-enabled}"
-export extension_name="$user_number-arc-data-controller-ext"
-export namespace="$user_number-arc-data-controller"
-export custom_location_name="$user_number-arc-data-controller"
-export data_controller_name="$user_number-dc"
+if [ -f "$HOME/.microhack-k8s.env" ]; then
+    source "$HOME/.microhack-k8s.env"
+fi
+: "${arc_resource_group:?Set arc_resource_group to the Arc Resource Group from HB Console Credentials}"
+: "${arc_cluster_name:?Set arc_cluster_name to the actual cluster name from challenge 1}"
+: "${workspace_name:?Set workspace_name to the Log Analytics Workspace from HB Console Credentials}"
+
+export resource_group="$arc_resource_group"
+export connected_cluster_name="$arc_cluster_name"
+participant_name="${resource_group#rg-}"
+if [[ "$resource_group" =~ ^[0-9]+-k8s-arc$ ]]; then
+    participant_name="${resource_group%-k8s-arc}"
+    export onprem_resource_group="${onprem_resource_group:-${participant_name}-k8s-onprem}"
+else
+    export onprem_resource_group="${onprem_resource_group:-${resource_group}-onprem}"
+fi
+if [[ ! "$participant_name" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
+    echo "Error: Cannot derive a Kubernetes-compatible participant name from '$resource_group'." >&2
+    exit 1
+fi
+export participant_name
+export extension_name="${participant_name}-arc-data-controller-ext"
+export namespace="${participant_name}-arc-data-controller"
+export custom_location_name="${participant_name}-arc-data-controller"
+export data_controller_name="${participant_name}-dc"
 
 # Get Log Analytics workspace details
-export workspace_name="${workspace_name:-${user_number}-law}"
-export log_analytics_workspace_id=$(az monitor log-analytics workspace show -g $resource_group -n "$workspace_name" --query customerId -o tsv)
-export log_analytics_primary_key=$(az monitor log-analytics workspace get-shared-keys -g $resource_group -n "$workspace_name" --query primarySharedKey -o tsv)
+log_analytics_workspace_id=$(az monitor log-analytics workspace show -g "$resource_group" -n "$workspace_name" --query customerId -o tsv) || exit 1
+log_analytics_primary_key=$(az monitor log-analytics workspace get-shared-keys -g "$resource_group" -n "$workspace_name" --query primarySharedKey -o tsv) || exit 1
+export log_analytics_workspace_id log_analytics_primary_key
 
 echo "Your values:"
 echo "RESOURCE_GROUP: $resource_group"
@@ -47,6 +68,18 @@ echo "CUSTOM_LOCATION_NAME: $custom_location_name"
 echo "DATA_CONTROLLER_NAME: $data_controller_name"
 echo "LOG_ANALYTICS_WORKSPACE_ID: $log_analytics_workspace_id"
 ```
+
+For `rg-labuser-0009`, the new values are:
+
+```text
+EXTENSION_NAME: labuser-0009-arc-data-controller-ext
+NAMESPACE: labuser-0009-arc-data-controller
+CUSTOM_LOCATION_NAME: labuser-0009-arc-data-controller
+DATA_CONTROLLER_NAME: labuser-0009-dc
+```
+
+The Log Analytics workspace ID here is its `customerId` UUID, not the Azure
+resource ID used in challenge 2. Do not print or share the workspace primary key.
 
 ### Step 2: Update parameters.json
 
@@ -92,14 +125,14 @@ read -s -p "Enter password for metrics/logs dashboard: " DC_PASSWORD && echo
 
 # Validate the deployment first
 az deployment group validate \
-  --resource-group $resource_group \
+  --resource-group "$resource_group" \
   --template-file template.json \
   --parameters parameters-my.json \
   --parameters dataController_metricsAndLogsDashboardPassword="$DC_PASSWORD"
 
 # Deploy (you'll be prompted for the dashboard password)
 az deployment group create \
-  --resource-group $resource_group \
+  --resource-group "$resource_group" \
   --template-file template.json \
   --parameters parameters-my.json \
   --parameters dataController_metricsAndLogsDashboardPassword="$DC_PASSWORD" \
@@ -112,13 +145,13 @@ The deployment takes 10-15 minutes. You can monitor progress with:
 ```bash
 # Watch deployment status
 az deployment group show \
-  --resource-group $resource_group \
+  --resource-group "$resource_group" \
   --name template \
   --query properties.provisioningState
 
 # Monitor operations
 az deployment operation group list \
-  --resource-group $resource_group \
+  --resource-group "$resource_group" \
   --name template \
   --query "[].{Resource:properties.targetResource.resourceName, State:properties.provisioningState}" -o table
 ```
@@ -129,13 +162,13 @@ az deployment operation group list \
 
 ```bash
 # Set SQL MI name (must start with a letter for Kubernetes naming rules)
-export sqlmi_name="sqlmi-${user_number}-1"
+export sqlmi_name="sqlmi-${participant_name}-1"
 
 # Create SQL MI (you'll be prompted for sql admin user and password)
 az sql mi-arc create \
-  --name $sqlmi_name \
-  --resource-group $resource_group \
-  --custom-location $custom_location_name \
+  --name "$sqlmi_name" \
+  --resource-group "$resource_group" \
+  --custom-location "$custom_location_name" \
   --cores-request 1 \
   --memory-request 3Gi
 ```
@@ -144,26 +177,31 @@ The creation takes 5-10 minutes. Monitor progress:
 
 ```bash
 # Check deployment status
-az sql mi-arc show --name $sqlmi_name --resource-group $resource_group --query "properties.k8sRaw.status.state" -o tsv
+az sql mi-arc show --name "$sqlmi_name" --resource-group "$resource_group" --query "properties.k8sRaw.status.state" -o tsv
 
 # Check pods in the namespace
-kubectl get pods -n $namespace -l app.kubernetes.io/name=$sqlmi_name
+kubectl get pods -n "$namespace" -l "app.kubernetes.io/name=$sqlmi_name"
 ```
 
 ## Task 3 - Connect to your SQL Managed Instance
 
 ### Prerequisites
 * In this microhack the K3s cluster is configured to expose services on the private IP address of the master node per default. So you should use the Windows workstation in your lab environment to connect to the SQL MI.
-* **Network Security Group (NSG)**: The Terraform deployment has already configured the NSG to allow external access to the NodePort range (30000-32767) required for SQL MI connectivity. No additional NSG configuration is needed.
+* **Network Security Group (NSG)**: The Console Bicep and manual Terraform deployments allow access from the lab workstation to the NodePort range (30000-32767) required for SQL MI connectivity. No additional NSG configuration is needed.
 
 ### Get connection details
 
 ```bash
-# Get public ip of master node via Azure cli according to user-number
-master_ip=$(az vm list-ip-addresses --resource-group "${onprem_resource_group:-${user_number}-k8s-onprem}" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.privateIpAddresses[0]" --output tsv)
+# Discover the actual master VM and its private IP in the on-prem RG
+master_vm_name=$(az vm list --resource-group "$onprem_resource_group" --query "[?ends_with(name, '-k8s-master')].name | [0]" --output tsv) || exit 1
+if [ -z "$master_vm_name" ]; then
+    echo "Error: No K3s master VM found in '$onprem_resource_group'." >&2
+    exit 1
+fi
+master_ip=$(az vm list-ip-addresses --resource-group "$onprem_resource_group" --name "$master_vm_name" --query "[0].virtualMachine.network.privateIpAddresses[0]" --output tsv) || exit 1
 
 # Get the NodePort assigned to SQL MI
-node_port=$(kubectl get svc ${sqlmi_name}-external-svc -n $namespace -o jsonpath='{.spec.ports[0].nodePort}')
+node_port=$(kubectl get svc "${sqlmi_name}-external-svc" -n "$namespace" -o jsonpath='{.spec.ports[0].nodePort}')
 
 echo "Connection details:"
 echo "Server: $master_ip,$node_port"
@@ -185,9 +223,9 @@ echo "Server=$master_ip,$node_port;Database=master;User Id=sa;Password=<your-pas
 ![Connect to SQL MI](img/02-connect.sqlmi.png)
 
 #### 3. Enter connection details:
-**💡Note: In this lab we are using the public ip to connect to the service.**
+**💡Note: Use the master's private IP from the Windows workstation, not a public IP on your own computer.**
    - **Input type**: Parameters
-   - **Server:** `<Public-IP-Master-Node>,<NODE_PORT>` (e.g., `20.123.45.67,31433`, optionally, use the following command: ```echo "$master_ip,$(kubectl get svc ${sqlmi_name}-external-svc -n $namespace -o jsonpath='{.spec.ports[0].nodePort}')"```
+   - **Server:** `<Private-IP-Master-Node>,<NODE_PORT>` (e.g., `10.2.1.10,31433`). Use the `Server` value printed above.
    - **Trust Server Certificate:** Yes
    - **Authentication Type:** SQL Login
    - **User name:** (the admin account you entered during SQL MI creation)

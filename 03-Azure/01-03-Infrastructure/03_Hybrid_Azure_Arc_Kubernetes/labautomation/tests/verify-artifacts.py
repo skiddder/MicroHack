@@ -87,7 +87,9 @@ for challenge in ("02", "04"):
         assert "sed 's/^0*//'" not in walkthrough
         monitoring = re.search(r"```bash\n(.*?)```", walkthrough, re.S).group(1)
     else:
-        assert 'export workspace_name="${workspace_name:-${user_number}-law}"' in walkthrough
+        assert 'export data_controller_name="${participant_name}-dc"' in walkthrough
+        assert 'sqlmi-${participant_name}-1' in walkthrough
+        assert "sed 's/^0*//'" not in walkthrough
     workspace_commands = [
         line for line in walkthrough.splitlines()
         if "az monitor log-analytics workspace " in line
@@ -291,4 +293,77 @@ kubectl() {{
     assert result.returncode == (rollout_status or model_status), result
     assert ("MODEL_CHECK" in result.stdout) == (rollout_status == 0)
 
-print("Validated guest artifacts, 11 onboarding, 7 monitoring and 3 Ollama readiness cases; both Helm installs wait up to 20 minutes.")
+data_walkthrough = (
+    root.parent / "walkthrough" / "challenge-04" / "solution-04.md"
+).read_text(encoding="utf-8")
+data_blocks = re.findall(r"```bash\n(.*?)```", data_walkthrough, re.S)
+for block in data_blocks:
+    subprocess.run([bash, "-n"], input=block, text=True, encoding="utf-8", check=True)
+data_setup, data_parameters = data_blocks[:2]
+sqlmi_setup = next(
+    line for block in data_blocks for line in block.splitlines()
+    if line.startswith("export sqlmi_name=")
+)
+data_connection = next(
+    block.split('echo "Connection details:"', 1)[0]
+    for block in data_blocks if "master_vm_name=$(az vm list" in block
+)
+source_parameters = (
+    root.parent / "walkthrough" / "challenge-04" / "templates" / "parameters.json"
+).read_text(encoding="utf-8")
+with tempfile.TemporaryDirectory(prefix="microhack-k8s-data-names-") as directory:
+    for label, group, workspace, prefix, master, onprem in (
+        ("hb-0009", "rg-labuser-0009", "labuser-0009-law", "labuser-0009", "k8s7bbc1170d029-k8s-master", "rg-labuser-0009-onprem"),
+        ("hb-0020", "rg-labuser-0020", "labuser-0020-law", "labuser-0020", "k8sc8833ecff6dd-k8s-master", "rg-labuser-0020-onprem"),
+        ("terraform", "37-k8s-arc", "37-law", "37", "37-k8s-master", "37-k8s-onprem"),
+    ):
+        home = pathlib.Path(directory) / label
+        parameters_directory = home / "walkthrough" / "challenge-04" / "templates"
+        parameters_directory.mkdir(parents=True)
+        (parameters_directory / "parameters.json").write_text(source_parameters, encoding="utf-8")
+        (parameters_directory / "parameters-my.json").write_text("{}", encoding="utf-8")
+        cluster = master.removesuffix("-k8s-master") + "-k8s-arc-enabled"
+        workspace_id = "00000000-0000-0000-0000-000000000001"
+        responses = {
+            f"monitor log-analytics workspace show -g {group} -n {workspace} --query customerId -o tsv": workspace_id,
+            f"monitor log-analytics workspace get-shared-keys -g {group} -n {workspace} --query primarySharedKey -o tsv": "TEST/KEY&ONLY",
+            f"vm list --resource-group {onprem} --query [?ends_with(name, '-k8s-master')].name | [0] --output tsv": master,
+            f"vm list-ip-addresses --resource-group {onprem} --name {master} --query [0].virtualMachine.network.privateIpAddresses[0] --output tsv": "10.2.1.10",
+        }
+        cases = [
+            f"{shlex.quote(command)}) printf '%s\\n' {shlex.quote(value)} ;;"
+            for command, value in responses.items()
+        ]
+        stub = (
+            'set -e\nexport HOME="$1"\ncd "$HOME"\n'
+            f"export arc_resource_group={shlex.quote(group)} arc_cluster_name={shlex.quote(cluster)} workspace_name={shlex.quote(workspace)}\n"
+            # A stale numeric value must not affect the new names.
+            "export user_number=9\nunset onprem_resource_group\n"
+            'az() { case "$*" in\n' + "\n".join(cases)
+            + '\n*) echo "Unexpected Azure command: $*" >&2; return 98 ;; esac; }\n'
+            + 'kubectl() { case "$*" in\n'
+            + f"{shlex.quote(f'get svc sqlmi-{prefix}-1-external-svc -n {prefix}-arc-data-controller -o jsonpath={{.spec.ports[0].nodePort}}')}) echo 31433 ;;\n"
+            + '*) echo "Unexpected kubectl command: $*" >&2; return 98 ;; esac; }\n'
+        )
+        result = subprocess.run(
+            [bash, "-s", "--", home.as_posix()],
+            input=stub + data_setup + data_parameters + "\n" + sqlmi_setup + "\n" + data_connection
+                + '\nprintf "RESULT=%s|%s|%s|%s\\n" "$data_controller_name" "$sqlmi_name" "$master_vm_name" "$master_ip,$node_port"\n',
+            text=True, encoding="utf-8", capture_output=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert f"RESULT={prefix}-dc|sqlmi-{prefix}-1|{master}|10.2.1.10,31433" in result.stdout
+        assert "TEST/KEY&ONLY" not in result.stdout
+        parameters = json.loads((parameters_directory / "parameters-my.json").read_text(encoding="utf-8"))["parameters"]
+        for key, value in {
+            "connectedClusterName": cluster,
+            "k8sExtensionName": f"{prefix}-arc-data-controller-ext",
+            "namespace": f"{prefix}-arc-data-controller",
+            "customLocationName": f"{prefix}-arc-data-controller",
+            "dataControllerName": f"{prefix}-dc",
+            "dataController_logAnalyticsWorkspaceId": workspace_id,
+            "dataController_logAnalyticsPrimaryKey": "TEST/KEY&ONLY",
+        }.items():
+            assert parameters[key]["value"] == value, (key, parameters[key]["value"])
+
+print("Validated guest artifacts, onboarding, monitoring, Ollama readiness and 3 data-service naming/template cases.")
