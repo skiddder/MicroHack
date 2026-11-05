@@ -77,9 +77,26 @@ After completing this MicroHack you will be familiar with:
 
 ## MicroHack Challenges
 
+Coaches can provision this environment using the [Hackbox Console Bicep automation](labautomation/README.md).
+The existing [Terraform/Ansible lab deployment](lab/readme.md) remains available unchanged as a manual fallback.
+
 In order to play through the challenges, your microhack coach prepared a k8s cluster for you, which you will use as your onprem environment. In the case of this microhack, we are using an K3s cluster. 
 
-For each user there are two resource groups pre-created by your coach. 
+For a **Hackbox Console deployment**, there are also two resource groups per participant:
+the **On-prem Resource Group** contains the four VMs and their network; the **Arc Resource Group**
+provided by Console contains the container registry, Log Analytics workspace and later exercise resources.
+Both names are shown in your dashboard.
+Connect to the workstation using the shared Bastion and the VM credentials from your dashboard.
+In WSL, run `source ~/.microhack-k8s.env` to load the actual resource names; kubeconfig is already installed.
+The walkthrough commands support this environment file. Numeric lab-user names and the table below apply
+to the **manual Terraform fallback** only.
+
+The configured Console mode grants subscription Owner to participants so that they can complete
+the subscription-level Defender configuration in challenge 2. **Participants are not RBAC-isolated
+from each other.** Use only disposable training subscriptions; see the automation README for the
+resource-group-only alternative.
+
+For the manual fallback, there are two resource groups pre-created by your coach.
 | Name            | Description                                                                                 |
 |-----------------|---------------------------------------------------------------------------------------------|
 | xy-k8s-onprem   | In this resource group you can find the k8s cluster which simulates your onprem environment |

@@ -5,9 +5,13 @@ set -e
 # This script connects an existing K3s cluster to Azure Arc with Azure RBAC enabled
 echo "Exporting environment variables"
 
+if [ -f "$HOME/.microhack-k8s.env" ]; then
+    source "$HOME/.microhack-k8s.env"
+fi
+
 # Extract user number from Azure username (e.g., LabUser-37 -> 37)
 azure_user=$(az account show --query user.name --output tsv | tr -d '\r')
-user_number=$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')
+user_number="${user_number:-$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')}"
 
 if [ -z "$user_number" ]; then
     echo "Error: Could not extract user number from Azure username: $azure_user"
@@ -18,10 +22,10 @@ fi
 echo "Detected user number: $user_number"
 
 # Set variables based on detected user number
-export onprem_resource_group="${user_number}-k8s-onprem"
-export arc_resource_group="${user_number}-k8s-arc"
-export arc_cluster_name="${user_number}-k8s-arc-enabled"
-export location="westeurope"
+export onprem_resource_group="${onprem_resource_group:-${user_number}-k8s-onprem}"
+export arc_resource_group="${arc_resource_group:-${user_number}-k8s-arc}"
+export arc_cluster_name="${arc_cluster_name:-${user_number}-k8s-arc-enabled}"
+export location="${location:-westeurope}"
 
 echo "Using resource groups: $onprem_resource_group (onprem) and $arc_resource_group (arc)"
 
@@ -69,4 +73,3 @@ echo "Summary:"
 echo "   - Resource Group: $arc_resource_group" 
 echo "   - Status:"
 az connectedk8s show --resource-group $arc_resource_group --name $arc_cluster_name --query "{name:name, connectivityStatus:connectivityStatus}"
-

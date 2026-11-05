@@ -20,12 +20,14 @@ The deployment uses ARM templates as this is the most robust way for deployment 
 
 ### Step 1: Gather required values
 
+For Console labs, run `source ~/.microhack-k8s.env` in WSL first.
+
 ```bash
 # Get current user's number (e.g., LabUser-37@... or hackuser-067@... -> 37 or 67)
 export azure_user=$(az account show --query user.name --output tsv)
-export user_number=$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')
-export resource_group="$user_number-k8s-arc"
-export connected_cluster_name="$user_number-k8s-arc-enabled"
+export user_number="${user_number:-$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')}"
+export resource_group="${arc_resource_group:-$user_number-k8s-arc}"
+export connected_cluster_name="${arc_cluster_name:-$user_number-k8s-arc-enabled}"
 export extension_name="$user_number-arc-data-controller-ext"
 export namespace="$user_number-arc-data-controller"
 export custom_location_name="$user_number-arc-data-controller"
@@ -157,7 +159,7 @@ kubectl get pods -n $namespace -l app.kubernetes.io/name=$sqlmi_name
 
 ```bash
 # Get public ip of master node via Azure cli according to user-number
-master_ip=$(az vm list-ip-addresses --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.privateIpAddresses[0]" --output tsv)
+master_ip=$(az vm list-ip-addresses --resource-group "${onprem_resource_group:-${user_number}-k8s-onprem}" --name "${user_number}-k8s-master" --query "[0].virtualMachine.network.privateIpAddresses[0]" --output tsv)
 
 # Get the NodePort assigned to SQL MI
 node_port=$(kubectl get svc ${sqlmi_name}-external-svc -n $namespace -o jsonpath='{.spec.ports[0].nodePort}')

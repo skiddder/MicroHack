@@ -7,7 +7,7 @@ In challenge 1 you will connect/onboard your existing K8s cluster to Azure Arc.
 * Verify all prerequisites are in place
   * Resource Providers
   * Azure CLI extensions
-  * Resource group (Name: <xy>-k8s-arc)
+  * Resource group (Hackbox: the participant resource group from your dashboard; manual fallback: <xy>-k8s-arc)
   * Connectivity to required Azure endpoints
 * Deploy the Azure Arc agent pods to your k8s cluster
 * Assign permissions to view k8s resources in the Azure portal

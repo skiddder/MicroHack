@@ -2,6 +2,13 @@
 Duration: 15-30 minutes
 
 ## Prerequisites
+For Hackbox Console labs, use the **On-prem Resource Group**, **Arc Resource Group** and shared
+Bastion shown in your dashboard, not the numeric resource group names in the fallback examples below.
+In workstation WSL, run `source ~/.microhack-k8s.env`; kubeconfig is already installed.
+Run `kubectl get nodes` and proceed to Task 2 after logging in to Azure. The onboarding script
+loads this environment automatically. For challenges 2-5, keep using this WSL session or
+source the environment file again.
+
 Please ensure that you successfully verified 
 * the [general prerequisites](../../Readme.md#general-prerequisites) before starting this challenge.
 * that you can see your two resource groups in the [Azure portal](https://portal.azure.com) depending on your LabUser number. I.e. if you are LabUser-37, you should see the resource groups "37-k8s-arc" and "37-k8s-onprem".
@@ -27,14 +34,14 @@ To connect to your k8s cluster, we first need to merge the cluster credentials i
 
 ```bash
 # Set admin username (use the admin_user value provided by your coach)
-admin_user="<replace-with-admin_user-from-fixtures.tfvars>"
+admin_user="${admin_user:-<replace-with-admin_user-from-fixtures.tfvars>}"
 
 # Extract trailing number from Azure username before '@' (e.g., LabUser-37@... or hackuser-067@... -> 37 or 67)
 azure_user=$(az account show --query user.name --output tsv | tr -d '\r')
-user_number=$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')
+user_number="${user_number:-$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')}"
 
 # Get private IP of master node
-master_ip=$(az vm show --resource-group "${user_number}-k8s-onprem" --name "${user_number}-k8s-master" --show-details --query privateIps --output tsv)
+master_ip=$(az vm show --resource-group "${onprem_resource_group:-${user_number}-k8s-onprem}" --name "${user_number}-k8s-master" --show-details --query privateIps --output tsv)
 
 # ── Optional: only if working from your LOCAL machine instead of the workstation VM ──
 # Uncomment the following lines to tunnel SSH and the K3s API through Azure Bastion:

@@ -1,0 +1,56 @@
+---
+- name: Verify workstation and prepare participant context
+  hosts: workstations
+  gather_facts: false
+  tasks:
+    - name: Ensure WSL extension is installed after provisioning reboots
+      ansible.windows.win_shell: |
+        $ErrorActionPreference = 'Stop'
+        $code = Join-Path $env:ProgramFiles 'Microsoft VS Code\bin\code.cmd'
+        if (-not (Test-Path -LiteralPath $code)) {
+          throw "VS Code command line was not installed at $code."
+        }
+        & $code --install-extension ms-vscode-remote.remote-wsl
+        if ($LASTEXITCODE -ne 0) { throw 'Installing the VS Code WSL extension failed.' }
+      register: wsl_extension
+      changed_when: "'was successfully installed' in wsl_extension.stdout"
+
+    - name: Verify Windows tools and WSL extension
+      ansible.windows.win_shell: |
+        $ErrorActionPreference = 'Stop'
+        Get-Command git, code -ErrorAction Stop
+        $extensions = code --list-extensions
+        if ($LASTEXITCODE -ne 0 -or $extensions -notcontains 'ms-vscode-remote.remote-wsl') {
+          throw 'VS Code WSL extension is missing.'
+        }
+
+    - name: Verify WSL tools
+      ansible.windows.win_command: >-
+        wsl -d Ubuntu -- bash -lc
+        "set -e; git --version; az version; kubectl version --client; helm version --short"
+
+    - name: Install participant environment
+      ansible.windows.win_command: >-
+        wsl -d Ubuntu -- bash -lc
+        "set -e; echo '{{ context_base64 }}' | base64 -d > ~/.microhack-k8s.env;
+        grep -qxF 'source ~/.microhack-k8s.env' ~/.bashrc ||
+        echo 'source ~/.microhack-k8s.env' >> ~/.bashrc"
+
+    - name: Install kubeconfig for the interactive WSL user
+      no_log: true
+      block:
+        - name: Copy kubeconfig to Windows
+          ansible.windows.win_copy:
+            content: "{{ lookup('file', kubeconfig_path) }}"
+            dest: C:\Temp\microhack-kubeconfig
+
+        - name: Copy kubeconfig into WSL
+          ansible.windows.win_command: >-
+            wsl -d Ubuntu -- bash -lc
+            "set -e; mkdir -p ~/.kube; cp /mnt/c/Temp/microhack-kubeconfig ~/.kube/config;
+            chmod 600 ~/.kube/config; kubectl get nodes"
+      always:
+        - name: Remove temporary Windows kubeconfig
+          ansible.windows.win_file:
+            path: C:\Temp\microhack-kubeconfig
+            state: absent

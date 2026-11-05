@@ -7,20 +7,23 @@ Duration: 30-45 min
 * You require at least Contributor access to the cluster for onboarding.
 * You require Monitoring Reader or Monitoring Contributor to view data after monitoring is enabled.
 * Verify the firewall requirements in addition to the Azure Arc-enabled Kubernetes network requirements.
-* A Log Analytics workspace (law). (If you used the terraform to deploy the microhack environment, each participant already has a law in his arc resource group.)
+* A Log Analytics workspace (law). Both Console and Terraform deployments create one per participant.
 * You must be logged in to az cli (az login)
+* For Console labs, run `source ~/.microhack-k8s.env` in WSL before these commands.
+* Task 2 requires subscription-level permissions. The default Console configuration grants subscription Owner.
+  If your coach selected resource-group-only access, the coach must configure the Defender plan instead.
 
 ## Task 1 - Enable Azure Monitor for k8s
 Execute the following commands in your bash shell to install the container log extension with default settings:
 ```bash
 # Extract user number from Azure username before '@' (e.g., LabUser-37@... or hackuser-067@... -> 37 or 67)
 azure_user=$(az account show --query user.name --output tsv)
-user_number=$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')
+user_number="${user_number:-$(echo "$azure_user" | cut -d'@' -f1 | sed -E -n 's/.*[^0-9]([0-9]+)$/\1/p' | sed 's/^0*//')}"
 echo $user_number
 
 # if you are running this in a non-microhack env, adjust the values to match your env
-export arc_resource_group="${user_number}-k8s-arc"
-export arc_cluster_name="${user_number}-k8s-arc-enabled"
+export arc_resource_group="${arc_resource_group:-${user_number}-k8s-arc}"
+export arc_cluster_name="${arc_cluster_name:-${user_number}-k8s-arc-enabled}"
 export law_resource_id=$(az monitor log-analytics workspace show --resource-group $arc_resource_group --workspace-name "${user_number}-law" --query 'id' -o tsv)
 
 az k8s-extension create \
