@@ -8,7 +8,7 @@ In this challenge, you will configure and deploy the Best Practices Assessment f
 
 ## Actions
 
-- Set Up Best Practices Assessment for one machine
+- Set Up Best Practices Assessment for your Windows Arc machine in the Azure exercise resource group: <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
 - Run the Best Practices Assessment
 - Analyze Results
 
@@ -21,4 +21,3 @@ In this challenge, you will configure and deploy the Best Practices Assessment f
 ## Learning resources
 
 - [Configure Best Practices Assessment for Arc-enabled Windows servers](https://learn.microsoft.com/windows-server/manage/azure-arc/best-practices-assessment-for-windows-server)
-

@@ -14,8 +14,10 @@ Please ensure that you successfully passed [challenge 2](../../Readme.md#challen
 > This covers `Microsoft.Resources/deployments/validate/action` at subscription
 > scope for the setup validation below. If validation reports missing permissions,
 > ask the coach to verify the participant's subscription Owner assignment and
-> allow for RBAC propagation. Select your **Azure exercise resource group** and
-> its workspace and Arc machine, not the underlying VM in the `-onprem` RG.
+> allow for RBAC propagation. Select your **Azure exercise resource group**
+> <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
+> and its workspace and Arc machine, not the underlying VM in the **Simulated on-prem resource group**
+> <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>.
 
 ## Task 1: Set up the Best Practices Assessment for a Windows server
 
@@ -28,7 +30,7 @@ Please ensure that you successfully passed [challenge 2](../../Readme.md#challen
 ![alt text](img/image7.png)
 4. Click the "Get Started" button. A blade will open on the right.
 ![alt text](img/image.png)
-5. Select your resource group and previously created Log Analytics Workspace
+5. Select your Azure exercise resource group <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret> and the Log Analytics Workspace you created in Challenge 2.
 6. Let the validation check and confirm via "Set up"
 ![alt text](img/image2.png)
 7. Wait for the deployment to go through. This may take up to 15 minutes. Feel free to continue with another challenge in the meantime.

@@ -6,9 +6,12 @@ Duration: 30 minutes
 
 ## Action 1: Create an Azure Policy Guest Configuration for your Azure Arc VMs
 
-> **Hackbox Console:** Replace `mh-arc-servers-rg` with your Console-provided user
-> **Azure exercise resource group** containing the Arc representations. Scope
-> assignments to that group, not the `-onprem` RG containing the underlying Azure VMs.
+> **Hackbox Console:** Use your **Azure exercise resource group**
+> <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
+> containing the Arc representations. Scope assignments to that group, not the
+> **Simulated on-prem resource group**
+> <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>
+> containing the underlying Azure VMs.
 
 ### Setup a Policy that checks if the user "FrodoBaggins" is part of the local administrators group
 
@@ -21,7 +24,7 @@ Duration: 30 minutes
 
 3. In this section you can now configure the assignment with the following settings and create the assignment:
 
-- Scope: Please select the resource group called *mh-arc-servers-rg*
+- Scope: Select your Azure exercise resource group <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>.
 - Policy Definition: Please search for *administrators group* and select *Audit Windows machines missing any of the specified members in the Administrators group*.
 - Parameters: Please ensure to set *Include Arc connected servers* to *true and *Members to include* to *FrodoBaggins*.
 
@@ -83,7 +86,7 @@ Find it here [AddKey.zip](../../labautomation/AddKey.zip).
 > corresponding management-group permissions. Subscription Owner does not grant
 > those permissions.
 
-1. You will need to upload the zip file to a Storage Account and create a SAS with read permissions.
+1. Create your Storage Account in the Azure exercise resource group <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>, upload the zip file, and create a SAS with read permissions. Record your chosen storage account and container names and enter them in the code block below; these resources are not supplied as Console credentials.
 
     > **Warning**
     >  The following commands cannot be run from Azure Cloud Shell! Please use a local Powershell.

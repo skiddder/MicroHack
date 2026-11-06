@@ -10,15 +10,18 @@ Please ensure that you successfully passed [challenge 2](../../Readme.md#challen
 
 ### Task 1: Create an Azure Key Vault
 
-> **Hackbox Console:** Replace `mh-arc-servers-rg` with the dashboard's **Azure
-> exercise resource group** for Key Vault, Arc resources and access assignments.
-> The separate `<Console-RG>-onprem` contains only the underlying Azure VM infrastructure.
+> **Hackbox Console:** Use your **Azure exercise resource group**
+> <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
+> for Key Vault, Arc resources and access assignments.
+> The separate **Simulated on-prem resource group**
+> <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>
+> contains only the underlying Azure VM infrastructure.
 
 1. Navigate to *Azure Key Vault* using the top search bar and select *Create* in the top navigation pane.
 
 ![image](./img/1_new_KV.png)
 
-2. Create the Azure Key Vault in your resource group *mh-arc-servers-rg* with default settings and call it *mh-arc-servers-kv* with a random number at the end as the name needs to be unique across all Azure Key Vaults.
+2. Create the Azure Key Vault in your Azure exercise resource group <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret> with default settings. Choose a globally unique Key Vault name and record it for Task 3; the Key Vault is created by you, not supplied as a Console credential.
 
 ![image](./img/2_KV_settings.jpg)
 
@@ -39,7 +42,7 @@ Then assign the *Key Vault Secrets Officer* role to yourself.
 
 ### Task 3: Call the secret without providing any credentials
 
-1. Connect via SSH to the Virtual Machine *microhack-arc-servers-lin01*.
+1. For Hackbox Console, connect via SSH to your Linux VM at <secret group="Lab-Deployment" name="vm-linux-mh" show="always"></secret> using username <secret group="Lab-Deployment" name="VM Admin Username" show="always"></secret> and the VM Admin Password from **Credentials > Lab-Deployment**. Outside the Console, use your own Linux server's address and credentials.
 
 2. Elevate your privileges using the following command:
 

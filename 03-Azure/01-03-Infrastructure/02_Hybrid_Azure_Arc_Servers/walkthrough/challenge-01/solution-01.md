@@ -10,14 +10,20 @@ Please ensure that you successfully verified the [General prerequisits](../../Re
 
 ### Task 1: Create Azure Resource Group
 
-> **Hackbox Console:** Skip RG creation and use the dashboard's **Azure exercise
-> resource group** (the unchanged Console RG) for Arc onboarding and the screenshot
+> **Hackbox Console:** Skip RG creation and use your **Azure exercise
+> resource group** <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
+> for Arc onboarding and the screenshot
 > examples. The prepared Azure VMs are in the separate **Simulated on-prem resource
-> group**, `<Console-RG>-onprem`; do not select it as the Arc onboarding destination. In the default
+> group** <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>;
+> do not select it as the Arc onboarding destination. In the default
 > `resourcegroup-with-subscriptionowner` mode, you have Owner on this group and
 > the shared subscription. Do not change other participants' resources.
 
 Sign in to the [Azure Portal](https://portal.azure.com/).
+
+For Hackbox Console, sign in as <secret group="Azure" name="Entra ID Username" show="always"></secret>
+and select subscription <secret group="Azure" name="Subscription ID" show="always"></secret>.
+Use your Console sign-in credentials, not the VM administrator account below.
 
 * [Create Resource Group](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal#create-resource-groups)
 * On the **Tags** tab, set **SecurityControl** to **Ignore** before creating the
@@ -50,10 +56,17 @@ Sign in to the [Azure Portal](https://portal.azure.com/).
 > Their OS reconfiguration was only submitted asynchronously: verify guest-agent
 > shutdown, IMDS blocking and Windows reboot completion as described in the
 > [automation guide](../../labautomation/README.md#credentials-and-asynchronous-reconfiguration).
-> Locate the underlying Azure VMs in the dashboard's **Simulated on-prem resource
-> group**. Their Arc representations will instead be created in the **Azure
-> exercise resource group** during onboarding.
+> Locate the underlying Azure VMs in the **Simulated on-prem resource
+> group** <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>.
+> Their Arc representations will instead be created in the **Azure
+> exercise resource group** <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
+> during onboarding.
 > Do not blindly rerun guest-agent-based preparation after that agent is stopped.
+
+For both Console-provisioned VMs, use administrator username
+<secret group="Lab-Deployment" name="VM Admin Username" show="always"></secret>
+and password <secret group="Lab-Deployment" name="VM Admin Password" show="false"></secret>.
+The password is initially hidden; click to reveal it or double-click to copy.
 
 * Have a server, windows or linux ready, perhaps on your own laptop/notebook
 * For windows, please use Windows Server 2025 with the latest patch level. 💡 ATTENTION: Use Windows Update to apply the latest patch level!!
@@ -79,6 +92,12 @@ Sign in to the [Azure Portal](https://portal.azure.com/).
 With these prerequisites in place, we can focus on building the differentiated knowledge in the hybrid world with Azure Arc to enable your on-prem, Multi-Cloud environment for the Cloud operations model.
 
 ### Task 5: Onboard Windows Server OS to Azure Arc
+
+For Hackbox Console, connect to the prepared Windows server using RDP at
+<secret group="Lab-Deployment" name="vm-win2025-mh" show="always"></secret>.
+Use the VM administrator credentials from Task 4 and select your Azure exercise resource group
+<secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
+when generating the onboarding script. Screenshot values are examples, not your lab values.
 
 * Onboard the recent installed or prepared Windows Server OS to Azure Arc, by using the documented steps
 1. Generate the installation script from the Azure portal [Link](https://learn.microsoft.com/en-us/azure/azure-arc/servers/onboard-service-principal#generate-the-installation-script-from-the-azure-portal)
@@ -111,7 +130,12 @@ With these prerequisites in place, we can focus on building the differentiated k
 
 2. Connect to Linux server via SSH [Link] (https://devblogs.microsoft.com/powershell/using-the-openssh-beta-in-windows-10-fall-creators-update-and-windows-server-1709/)
 
-* Use the account and password from setup:
+* For Hackbox Console, connect via SSH to
+  <secret group="Lab-Deployment" name="vm-linux-mh" show="always"></secret>
+  using the VM administrator credentials from Task 4. Otherwise, use the account
+  and password from your own setup. Select your Azure exercise resource group
+  <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
+  when generating the onboarding script.
 
 ![image](./img/33.png)
 

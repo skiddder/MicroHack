@@ -8,7 +8,7 @@ Managing secrets, credentials or certificates to secure communication between di
 
 ## Actions
 
-- Create an Azure Key Vault in your Azure resource group
+- Create an Azure Key Vault in your Azure exercise resource group: <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
 - Create a secret in the Azure Key Vault and assign permissions to your Linux virtual machine
 - Access the secret via bash script
 
@@ -22,4 +22,3 @@ Managing secrets, credentials or certificates to secure communication between di
 - [Set and retrieve a secret from Azure Key Vault using the Azure portal](https://docs.microsoft.com/azure/key-vault/secrets/quick-create-portal)
 - [Use a Linux VM system-assigned managed identity to access Azure Key Vault](https://docs.microsoft.com/azure/active-directory/managed-identities-azure-resources/tutorial-linux-vm-access-nonaad)
 - [Authenticate against Azure resources with Azure Arc-enabled servers](https://docs.microsoft.com/azure/azure-arc/servers/managed-identity-authentication)
-

@@ -10,7 +10,9 @@
 
 > **Hackbox Console:** Enabling or changing Defender plans on the shared
 > subscription is a coach task and can incur charges. Participants inspect their
-> own Arc servers after the coach has configured the shared subscription.
+> own Arc servers in the Azure exercise resource group
+> <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
+> after the coach has configured the shared subscription.
 
 - Enable Microsoft Defender for Cloud on your Azure Arc-enabled machines.
 

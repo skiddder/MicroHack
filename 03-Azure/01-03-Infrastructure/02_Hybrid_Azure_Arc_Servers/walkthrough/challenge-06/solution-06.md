@@ -3,7 +3,8 @@
 > **Hackbox Console:** No Windows Server 2012 R2 VM is provisioned. Follow this
 > optional walkthrough only if a suitable server has been supplied separately
 > and the coach has approved the ESU charges. Use your **Azure exercise resource
-> group** for its Arc representation and ESU license, not the simulated VM infrastructure RG.
+> group** <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
+> for its Arc representation and ESU license, not the simulated VM infrastructure RG.
 
 [Previous Challenge Solution](../challenge-05/solution-05.md) - **[Home](../../Readme.md)** - [Next Challenge Solution](../challenge-07/solution-07.md)
 
@@ -15,7 +16,8 @@ Duration: 15 minutes
 1. Navigate to the Azure Arc center and click "Licenses" and "Windows Server ESU licenses" (or click [here](https://portal.azure.com/#view/Microsoft_Azure_ArcCenterUX/ArcCenterMenuBlade/~/license))
 2. Click "Create" on the top bar. A new blade will open.
 3. Fill in the required field:
-    - Subscription and Resource group (where you created your previous objects)
+    - Subscription: <secret group="Azure" name="Subscription ID" show="always"></secret>
+    - Resource group: <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret> (where you created your previous Arc resources)
     - A license name - should only contain letters (both uppercase and lowercase), digits, hyphens, underscores, and periods. Consecutive dots are not allowed.
     - Select "Activate now" (you could create one with "Activate later" but cannot attach it to a server then)
     - Keep "West Europe" as the selected region

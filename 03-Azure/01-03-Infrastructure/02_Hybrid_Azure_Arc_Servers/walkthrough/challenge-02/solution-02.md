@@ -9,7 +9,7 @@ Duration: 40 minutes - Allow additional time for policy evaluation, initial data
 - Complete [Challenge 1](../../challenges/challenge-01.md). Both servers must appear as **Connected** under **Azure Arc > Machines**, with their system-assigned managed identities enabled.
 - Use the **Arc machine resources** (`Microsoft.HybridCompute/machines`), not the underlying Azure IaaS VMs used to simulate on-premises servers. Their Azure VM guest agents were deliberately disabled; do not re-enable them or remove the IMDS block.
 - In the Hackbox Console's default `resourcegroup-with-subscriptionowner` mode, you have `Owner` on your participant RG and the shared subscription. Use your participant RG for this walkthrough and keep **`SecurityControl=Ignore`** on it. Coordinate subscription-wide changes or additional managed RGs with the coach; do not modify other participants' resources. Entra and management-group permissions are separate.
-- Here, **participant RG** means the dashboard's **Azure exercise resource group**: the unchanged Console RG containing your Arc representations and exercise resources. The prepared Azure VMs live separately in `<Console-RG>-onprem`. Do not select that infrastructure RG for workspaces, DCRs, Arc Run Command or Arc policy assignments.
+- Here, **participant RG** means your **Azure exercise resource group** <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>, containing your Arc representations and exercise resources. The prepared Azure VMs live separately in the **Simulated on-prem resource group** <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>. Do not select that infrastructure RG for workspaces, DCRs, Arc Run Command or Arc policy assignments.
 - Verify the [AMA supported operating systems](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-supported-operating-systems), [Change Tracking support matrix](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/change-tracking-inventory-support-matrix) and service availability for your assigned region.
 - Allow the documented outbound connections for [AMA](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-network-configuration), Azure Arc and your OS update sources. This exercise does not require opening additional public inbound ports.
 - Ask the coach to approve service costs and update/reboot timing. Do not activate Windows Server benefits, paid plans or licenses merely to make a portal blade appear.
@@ -31,7 +31,7 @@ AMA collects the guest metrics; you do not need to install a separate OpenTeleme
 ## Task 1: Create or select your Log Analytics workspace
 
 1. In the [Azure portal](https://portal.azure.com/), search for **Log Analytics workspaces** and select **Create**, or reuse your workspace from an earlier attempt.
-2. Select your event subscription and **existing participant RG**. Use a name such as `mh-arc-servers-automation-law`.
+2. Select subscription <secret group="Azure" name="Subscription ID" show="always"></secret> and **existing participant RG** <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>. Use the workspace name `mh-arc-servers-automation-law`.
 3. Choose a workspace region. (Where you store logs and metrics is independant of where the meta data of your arc machines is stored. You can choose any region - i.e. the one closest to your onprem VMs.)
 4. Review the settings, create the workspace and record its **resource ID** and **region**.
 
@@ -86,6 +86,11 @@ Run Command for Arc is currently **preview** and has **no dedicated Azure portal
 3. Replace the placeholders below with your event subscription, participant RG and the two **Arc resource names** shown under **Azure Arc > Machines**. These are not necessarily the simulated Azure VM names.
 4. Read each Arc resource's metadata location on its **Overview** page and enter it below. This is not the Log Analytics workspace location or necessarily the simulated VM's physical region.
 5. Run the following in Cloud Shell, not in either guest. If a CLI command fails, resolve the error before continuing.
+
+For the script below, set **subscriptionId** to <secret group="Azure" name="Subscription ID" show="always"></secret>
+and **resourceGroup** to <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>.
+Copy these values into the quoted placeholders; Secret tags are not expanded inside code blocks.
+Read the Arc machine names and locations from their portal resources as described above.
 
 ```bash
 subscriptionId="<event-subscription-id>"
@@ -185,7 +190,7 @@ Keep the Task 2 log DCRs and their Log Analytics destination unchanged.
 
 1. In **Subscriptions > your event subscription > Resource providers**, verify that **Microsoft.Monitor** is **Registered**. Register it if necessary and wait for registration to finish. **Microsoft.Insights** must also be registered.
 2. Search for **Azure Monitor workspaces**, select **Create**, and choose your event subscription and **existing Azure exercise RG**, not the `-onprem` RG. This is a different resource type from Log Analytics.
-3. Use a participant-specific name, for example **`mh-amw-labuser-0001`**, replacing the suffix with your own participant identifier. Do not have every participant use the same name: the automatically generated managed RG name must also be distinct within the shared subscription.
+3. Choose a workspace name unique to your participant within the shared subscription. Use your Azure exercise resource group name displayed above as a participant-specific suffix. Do not have every participant use the same name: the automatically generated managed RG name must also be distinct within the shared subscription.
 4. Choose a service-supported workspace region agreed with the coach. Create the OTel DCR in this same region; it need not match the Arc machines' metadata locations or physical VM locations. This lab uses public endpoints; the metrics-based experience does not currently support Private Link.
 5. Review and create the workspace. Record its full **resource ID**. Azure also creates a service-managed RG, normally `MA_<workspace-name>_<location>_managed`, containing its default ingestion DCR and DCE.
 6. Open the workspace's **JSON View** and inspect `properties.defaultIngestionSettings`. Follow the referenced DCR/DCE resource IDs to identify the actual managed RG, rather than assuming ownership from its name. Record this RG and apply **`SecurityControl=Ignore`** to it as well. If naming/tag policies or a deny assignment prevent creation or tagging, stop and involve the coach; do not remove service-managed protections or modify another participant's managed RG.

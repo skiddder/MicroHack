@@ -15,10 +15,13 @@ Please ensure that you successfully passed [challenge 3](../../Readme.md#challen
 > the default Console mode, but changes affect all participants and can incur
 > charges. Do not change these settings without coach approval; continue with
 > inspection of your own Arc servers after coach preparation.
-> These Arc resources are in your **Azure exercise resource group**, not the
-> `-onprem` RG containing the underlying simulated servers.
+> These Arc resources are in your **Azure exercise resource group**
+> <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>,
+> not the **Simulated on-prem resource group**
+> <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>
+> containing the underlying simulated servers.
 
-* In the Defender for Cloud environment settings, click on the subscription your resource group resides in
+* In the Defender for Cloud environment settings, select your subscription: <secret group="Azure" name="Subscription ID" show="always"></secret>
 ![image](./img/1.png)
 
 * Verify that Plan 1 or 2 is enabled for Servers

@@ -8,25 +8,28 @@ In challenge 1 you will prepare your Azure environemnt for onboarding of existin
 
 ## Actions
 
-> **Hackbox Console:** Use your existing user resource group instead of creating
-> `mh-arc-servers-rg`. The coach supplies the Entra service principal if you lack
+> **Hackbox Console:** Use your Azure exercise resource group
+> <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
+> for Arc onboarding. The underlying Azure VMs are in the separate simulated on-prem resource group
+> <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>.
+> The coach supplies the Entra service principal if you lack
 > permission to create one; scope its onboarding role to your RG. Resource
 > providers are prepared by the shared deployment hook. The two VMs already have
 > asynchronous OS preparation requests, but you must verify that preparation
 > finished before onboarding. Windows Server 2012 R2 is not provisioned.
 
 - Verify all necessary Azure resources are in place
-  - Resource Group <variable group="Lab-Deployment" name="Azure exercise resource group" show="true"></variable>
-- Service Principal (Name: LabUser-xx-arc-servers-sp)
-- Enable required Resource Providers (if not already enabled)
-- Prep existing servers` operating system on-prem
+  - Azure exercise resource group: <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret> (Tag: `SecurityControl=Ignore`)
+- Create service principal for onboarding your servers
+- Enable required resource providers (if not already enabled)
+- Prep existing servers' operating system on-prem
   - Hint: We are using Azure VMs to simulate on-prem servers
 - Onboard existing servers to Azure Arc
   - win2012-vm may be skipped unless you plan to do the optional Challenge 6 (Extended Security Updates)
 
 ## Success criteria
 
-- You created an Azure resource group, or verified your Console-provided user resource group, with `SecurityControl=Ignore`
+- You verified your Console-provided Azure exercise resource group with `SecurityControl=Ignore`, or created and tagged your own group when working outside the Console
 - You created a service principal with the required role membership, or received a coach-provided one scoped to your resource group
 - Successfully prepared existing servers
 - Onboarded servers which is visible in the Azure Arc machines blade in the Azure Portal

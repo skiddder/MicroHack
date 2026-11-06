@@ -94,6 +94,31 @@ The canonical deployment assets have been moved here, not copied:
 Re-import the complete folder after updating the Console content. Importing only
 the hook scripts is insufficient.
 
+### Personalized challenge and solution text
+
+The Hackbox Console resolves `secret` elements in normal Markdown text using
+the current participant's credentials. Specify the exact `group` and `name`
+attributes and an explicit closing tag. See the
+[Challenge 1 resource group reference](../challenges/challenge-01.md#actions).
+Use group `Azure` for platform labels such as `Subscription ID` and
+`Entra ID Username`, and `Lab-Deployment` for this hook's credential labels:
+`Azure exercise resource group`, `Simulated on-prem resource group`,
+`VM Admin Username`, `VM Admin Password`, `vm-linux-mh` and `vm-win2025-mh`.
+The two VM labels contain public IP addresses, not Arc resource names.
+
+Use `show="always"` for non-sensitive names, IDs and addresses; clicking copies
+the value. Keep passwords initially masked with `show="false"`. Never put these
+elements in inline code or fenced code blocks: copy the resolved values from
+the surrounding text into script placeholders instead.
+
+Missing credentials render as `undefined`. Re-import the updated challenge,
+solution and deployment content and verify the labels in a participant session.
+The tags only resolve in the Console; when reading the Markdown elsewhere or
+using standalone setup, use your own environment values. Resources created
+during the exercises (workspaces, Key Vaults, DCRs and storage accounts) are not
+emitted by this hook, so their names must be recorded by the participant rather
+than referenced through invented credential labels.
+
 ### Re-import and verify the new event
 
 1. Re-import the complete `labautomation` content and create a **new event**.

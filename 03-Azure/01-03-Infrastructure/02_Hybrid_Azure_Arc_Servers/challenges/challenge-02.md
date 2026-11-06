@@ -8,9 +8,9 @@ In challenge 2 you will monitor your Windows and Linux Arc-enabled servers using
 
 ## Actions
 
-- Create all necessary Azure resources
-  - Log Analytics workspace (Name: mh-arc-servers-automation-law)
-  - Azure Monitor workspace for OpenTelemetry metrics (participant-specific name, for example mh-amw-labuser-0001)
+- Create all necessary Azure resources in your Azure exercise resource group: <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
+  - Log Analytics workspace
+  - Azure Monitor workspace for OpenTelemetry metrics (choose a name unique to your participant within the shared subscription)
   - Identify its automatically created managed resource group and apply the required governance tagging
 - Configure Data Collection Rules to collect Windows event logs and Linux syslog
 - Manually enable OpenTelemetry guest metrics on the Windows Arc machine, using the default system metrics
