@@ -347,6 +347,23 @@ function Get-ArcVmUserId {
     return ''
 }
 
+function Get-ArcVmReconfigurationState {
+    param([object]$Vm)
+
+    $state = ''
+    if ($Vm.PSObject.Properties['tags'] -and $Vm.tags -and
+        $Vm.tags.PSObject.Properties['microhackReconfiguration']) {
+        $state = [string]$Vm.tags.microhackReconfiguration
+    }
+    if ($state -eq 'submitting') {
+        throw "The previous reconfiguration submission for $($Vm.name) was interrupted. The coach must inspect the VM before clearing its microhackReconfiguration tag."
+    }
+    if ($state -notin @('', 'submitted')) {
+        throw "Unknown reconfiguration state '$state' on $($Vm.name)."
+    }
+    return $state
+}
+
 function Assert-ArcVm {
     param([object]$Vm, [string]$Location, [string]$Size, [string]$UserId = '', [switch]$AllowUnmarked, [switch]$AllowProvisioning)
 
@@ -370,7 +387,30 @@ function Wait-ArcVmProvisioning {
     $group = $Vm.resourceGroup
     for ($attempt = 0; $attempt -le 60; $attempt++) {
         Assert-ArcVm -Vm $Vm -Location $Location -Size $Size -UserId $UserId -AllowUnmarked:$AllowUnmarked -AllowProvisioning
+        $state = Get-ArcVmReconfigurationState -Vm $Vm
         if ($Vm.provisioningState -eq 'Succeeded') { return $Vm }
+        if ($Vm.provisioningState -eq 'Updating' -and $state -eq 'submitted' -and
+            $UserId -and (Get-ArcVmUserId -Vm $Vm) -eq $UserId -and
+            $name -in @('vm-linux-mh', 'vm-win2025-mh')) {
+            $view = Invoke-ArcAz -Arguments @(
+                'vm', 'get-instance-view', '--resource-group', $group, '--name', $name,
+                '--query', '{statuses:instanceView.statuses,agent:instanceView.vmAgent.statuses}'
+            )
+            if (-not $view -or -not $view.PSObject.Properties['statuses'] -or $view.statuses -isnot [array] -or
+                -not $view.PSObject.Properties['agent'] -or $view.agent -isnot [array]) {
+                throw "Cannot verify the guest-agent shutdown state of VM '$name' in '$group': Azure returned an invalid instance view."
+            }
+            $codes = @($view.statuses | ForEach-Object { $_.code })
+            $provisioningCodes = @($codes | Where-Object { $_ -like 'ProvisioningState/*' })
+            $powerCodes = @($codes | Where-Object { $_ -like 'PowerState/*' })
+            $agentCodes = @($view.agent | ForEach-Object { $_.code })
+            if ($powerCodes.Count -eq 1 -and $powerCodes[0] -eq 'PowerState/running' -and
+                $provisioningCodes.Count -eq 1 -and $provisioningCodes[0] -eq 'ProvisioningState/updating' -and
+                $agentCodes.Count -eq 1 -and $agentCodes[0] -eq 'ProvisioningState/Unavailable') {
+                Write-Warning "Reusing VM '$name' in '$group' with recorded reconfiguration submission, matching ownership, running power state and an unavailable guest agent. Azure still reports Updating; provisioning and guest preparation completion are NOT verified. No VM update or Run Command will be submitted. Verify the guest over SSH/RDP before Arc onboarding."
+                return $Vm
+            }
+        }
         if ($attempt -eq 60) {
             throw "VM '$name' in '$group' is still $($Vm.provisioningState) after 60 provisioning polls. Inspect Azure Activity Log and deployment/Run Command status before retrying; no VM was recreated or reconfiguration resubmitted."
         }

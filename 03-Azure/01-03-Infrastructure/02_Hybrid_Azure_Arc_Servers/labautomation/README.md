@@ -23,11 +23,11 @@ run cleanup, request quota increases or perform demo Arc onboarding.
 ## Console configuration
 
 Import this MicroHack with `deploymentType = resourcegroup-with-subscriptionowner`. The Hackbox Console
-controls both the participant count and subscription packing. **Configure the
-Console to put all participants in exactly one subscription.** This lab deliberately
-does not set `labsPerSubscription`, a default participant count, or a participant
-limit. Omitting that field does not itself enforce a single subscription: check
-the Console's reservation preview before starting.
+controls both the participant count and subscription packing. The
+`labsPerSubscription` default is **10**; larger events use multiple subscriptions.
+This is a packing default, not an event-wide participant limit. Check the
+Console's reservation preview before starting, especially for existing events
+whose saved settings may differ from the imported defaults.
 
 The Console's selected regions and their order are authoritative. The
 `preferredLocation` list in [lab-defaults.json](lab-defaults.json) only seeds the
@@ -123,7 +123,8 @@ than referenced through invented credential labels.
 
 1. Re-import the complete `labautomation` content and create a **new event**.
    Verify that the Console selects `resourcegroup-with-subscriptionowner` and
-   packs all participants into exactly one subscription.
+   uses **10 labs per subscription** and the preferred region order
+   `swedencentral, australiaeast, westus2`.
 2. After provisioning, check **Access control (IAM)** for a participant:
    subscription `Owner` must be present. RG access may be inherited; a second
    direct RG assignment is not necessary. The hook checks subscription Owner
@@ -314,11 +315,19 @@ password CLI argument is created. Credentials
 and public IPs, plus the two RG names and their purpose, are emitted only after both VMs have deployed and both
 reconfiguration requests have been accepted.
 
-Reconfiguration deliberately matches the Bash mechanism:
+Both Console guests use managed Run Command with `--async-execution true`:
 
-- Linux: action Run Command with `--no-wait`, using `reconfig-ubuntu.sh`.
-- Windows: managed Run Command with asynchronous execution, using
-  `reconfig-win.ps1`.
+- Linux: `reconfigLinux`, using `reconfig-ubuntu.sh`.
+- Windows: `reconfigWin`, using `reconfig-win.ps1`.
+
+The CLI call waits for managed command provisioning, which must report
+`Succeeded` before the VM tag is changed from `submitting` to `submitted`.
+With asynchronous execution, provisioning completes when script execution starts,
+not when it finishes. Unlike the former Linux action Run Command's client-side
+`--no-wait`, this does not wait for the guest script's completion after it has
+stopped the agent. See the [Run Command comparison](https://learn.microsoft.com/azure/virtual-machines/run-command-overview).
+This intentionally differs from the standalone Bash demo creator, whose legacy
+submission mechanism is unchanged.
 
 **Acceptance is not completion.** The guest scripts stop the Azure guest agent;
 Windows also reboots. The dashboard therefore reports
@@ -361,14 +370,31 @@ No guest-completion polling or automatic Arc onboarding is performed.
   if a reused VM did not originate from this lab's stable password, the dashboard
   password may not match it.
 - An existing failed VM deployment is not silently treated as a healthy VM.
+- For the known legacy action Run Command case, both hooks can reuse an
+  `Updating` VM only when its name is an expected lab VM, its ownership tag
+  exactly matches the participant (unmarked reuse does not qualify), and
+  `microhackReconfiguration=submitted`. A live instance-view query must also
+  report `ProvisioningState/updating`, `PowerState/running` and exactly one
+  agent status, `ProvisioningState/Unavailable`. The enclosing on-prem RG,
+  region and SKU must pass the usual checks.
+  This is explicit degraded reuse, **not** a successful provisioning or
+  guest-readiness verdict: a warning retains that distinction, as does the
+  dashboard. The hook does not change the VM's Azure state, tags, password or
+  Run Command, and it does not submit reconfiguration again. Verify both
+  guests through SSH/RDP before onboarding; unrelated Azure VM updates can
+  remain blocked while the agent is unavailable.
 - VMs in `Creating` or `Updating` are polled with `az vm show` in both hooks
-  before reuse, including after ownership tagging. There are at most 60 polls
+  before reuse unless the preceding detached-agent case qualifies, including
+  after ownership tagging. There are at most 60 polls
   per check, ten seconds apart (about ten minutes plus Azure API time).
   Ownership, region and SKU are checked before waiting and on every response.
   Failed, canceled or unknown states and API errors stop immediately; a VM
   still busy at the limit also stops with a diagnostic. Inspect its Azure
   Activity Log and deployment/Run Command status before retrying. Waiting does
   not recreate VMs, clear reconfiguration tags or resubmit guest scripts.
+  `submitting` and unknown reconfiguration tags stop immediately, including
+  during the shared stage. Failed instance-view queries or malformed responses
+  also stop rather than assuming that a guest was prepared.
 - Removing users or changing their assigned region first triggers a read-only
   subscription resource inventory. A stale mapping can be replaced if the entire
   subscription contains no resources other than resource groups and deployment
@@ -501,6 +527,10 @@ RG names and targeted cleanup/WhatIf are covered with mocks.
 The tests also cover the shared stage before Console RG/Owner visibility,
 full quota accounting in that state, subscription-Owner-only deployments,
 tag-based shared reruns, conflicting Azure RG tags and legacy direct ownership.
+Detached-agent recovery is tested for both VM types and both hooks, including
+zero new quota demand, unchanged VM state, no repeated Run Commands, and rejection
+of missing/contradictory status data or submission tags. Both guests' managed
+asynchronous command options and provisioning responses are checked with mocks.
 The centralized legacy PowerShell creator's parameter sets are also checked
 against its three local templates.
 

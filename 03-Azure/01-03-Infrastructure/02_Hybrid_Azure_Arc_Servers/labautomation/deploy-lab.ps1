@@ -108,34 +108,23 @@ foreach ($type in $script:ArcVmTypes) {
         ))
     }
     $vm = @(Wait-ArcVmProvisioning -Vm $vm[0] -Location $location -Size $script:ArcVmSizes[$type] -UserId $userId)
-    $state = ''
-    if ($vm[0].tags -and $vm[0].tags.PSObject.Properties['microhackReconfiguration']) {
-        $state = $vm[0].tags.microhackReconfiguration
-    }
-    if ($state -eq 'submitting') {
-        throw "The previous reconfiguration submission for $vmName was interrupted. The coach must inspect the VM before clearing its microhackReconfiguration tag."
-    }
-    if ($state -notin @('', 'submitted')) {
-        throw "Unknown reconfiguration state '$state' on $vmName."
-    }
+    $state = Get-ArcVmReconfigurationState -Vm $vm[0]
     if ($state -ne 'submitted') {
         # A stopped guest agent cannot reliably accept a second run-command.
         Invoke-ArcAz -Arguments @(
             'tag', 'update', '--resource-id', $vmResourceId, '--operation', 'Merge',
             '--tags', 'microhackReconfiguration=submitting'
         ) | Out-Null
-        if ($type -eq 'linux') {
-            Invoke-ArcAz -Arguments @(
-                'vm', 'run-command', 'invoke', '--resource-group', $onPremResourceGroupName, '--name', $vmName,
-                '--command-id', 'RunShellScript', '--scripts',
-                ('@' + (Join-Path $script:ArcVmSource 'reconfig-ubuntu.sh')), '--no-wait'
-            ) | Out-Null
-        } else {
-            Invoke-ArcAz -Arguments @(
-                'vm', 'run-command', 'create', '--resource-group', $onPremResourceGroupName, '--vm-name', $vmName,
-                '--name', 'reconfigWin', '--location', $location, '--script',
-                ('@' + (Join-Path $script:ArcVmSource 'reconfig-win.ps1')), '--async-execution', 'true'
-            ) | Out-Null
+        $runCommandName = if ($type -eq 'linux') { 'reconfigLinux' } else { 'reconfigWin' }
+        $scriptName = if ($type -eq 'linux') { 'reconfig-ubuntu.sh' } else { 'reconfig-win.ps1' }
+        $runCommand = Invoke-ArcAz -Arguments @(
+            'vm', 'run-command', 'create', '--resource-group', $onPremResourceGroupName, '--vm-name', $vmName,
+            '--name', $runCommandName, '--location', $location, '--script',
+            ('@' + (Join-Path $script:ArcVmSource $scriptName)), '--async-execution', 'true'
+        )
+        if (-not $runCommand -or -not $runCommand.PSObject.Properties['provisioningState'] -or
+            $runCommand.provisioningState -ne 'Succeeded') {
+            throw "Managed Run Command '$runCommandName' for '$vmName' did not confirm successful asynchronous provisioning. The reconfiguration tag remains submitting; inspect the command before retrying."
         }
         Invoke-ArcAz -Arguments @(
             'tag', 'update', '--resource-id', $vmResourceId, '--operation', 'Merge',

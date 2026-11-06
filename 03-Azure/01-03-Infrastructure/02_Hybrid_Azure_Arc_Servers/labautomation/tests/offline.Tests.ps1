@@ -29,6 +29,11 @@ function Reset-Mock {
         vmStates = @()
         vmPollSleeps = 0
         ownershipTagUpdating = $false
+        vmInstanceView = @{
+            statuses = @(@{ code = 'ProvisioningState/updating' }, @{ code = 'PowerState/running' })
+            agent = @(@{ code = 'ProvisioningState/succeeded' })
+        }
+        runCommandState = 'Succeeded'
         groupTags = @{}
         groupLocations = @{}
         extraOwners = @()
@@ -357,6 +362,7 @@ function global:az {
                 }
             )
         }
+        'vm get-instance-view' { $global:ArcMock.vmInstanceView }
         'vm show' {
             $name = Get-MockArgument $arguments '--name'
             $rg = Get-MockArgument $arguments '--resource-group'
@@ -415,17 +421,19 @@ function global:az {
             @{ properties = @{ tags = $vm[0].tags } }
         }
         'vm run-command' {
-            if ($arguments[2] -eq 'invoke' -and '--no-wait' -notin $arguments) { throw 'Linux must be asynchronous.' }
-            if ($arguments[2] -eq 'create' -and (Get-MockArgument $arguments '--async-execution') -ne 'true') {
-                throw 'Windows must be asynchronous.'
+            if ($arguments[2] -ne 'create' -or (Get-MockArgument $arguments '--async-execution') -ne 'true' -or
+                '--no-wait' -in $arguments) {
+                throw 'Both guests require managed async execution, not action Run Command or client-side no-wait.'
             }
-            $file = if ($arguments[2] -eq 'invoke') {
-                Get-MockArgument $arguments '--scripts'
-            } else { Get-MockArgument $arguments '--script' }
+            $vmName = Get-MockArgument $arguments '--vm-name'
+            $commandName = Get-MockArgument $arguments '--name'
+            $expectedName = if ($vmName -eq 'vm-linux-mh') { 'reconfigLinux' } else { 'reconfigWin' }
+            if ($commandName -ne $expectedName) { throw 'Managed Run Command must use its stable OS-specific name.' }
+            $file = Get-MockArgument $arguments '--script'
             if (-not $file.StartsWith('@') -or -not (Test-Path $file.Substring(1))) {
                 throw 'The original reconfiguration file must exist.'
             }
-            @{ submitted = $true }
+            @{ name = $commandName; provisioningState = $global:ArcMock.runCommandState }
         }
         'network public-ip' {
             if ($arguments[2] -eq 'list') {
@@ -471,7 +479,8 @@ foreach ($file in Get-ChildItem $labRoot -Filter '*.ps1' -Recurse) {
 $defaults = Get-Content (Join-Path $labRoot 'lab-defaults.json') -Raw | ConvertFrom-Json -AsHashtable
 Assert-Test ($defaults.deploymentType -eq 'resourcegroup-with-subscriptionowner') 'Default requests participant RGs with subscription Owner'
 Assert-Test ($defaults.groups.Count -eq 0) 'No extra licenses'
-Assert-Test (-not $defaults.ContainsKey('labsPerSubscription')) 'Console controls subscription packing'
+Assert-Test ($defaults.labsPerSubscription -eq 10) 'Console defaults to ten labs per subscription'
+Assert-Test ($defaults.preferredLocation -ceq 'swedencentral, australiaeast, westus2') 'Preferred regions retain the requested order'
 Assert-Test (-not $defaults.ContainsKey('estimatedDailyCostsUsd')) 'No invented cost estimate'
 $source = Get-Content (Join-Path $labRoot 'demo-vm-creator\create_vms.sh') -Raw
 Assert-Test (-not $source.Contains("`r")) 'Standalone Bash creator uses Unix line endings'
@@ -901,7 +910,8 @@ foreach ($tagShape in @('missing', 'null', 'empty', 'custom', 'empty-owner', 'su
     }
     if ($tagShape -eq 'submitted') {
         Assert-Test (@($global:ArcMock.calls | Where-Object {
-            $_[0] -eq 'vm' -and $_[1] -eq 'run-command' -and $_[2] -eq 'invoke'
+            $_[0] -eq 'vm' -and $_[1] -eq 'run-command' -and
+            (Get-MockArgument $_ '--vm-name') -eq 'vm-linux-mh'
         }).Count -eq 0) 'Adding a missing owner tag preserves submitted state without contacting the stopped Linux agent'
     }
 }
@@ -1017,6 +1027,104 @@ foreach ($stage in @('shared', 'participant')) {
         Assert-Test ($global:ArcMock.deployments.Count -eq 2) "$stage never redeploys a VM after $outcome"
         Assert-Test ($global:ArcMock.vms[0].tags.microhackReconfiguration -eq 'submitted') "$stage preserves reconfiguration after $outcome"
     }
+}
+
+foreach ($stage in @('shared', 'participant')) {
+    foreach ($type in @('linux', 'win2025')) {
+        Reset-Mock -Count 1
+        Invoke-Shared
+        Invoke-Lab | Out-Null
+        $busy = @($global:ArcMock.vms | Where-Object { $_.name -eq "vm-$type-mh" })[0]
+        $busy.provisioningState = 'Updating'
+        $global:ArcMock.vmInstanceView.agent = @(@{ code = 'ProvisioningState/Unavailable' })
+        $callCount = $global:ArcMock.calls.Count
+        $global:ArcMock.quota = 0
+        $global:ArcMock.networkQuota = 0
+        $global:ArcMock.totalNetworkQuota = 0
+        if ($stage -eq 'shared') {
+            $messages = @(Invoke-Shared 3>&1)
+        } else {
+            $messages = @(Invoke-Lab 3>&1)
+            $credentials = @($messages | Where-Object { $_ -is [hashtable] })
+            Assert-Test ($credentials.Count -eq 7) 'Recovery preserves the participant dashboard contract'
+            Assert-Test ($credentials[-1].HackboxCredential.value -like '*NOT verified*') 'Recovery does not claim successful guest preparation'
+        }
+        $warnings = @($messages | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
+        Assert-Test (@($warnings | Where-Object { $_ -like '*Azure still reports Updating*NOT verified*' }).Count -gt 0) "$stage explicitly warns about $type degraded reuse"
+        Assert-Test ($busy.provisioningState -eq 'Updating') "$stage preserves the real Azure provisioning state"
+        Assert-Test ($global:ArcMock.vmPollSleeps -eq 0) "$stage does not wait for an intentionally detached agent"
+        Assert-Test ($global:ArcMock.deployments.Count -eq 2) "$stage does not recreate detached VMs or require more quota"
+        $recoveryCalls = @($global:ArcMock.calls | Select-Object -Skip $callCount)
+        Assert-Test (@($recoveryCalls | Where-Object {
+            ($_[0] -eq 'vm' -and $_[1] -in @('run-command', 'update')) -or
+            ($_[0] -eq 'tag' -and (Get-MockArgument $_ '--resource-id') -match '/providers/Microsoft.Compute/')
+        }).Count -eq 0) "$stage never writes to the detached VM or resubmits reconfiguration"
+        Assert-Test (@($recoveryCalls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'get-instance-view' }).Count -gt 0) "$stage requires live detached-agent evidence"
+    }
+}
+foreach ($stage in @('shared', 'participant')) {
+    foreach ($invalid in @('no-submission', 'unmarked', 'submitting', 'unknown-tag', 'stopped', 'agent-ready', 'missing-view', 'missing-agent', 'mixed-status', 'view-api', 'Creating', 'Failed', 'Canceled')) {
+        Reset-Mock -Count 1
+        Invoke-Shared
+        Invoke-Lab | Out-Null
+        $busy = $global:ArcMock.vms[0]
+        $busy.provisioningState = 'Updating'
+        $global:ArcMock.vmInstanceView.agent = @(@{ code = 'ProvisioningState/Unavailable' })
+        $pattern = 'after 60 provisioning polls'
+        $expectedSleeps = 60
+        switch ($invalid) {
+            'no-submission' { $busy.tags.PSObject.Properties.Remove('microhackReconfiguration') }
+            'unmarked' { $busy.tags.PSObject.Properties.Remove('microhackArcUserId') }
+            'submitting' {
+                $busy.tags.microhackReconfiguration = 'submitting'
+                $pattern = 'was interrupted'
+                $expectedSleeps = 0
+            }
+            'unknown-tag' {
+                $busy.tags.microhackReconfiguration = 'unexpected'
+                $pattern = 'Unknown reconfiguration state'
+                $expectedSleeps = 0
+            }
+            'stopped' {
+                $global:ArcMock.vmInstanceView.statuses = @(@{ code = 'ProvisioningState/updating' }, @{ code = 'PowerState/stopped' })
+            }
+            'agent-ready' { $global:ArcMock.vmInstanceView.agent = @(@{ code = 'ProvisioningState/succeeded' }) }
+            'missing-view' {
+                $global:ArcMock.vmInstanceView = @{}
+                $pattern = 'invalid instance view'
+                $expectedSleeps = 0
+            }
+            'missing-agent' {
+                $global:ArcMock.vmInstanceView.agent = $null
+                $pattern = 'invalid instance view'
+                $expectedSleeps = 0
+            }
+            'mixed-status' {
+                $global:ArcMock.vmInstanceView.statuses += @{ code = 'ProvisioningState/failed' }
+            }
+            'Creating' { $busy.provisioningState = 'Creating' }
+            'view-api' {
+                $global:ArcMock.failCommand = 'vm get-instance-view'
+                $pattern = 'Azure CLI failed'
+                $expectedSleeps = 0
+            }
+            { $_ -in @('Failed', 'Canceled') } {
+                $busy.provisioningState = $invalid
+                $pattern = 'not successfully provisioned'
+                $expectedSleeps = 0
+            }
+        }
+        if ($stage -eq 'shared') { Assert-Throws { Invoke-Shared } $pattern } else { Assert-Throws { Invoke-Lab } $pattern }
+        Assert-Test ($global:ArcMock.vmPollSleeps -eq $expectedSleeps) "$stage does not bypass safeguards for $invalid"
+        Assert-Test ($global:ArcMock.deployments.Count -eq 2) "$stage does not recreate the VM on $invalid"
+    }
+}
+foreach ($commandState in @('Failed', 'Updating', $null)) {
+    Reset-Mock -Count 1
+    Invoke-Shared
+    $global:ArcMock.runCommandState = $commandState
+    Assert-Throws { Invoke-Lab } 'did not confirm successful asynchronous provisioning'
+    Assert-Test ($global:ArcMock.vms[0].tags.microhackReconfiguration -eq 'submitting') 'An unconfirmed managed command is never marked submitted'
 }
 
 Reset-Mock -Count 1
@@ -1206,8 +1314,7 @@ try {
     $runCommands = @($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'run-command' })
     Assert-Test ($runCommands.Count -eq 2) 'Standalone package submits both reconfiguration requests'
     foreach ($command in $runCommands) {
-        $option = if ($command[2] -eq 'invoke') { '--scripts' } else { '--script' }
-        $path = (Get-MockArgument $command $option).Substring(1)
+        $path = (Get-MockArgument $command '--script').Substring(1)
         Assert-Test ((Split-Path $path -Parent) -eq $packageRoot) 'Reconfiguration uses a script inside the imported package'
     }
     foreach ($name in $assetNames) {
@@ -1252,7 +1359,7 @@ Assert-Test (@($credentials | Where-Object {
     $_.HackboxCredential.name -eq 'Simulated on-prem resource group' -and $_.HackboxCredential.value -eq 'rg-01-onprem'
 }).Count -eq 1) 'Dashboard identifies the on-prem RG'
 Assert-Test (@($global:ArcMock.calls | Where-Object {
-    (($_[0] -eq 'vm' -and $_[1] -in @('show', 'run-command')) -or
+    (($_[0] -eq 'vm' -and $_[1] -in @('show', 'get-instance-view', 'run-command')) -or
         ($_[0] -eq 'network' -and $_[1] -eq 'public-ip' -and $_[2] -eq 'show')) -and
     (Get-MockArgument $_ '--resource-group') -ne 'rg-01-onprem'
 }).Count -eq 0) 'VM operations and endpoint lookup target only the on-prem RG'
