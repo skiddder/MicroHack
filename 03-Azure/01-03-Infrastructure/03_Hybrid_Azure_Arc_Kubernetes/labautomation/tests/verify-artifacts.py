@@ -435,11 +435,19 @@ deployment_script = "\n".join(
     line for line in deployment_script.splitlines()
     if not line.startswith("read -s ")
 )
-for validation_status in (0, 1):
+for region, validation_status in (
+    ("swedencentral", 0), ("swedencentral", 1),
+    ("germanywestcentral", 0), ("germanywestcentral", 1),
+):
     stub = f"""
 resource_group=rg-labuser-0009
+location={region}
 DC_PASSWORD=TEST-ONLY
 az() {{
+    case "$*" in
+        *"location=$location"*) ;;
+        *) echo "Expected the Arc cluster region as an explicit deployment parameter." >&2; return 98 ;;
+    esac
     case "$*" in
         'deployment group validate '*)
             echo VALIDATION_CHECK

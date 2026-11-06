@@ -91,6 +91,8 @@ The Log Analytics workspace ID here is its `customerId` UUID, not the Azure
 resource ID used in challenge 2. Do not print or share the workspace primary key.
 The region is read from the existing Arc cluster, overriding any stale shell
 value. Custom location, resource sync rule and data controller use this region.
+Step 3 also passes this region explicitly to validation and deployment, overriding
+any older location value in `parameters-my.json`.
 Do not leave a fixed `westeurope` in the parameter file or select an unrelated
 fallback region. The selected subscription must permit these resource types
 in the cluster's region.
@@ -144,14 +146,14 @@ az deployment group validate \
   --resource-group "$resource_group" \
   --template-file template.json \
   --parameters parameters-my.json \
-  --parameters dataController_metricsAndLogsDashboardPassword="$DC_PASSWORD" &&
+  --parameters location="$location" dataController_metricsAndLogsDashboardPassword="$DC_PASSWORD"
 
 # Deploy only if validation succeeded
 az deployment group create \
   --resource-group "$resource_group" \
   --template-file template.json \
   --parameters parameters-my.json \
-  --parameters dataController_metricsAndLogsDashboardPassword="$DC_PASSWORD" \
+  --parameters location="$location" dataController_metricsAndLogsDashboardPassword="$DC_PASSWORD" \
   --verbose
 ```
 *NOTE*: At the time of writing there is a bug in the az cli command to create the arc data controller. This is why we are using a workaround based on an ARM template deployment.
@@ -204,7 +206,7 @@ The creation takes 5-10 minutes. Monitor progress:
 az sql mi-arc show --name "$sqlmi_name" --resource-group "$resource_group" --query "properties.k8sRaw.status.state" -o tsv
 
 # Check pods in the namespace
-kubectl get pods -n "$namespace" -l "app.kubernetes.io/name=$sqlmi_name"
+kubectl get pods -n "$namespace"
 ```
 
 ## Task 3 - Connect to your SQL Managed Instance
