@@ -34,6 +34,7 @@ function Reset-Mock {
             agent = @(@{ code = 'ProvisioningState/succeeded' })
         }
         runCommandState = 'Succeeded'
+        cloudInitValidated = 0
         groupTags = @{}
         groupLocations = @{}
         extraOwners = @()
@@ -140,7 +141,9 @@ function global:New-AzResourceGroupDeployment {
     $global:ArcMock.vmTemplatePaths.Add($TemplateFile)
     $template = Get-Content $TemplateFile -Raw | ConvertFrom-Json -AsHashtable
     foreach ($key in $template.parameters.Keys) {
-        if (-not $TemplateParameterObject.ContainsKey($key)) { throw "Missing ARM parameter $key" }
+        if (-not $TemplateParameterObject.ContainsKey($key) -and -not $template.parameters[$key].ContainsKey('defaultValue')) {
+            throw "Missing ARM parameter $key"
+        }
     }
     foreach ($key in $TemplateParameterObject.Keys) {
         if (-not $template.parameters.ContainsKey($key)) { throw "Unknown ARM parameter $key" }
@@ -159,14 +162,42 @@ function global:New-AzResourceGroupDeployment {
     if ($serializedParameters.adminPassword -cne $TemplateParameterObject.adminPassword) {
         throw 'Password changed during parameter serialization.'
     }
+    if ($TemplateParameterObject.virtualMachineName -eq 'vm-linux-mh') {
+        $assertCloudInit = {
+            param([bool]$Condition, [string]$Message)
+            if (-not $Condition) { throw "Invalid Linux customData: $Message" }
+        }
+        $customData = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($TemplateParameterObject.customData))
+        & $assertCloudInit ($customData.StartsWith("#cloud-config`n")) 'Linux customData is a cloud-config document'
+        $config = $customData.Substring("#cloud-config`n".Length) | ConvertFrom-Json -AsHashtable
+        & $assertCloudInit ($config.write_files.Count -eq 1) 'Cloud-init installs exactly one guest preparation script'
+        $file = $config.write_files[0]
+        & $assertCloudInit ($file.path -eq '/usr/local/sbin/microhack-arc-reconfigure.sh') 'Guest preparation has a stable local path'
+        & $assertCloudInit ($file.owner -eq 'root:root' -and $file.permissions -eq '0700') 'Guest preparation is root-only'
+        & $assertCloudInit ($file.encoding -eq 'b64') 'Guest preparation is safely encoded rather than interpolated into YAML'
+        $guestScript = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($file.content))
+        $expectedScript = (Get-Content -LiteralPath (Join-Path $labRoot 'reconfig-ubuntu.sh') -Raw).Replace("`r`n", "`n")
+        & $assertCloudInit ($guestScript -ceq $expectedScript -and -not $guestScript.Contains("`r")) 'Cloud-init receives the original guest script with Linux line endings'
+        & $assertCloudInit ($config.runcmd.Count -eq 1 -and $config.runcmd[0].Count -eq 2) 'Cloud-init retains one argv-style command, not a flattened string'
+        & $assertCloudInit ($config.runcmd[0][0] -eq '/bin/sh' -and $config.runcmd[0][1] -eq $file.path) 'Cloud-init executes the installed script directly'
+        & $assertCloudInit (-not $customData.Contains($TemplateParameterObject.adminPassword)) 'Cloud-init does not contain the VM password'
+        & $assertCloudInit ($TemplateParameterObject.vmTags.microhackReconfiguration -eq 'submitted' -and
+            $TemplateParameterObject.vmTags.microhackReconfigurationMethod -eq 'cloud-init') 'Cloud-init submission is recorded at VM creation, not after agent shutdown'
+        & $assertCloudInit ($TemplateParameterObject.vmTags.microhackArcUserId -match '^[0-9a-f-]{36}$') 'Linux ownership is recorded at VM creation'
+        $global:ArcMock.cloudInitValidated++
+    }
     $global:ArcMock.deployments.Add($TemplateParameterObject)
-    $global:ArcMock.vms += [pscustomobject]@{
+    $vm = [pscustomobject]@{
         name = $TemplateParameterObject.virtualMachineName
         resourceGroup = $ResourceGroupName
         location = $TemplateParameterObject.location
         hardwareProfile = [pscustomobject]@{ vmSize = $TemplateParameterObject.virtualMachineSize }
         provisioningState = 'Succeeded'
     }
+    if ($TemplateParameterObject.ContainsKey('vmTags')) {
+        $vm | Add-Member -NotePropertyName tags -NotePropertyValue ([pscustomobject]$TemplateParameterObject.vmTags)
+    }
+    $global:ArcMock.vms += $vm
     [pscustomobject]@{ ProvisioningState = 'Succeeded' }
 }
 
@@ -423,12 +454,13 @@ function global:az {
         'vm run-command' {
             if ($arguments[2] -ne 'create' -or (Get-MockArgument $arguments '--async-execution') -ne 'true' -or
                 '--no-wait' -in $arguments) {
-                throw 'Both guests require managed async execution, not action Run Command or client-side no-wait.'
+                throw 'Windows requires managed async execution, not action Run Command or client-side no-wait.'
             }
             $vmName = Get-MockArgument $arguments '--vm-name'
             $commandName = Get-MockArgument $arguments '--name'
-            $expectedName = if ($vmName -eq 'vm-linux-mh') { 'reconfigLinux' } else { 'reconfigWin' }
-            if ($commandName -ne $expectedName) { throw 'Managed Run Command must use its stable OS-specific name.' }
+            if ($vmName -ne 'vm-win2025-mh' -or $commandName -ne 'reconfigWin') {
+                throw 'No Run Command may be submitted to Linux, including on an agent without managed-command support.'
+            }
             $file = Get-MockArgument $arguments '--script'
             if (-not $file.StartsWith('@') -or -not (Test-Path $file.Substring(1))) {
                 throw 'The original reconfiguration file must exist.'
@@ -511,6 +543,10 @@ Assert-Test ($linuxImage.publisher -ceq 'Canonical') 'Linux image uses the offic
 Assert-Test ($linuxImage.offer -ceq 'ubuntu-24_04-lts') 'Linux image uses Ubuntu 24.04 LTS'
 Assert-Test ($linuxImage.sku -ceq 'server') 'Linux image uses standard non-Pro x64 Gen2 Server'
 Assert-Test ($linuxImage.version -ceq 'latest') 'Linux image uses the latest Ubuntu 24.04 image version'
+Assert-Test ($linuxTemplate.parameters.customData.defaultValue -eq '') 'Standalone Linux deployments retain an empty customData default'
+Assert-Test ($linuxTemplate.parameters.vmTags.defaultValue.Count -eq 0) 'Standalone Linux deployments retain empty VM tags by default'
+Assert-Test ($linuxVm[0].tags -eq "[parameters('vmTags')]") 'Linux ownership and submission tags are wired to the VM resource'
+Assert-Test ($linuxVm[0].properties.osProfile.customData -eq "[if(empty(parameters('customData')), json('null'), parameters('customData'))]") 'Cloud-init is wired to osProfile and omitted for standalone defaults'
 $creatorPath = Join-Path $labRoot 'demo-vm-creator\create_vms.ps1'
 $creatorSource = Get-Content -LiteralPath $creatorPath -Raw
 Assert-Test (-not ($creatorSource -match '-TemplateUri|-SourceScriptUri|raw\.githubusercontent\.com')) 'Legacy PowerShell creator consumes local setup assets rather than remote repository URLs'
@@ -710,6 +746,12 @@ Assert-Test ($global:ArcMock.deployments[0].networkSecurityGroupRules[0].propert
 Assert-Test ($global:ArcMock.deployments[1].networkSecurityGroupRules.Count -eq 2) 'Existing RDP/WinRM rules'
 Assert-Test ($credentials.Count -eq 7) 'Only dashboard credentials and both RG names on success stream'
 Assert-Test ($credentials[-1].HackboxCredential.value -like '*NOT verified*') 'Honest asynchronous status'
+Assert-Test ($global:ArcMock.cloudInitValidated -eq 1) 'Linux cloud-init payload, command shape and guest script were validated'
+Assert-Test (@($global:ArcMock.calls | Where-Object {
+    $_[0] -eq 'vm' -and $_[1] -eq 'run-command' -and (Get-MockArgument $_ '--vm-name') -eq 'vm-linux-mh'
+}).Count -eq 0) 'New Linux VM never requires managed Run Command or an agent feature upgrade'
+Assert-Test ($global:ArcMock.vms[0].tags.microhackArcUserId -eq $users[0] -and
+    $global:ArcMock.vms[0].tags.microhackReconfigurationMethod -eq 'cloud-init') 'Linux ownership and cloud-init method survive VM creation'
 Assert-Test ($credentials[1].HackboxCredential.value -eq 'OfflineOnlyPassword123') 'Per-lab password returned after acceptance'
 Assert-Test ($global:ArcMock.deployments[0].adminPassword -ceq $credentials[1].HackboxCredential.value) 'Linux receives the dashboard password as a serializable ARM parameter value'
 Assert-Test ($global:ArcMock.deployments[1].adminPassword -ceq $credentials[1].HackboxCredential.value) 'Windows receives the same serializable dashboard password'
@@ -834,15 +876,15 @@ Assert-Throws { Invoke-Lab } 'Mock ARM deployment failed'
 Assert-Test ($global:ArcMock.vms.Count -eq 0) 'Failed deployment publishes no credentials or reconfiguration'
 Reset-Mock -Count 1
 Invoke-Shared
-$global:ArcMock.failCommand = '/providers/Microsoft.Compute/virtualMachines/vm-linux-mh --operation Merge --tags microhackArcUserId='
+$global:ArcMock.failCommand = '/providers/Microsoft.Compute/virtualMachines/vm-win2025-mh --operation Merge --tags microhackArcUserId='
 Assert-Throws { Invoke-Lab } 'Azure CLI failed'
-Assert-Test ($global:ArcMock.vms.Count -eq 1) 'Tag API failure leaves the newly created VM for recovery'
+Assert-Test ($global:ArcMock.vms.Count -eq 2) 'Tag API failure leaves both newly created VMs for recovery'
 Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'run-command' }).Count -eq 0) 'Failed ownership tagging never submits reconfiguration'
 $global:ArcMock.failCommand = ''
 Invoke-Shared
 Invoke-Lab | Out-Null
-Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Retry after ownership-tag failure reuses Linux and only creates the missing Windows VM'
-Assert-Test ($global:ArcMock.vms[0].tags.microhackArcUserId -eq $users[0]) 'Retry restores the missing ownership tag'
+Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Retry after Windows ownership-tag failure reuses both VMs'
+Assert-Test ($global:ArcMock.vms[1].tags.microhackArcUserId -eq $users[0]) 'Retry restores the missing Windows ownership tag'
 
 Reset-Mock -Count 1
 $global:ArcMock.groupTags['rg-01'] = [pscustomobject]@{ keep = 'unchanged'; SecurityControl = 'Enforce' }
@@ -881,10 +923,10 @@ foreach ($tagShape in @('missing', 'null', 'empty', 'custom', 'empty-owner', 'su
     Reset-Mock -Count 1
     Invoke-Shared
     $vm = [pscustomobject]@{
-        name = 'vm-linux-mh'
+        name = 'vm-win2025-mh'
         resourceGroup = 'rg-01-onprem'
         location = 'swedencentral'
-        hardwareProfile = [pscustomobject]@{ vmSize = 'Standard_D2ads_v5' }
+        hardwareProfile = [pscustomobject]@{ vmSize = 'Standard_D4ads_v5' }
         provisioningState = 'Succeeded'
     }
     if ($tagShape -ne 'missing') {
@@ -901,7 +943,7 @@ foreach ($tagShape in @('missing', 'null', 'empty', 'custom', 'empty-owner', 'su
     Invoke-Shared
     Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'tag' -and (Get-MockArgument $_ '--resource-id') -match '/providers/Microsoft.Compute/virtualMachines/' }).Count -eq 0) 'Shared preflight allows unmarked expected VMs without changing VM tags'
     $recovered = @(Invoke-Lab)
-    Assert-Test ($global:ArcMock.deployments.Count -eq 1) 'Existing unmarked Linux VM is reused rather than redeployed'
+    Assert-Test ($global:ArcMock.deployments.Count -eq 1) 'Existing unmarked Windows VM is reused rather than redeployed'
     Assert-Test ($global:ArcMock.vms[0].tags.microhackArcUserId -eq $users[0]) "Ownership tag is initialized for $tagShape tags"
     Assert-Test ($global:ArcMock.vms[0].tags.microhackReconfiguration -eq 'submitted') 'Reconfiguration state is merged into initialized VM tags'
     Assert-Test ($recovered.Count -eq 7) 'Recovery completes both VMs and dashboard RG output'
@@ -911,8 +953,8 @@ foreach ($tagShape in @('missing', 'null', 'empty', 'custom', 'empty-owner', 'su
     if ($tagShape -eq 'submitted') {
         Assert-Test (@($global:ArcMock.calls | Where-Object {
             $_[0] -eq 'vm' -and $_[1] -eq 'run-command' -and
-            (Get-MockArgument $_ '--vm-name') -eq 'vm-linux-mh'
-        }).Count -eq 0) 'Adding a missing owner tag preserves submitted state without contacting the stopped Linux agent'
+            (Get-MockArgument $_ '--vm-name') -eq 'vm-win2025-mh'
+        }).Count -eq 0) 'Adding a missing owner tag preserves submitted state without contacting the stopped Windows agent'
     }
 }
 
@@ -926,13 +968,45 @@ $global:ArcMock.vms = @(
             location = 'swedencentral'
             hardwareProfile = [pscustomobject]@{ vmSize = if ($type -eq 'linux') { 'Standard_D2ads_v5' } else { 'Standard_D4ads_v5' } }
             provisioningState = 'Succeeded'
+            tags = [pscustomobject]@{ microhackReconfiguration = if ($type -eq 'linux') { 'submitted' } else { '' } }
         }
     }
 )
 Invoke-Shared
 Invoke-Lab | Out-Null
-Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Both existing unmarked VM types are reused without ARM redeployment'
+Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Existing submitted Linux and unmarked Windows VMs are reused without ARM redeployment'
 Assert-Test (@($global:ArcMock.vms | Where-Object { $_.tags.microhackArcUserId -eq $users[0] }).Count -eq 2) 'Recovery tags both Linux and Windows with the current participant ID'
+
+foreach ($missingOwner in @($false, $true)) {
+    Reset-Mock -Count 1
+    Invoke-Shared
+    Invoke-Lab | Out-Null
+    $global:ArcMock.vms[0].tags.PSObject.Properties.Remove('microhackReconfiguration')
+    if ($missingOwner) { $global:ArcMock.vms[0].tags.PSObject.Properties.Remove('microhackArcUserId') }
+    $callCount = $global:ArcMock.calls.Count
+    Assert-Throws { Invoke-Lab } 'cloud-init only runs at VM creation'
+    $recoveryCalls = @($global:ArcMock.calls | Select-Object -Skip $callCount)
+    Assert-Test (@($recoveryCalls | Where-Object {
+        ($_[0] -eq 'vm' -and $_[1] -in @('run-command', 'update')) -or
+        ($_[0] -eq 'tag' -and (Get-MockArgument $_ '--resource-id') -match '/providers/Microsoft.Compute/')
+    }).Count -eq 0) 'An existing unprepared Linux VM is not retagged, updated or given a Run Command fallback'
+    Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'An existing unprepared Linux VM is never recreated'
+}
+foreach ($stage in @('shared', 'participant')) {
+    Reset-Mock -Count 1
+    Invoke-Shared
+    Invoke-Lab | Out-Null
+    $global:ArcMock.vms[0].provisioningState = 'Failed'
+    $global:ArcMock.vms[0].tags.microhackReconfiguration = 'submitting'
+    $callCount = $global:ArcMock.calls.Count
+    if ($stage -eq 'shared') { Assert-Throws { Invoke-Shared } 'not successfully provisioned: Failed' } else {
+        Assert-Throws { Invoke-Lab } 'not successfully provisioned: Failed'
+    }
+    Assert-Test ($global:ArcMock.vms[0].tags.microhackReconfiguration -eq 'submitting') 'The observed failed managed-command state is not relabeled as cloud-init submission'
+    Assert-Test (@($global:ArcMock.calls | Select-Object -Skip $callCount | Where-Object {
+        $_[0] -eq 'vm' -and $_[1] -in @('run-command', 'update', 'delete')
+    }).Count -eq 0) "$stage does not mutate or retry the failed managed-command VM"
+}
 
 Reset-Mock -Count 1
 Invoke-Shared
@@ -1124,14 +1198,14 @@ foreach ($commandState in @('Failed', 'Updating', $null)) {
     Invoke-Shared
     $global:ArcMock.runCommandState = $commandState
     Assert-Throws { Invoke-Lab } 'did not confirm successful asynchronous provisioning'
-    Assert-Test ($global:ArcMock.vms[0].tags.microhackReconfiguration -eq 'submitting') 'An unconfirmed managed command is never marked submitted'
+    Assert-Test ($global:ArcMock.vms[1].tags.microhackReconfiguration -eq 'submitting') 'An unconfirmed Windows managed command is never marked submitted'
 }
 
 Reset-Mock -Count 1
 Invoke-Shared
 $global:ArcMock.failCommand = 'vm run-command'
 Assert-Throws { Invoke-Lab } 'Azure CLI failed'
-Assert-Test ($global:ArcMock.vms[0].tags.microhackReconfiguration -eq 'submitting') 'Ambiguous submission preserved'
+Assert-Test ($global:ArcMock.vms[1].tags.microhackReconfiguration -eq 'submitting') 'Ambiguous Windows submission preserved'
 $global:ArcMock.failCommand = ''
 Assert-Throws { Invoke-Lab } 'interrupted'
 Reset-Mock -Count 1
@@ -1308,11 +1382,12 @@ try {
     $credentials = @(Invoke-Lab -LabPath $packageRoot)
     Assert-Test ($global:ArcMock.deployments.Count -eq 2) 'Standalone labautomation package deploys both VMs without the repository layout'
     Assert-Test ($credentials.Count -eq 7) 'Standalone package emits all dashboard credentials and both RG names'
+    Assert-Test ($global:ArcMock.cloudInitValidated -eq 1) 'Standalone package embeds and validates its Linux guest script in cloud-init'
     foreach ($path in $global:ArcMock.vmTemplatePaths) {
         Assert-Test ((Split-Path $path -Parent) -eq $packageRoot) 'VM deployment uses a template inside the imported package'
     }
     $runCommands = @($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'run-command' })
-    Assert-Test ($runCommands.Count -eq 2) 'Standalone package submits both reconfiguration requests'
+    Assert-Test ($runCommands.Count -eq 1) 'Standalone package submits only the Windows Run Command; Linux uses cloud-init'
     foreach ($command in $runCommands) {
         $path = (Get-MockArgument $command '--script').Substring(1)
         Assert-Test ((Split-Path $path -Parent) -eq $packageRoot) 'Reconfiguration uses a script inside the imported package'

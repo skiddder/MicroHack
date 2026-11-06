@@ -83,6 +83,30 @@ foreach ($type in $script:ArcVmTypes) {
         $parameters.networkSecurityGroupName = "$vmName-nsg"
         $parameters.virtualNetworkName = "$vmName-vnet"
         $parameters.publicIpAddressName = "$vmName-pip"
+        if ($type -eq 'linux') {
+            $guestScript = (Get-Content -LiteralPath (Join-Path $script:ArcVmSource 'reconfig-ubuntu.sh') -Raw).Replace("`r`n", "`n")
+            $guestScriptPath = '/usr/local/sbin/microhack-arc-reconfigure.sh'
+            $cloudConfig = "#cloud-config`n" + (@{
+                write_files = @(@{
+                    path = $guestScriptPath
+                    owner = 'root:root'
+                    permissions = '0700'
+                    encoding = 'b64'
+                    content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($guestScript))
+                })
+                runcmd = @(, @('/bin/sh', $guestScriptPath))
+            } | ConvertTo-Json -Depth 10)
+            $cloudConfigBytes = [Text.Encoding]::UTF8.GetBytes($cloudConfig)
+            if ($cloudConfigBytes.Length -gt 65535) {
+                throw 'Linux cloud-init configuration exceeds the Azure customData size limit.'
+            }
+            $parameters.customData = [Convert]::ToBase64String($cloudConfigBytes)
+            $parameters.vmTags = @{
+                microhackArcUserId = $userId
+                microhackReconfiguration = 'submitted'
+                microhackReconfigurationMethod = 'cloud-init'
+            }
+        }
 
         Update-MhhToken | Out-Null
         $result = New-AzResourceGroupDeployment -Name "$vmName-Deploy" `
@@ -95,6 +119,10 @@ foreach ($type in $script:ArcVmTypes) {
         $vm = @(Invoke-ArcAz -Arguments @('vm', 'show', '--resource-group', $onPremResourceGroupName, '--name', $vmName))
     }
     $vm = @(Wait-ArcVmProvisioning -Vm $vm[0] -Location $location -Size $script:ArcVmSizes[$type] -UserId $userId -AllowUnmarked)
+    $state = Get-ArcVmReconfigurationState -Vm $vm[0]
+    if ($type -eq 'linux' -and $state -ne 'submitted') {
+        throw "Existing Linux VM '$vmName' has no recorded reconfiguration submission. cloud-init only runs at VM creation; no Run Command will be submitted and no VM will be overwritten. Have the coach inspect its guest and deployment history before recovery."
+    }
     if ((Get-ArcVmUserId -Vm $vm[0]) -eq '') {
         if (-not $isNewVm) {
             Write-Warning "Adding missing ownership tag to existing VM '$vmName' in '$onPremResourceGroupName' under the approved reuse policy. Its origin and password are not verified; the password is not reset."
@@ -115,12 +143,11 @@ foreach ($type in $script:ArcVmTypes) {
             'tag', 'update', '--resource-id', $vmResourceId, '--operation', 'Merge',
             '--tags', 'microhackReconfiguration=submitting'
         ) | Out-Null
-        $runCommandName = if ($type -eq 'linux') { 'reconfigLinux' } else { 'reconfigWin' }
-        $scriptName = if ($type -eq 'linux') { 'reconfig-ubuntu.sh' } else { 'reconfig-win.ps1' }
+        $runCommandName = 'reconfigWin'
         $runCommand = Invoke-ArcAz -Arguments @(
             'vm', 'run-command', 'create', '--resource-group', $onPremResourceGroupName, '--vm-name', $vmName,
             '--name', $runCommandName, '--location', $location, '--script',
-            ('@' + (Join-Path $script:ArcVmSource $scriptName)), '--async-execution', 'true'
+            ('@' + (Join-Path $script:ArcVmSource 'reconfig-win.ps1')), '--async-execution', 'true'
         )
         if (-not $runCommand -or -not $runCommand.PSObject.Properties['provisioningState'] -or
             $runCommand.provisioningState -ne 'Succeeded') {
@@ -163,6 +190,6 @@ foreach ($endpoint in $endpoints) {
 @{ HackboxCredential = @{
     name = 'Reconfiguration status'
     value = 'Submitted asynchronously - completion NOT verified'
-    note = 'Connect using SSH/RDP and verify guest-agent shutdown and IMDS blocking before Arc onboarding. Windows may reboot. No VM is onboarded to Arc yet.'
+    note = 'Linux: cloud-init; Windows: asynchronous Run Command. Connect using SSH/RDP and verify guest-agent shutdown and IMDS blocking before Arc onboarding. Windows may reboot. No VM is onboarded to Arc yet.'
 } }
 Write-Warning 'Reconfiguration was only submitted, not verified. Check both guests before starting challenge 1.'

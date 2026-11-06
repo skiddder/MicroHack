@@ -315,27 +315,45 @@ password CLI argument is created. Credentials
 and public IPs, plus the two RG names and their purpose, are emitted only after both VMs have deployed and both
 reconfiguration requests have been accepted.
 
-Both Console guests use managed Run Command with `--async-execution true`:
+The Console uses different preparation paths for the two guests:
 
-- Linux: `reconfigLinux`, using `reconfig-ubuntu.sh`.
-- Windows: `reconfigWin`, using `reconfig-win.ps1`.
+- **New Linux VMs:** the hook embeds the local `reconfig-ubuntu.sh` in
+  `osProfile.customData` as a Base64-encoded cloud-config document. Cloud-init
+  writes a root-owned, mode-0700 script at
+  `/usr/local/sbin/microhack-arc-reconfigure.sh` and runs it during first boot.
+  Payload line endings are normalized to LF; it contains no credentials.
+  Ownership, `microhackReconfiguration=submitted` and
+  `microhackReconfigurationMethod=cloud-init` are set in the VM's initial ARM
+  creation, not after guest-agent shutdown. No Linux Run Command is submitted.
+- **Windows:** managed Run Command `reconfigWin`, with
+  `--async-execution true`, using `reconfig-win.ps1`. The CLI waits for managed
+  command provisioning, which must report `Succeeded` before the VM tag is
+  changed from `submitting` to `submitted`.
 
-The CLI call waits for managed command provisioning, which must report
-`Succeeded` before the VM tag is changed from `submitting` to `submitted`.
-With asynchronous execution, provisioning completes when script execution starts,
-not when it finishes. Unlike the former Linux action Run Command's client-side
-`--no-wait`, this does not wait for the guest script's completion after it has
-stopped the agent. See the [Run Command comparison](https://learn.microsoft.com/azure/virtual-machines/run-command-overview).
-This intentionally differs from the standalone Bash demo creator, whose legacy
-submission mechanism is unchanged.
+Linux managed Run Command requires a supported, reachable Linux Guest Agent
+(minimum version 2.4.0.2). The observed `VMExtensionLinuxAgentUpdate` feature
+errors and `VMAgentStatusCommunicationError` cannot be fixed by region/Quota
+changes or by treating `Pending` as success. Cloud-init removes this dependency
+for new Linux VMs. It does not repair failed existing VM/Run Command resources.
+See [Linux managed Run Command prerequisites](https://learn.microsoft.com/azure/virtual-machines/linux/run-command-managed#prerequisites)
+and [custom data processing](https://learn.microsoft.com/azure/virtual-machines/custom-data#process-custom-data).
 
-**Acceptance is not completion.** The guest scripts stop the Azure guest agent;
+The Linux template's new `customData` and `vmTags` parameters have empty defaults,
+so standalone creators do not enable cloud-init preparation accidentally. Their
+legacy Run Command submission mechanisms are unchanged.
+
+**Acceptance is not completion.** Cloud-init can report VM readiness before
+user configuration finishes; ARM deployment success is not a guest-script
+completion check. The guest scripts stop the Azure guest agent;
 Windows also reboots. The dashboard therefore reports
 `Submitted asynchronously - completion NOT verified`, never "Arc-ready".
 Before onboarding, connect through SSH/RDP and verify:
 
-- Linux: the Azure Linux agent is stopped and the outbound IMDS block exists
-  (`sudo ufw status verbose`).
+- Linux: inspect `sudo cloud-init status --long` and
+  `/var/log/cloud-init-output.log`; confirm guest preparation completed without
+  errors, the Azure Linux agent is stopped, and the outbound IMDS block exists
+  (`sudo ufw status verbose`). A failed guest command now stops the script
+  rather than silently continuing.
 - Windows: `WindowsAzureGuestAgent` is stopped/disabled, the `BlockAzureIMDS`
   firewall rule is enabled, and machine-level `MSFT_ARC_TEST` is `true`.
 - Windows has completed its reboot and both servers remain accessible.
@@ -352,8 +370,12 @@ No guest-completion polling or automatic Arc onboarding is performed.
   approved permanent recovery policy, missing ownership tags are automatically
   set without manual origin/credential verification, but only for `vm-linux-mh`
   and `vm-win2025-mh` in the matching tagged on-prem RG. The shared
-  preflight permits these unmarked VMs; the participant hook tags and reuses them
-  with an explicit warning. Conflicting nonempty owner tags are never overwritten.
+  preflight permits these unmarked VMs. The participant hook tags and reuses
+  Windows VMs with an explicit warning. Linux reuse additionally requires a
+  recorded `microhackReconfiguration=submitted`; cloud-init cannot be retrofitted
+  onto an existing VM. An existing Linux VM without that record stops before
+  VM tag writes or reconfiguration instead of falling back to Run Command.
+  Conflicting nonempty owner tags are never overwritten.
 - All ownership and reconfiguration tag writes use `az tag update --operation
   Merge`, which initializes missing tags and preserves unrelated tags. VM data
   is read again after ownership tagging; the tag API response is not a VM object.
@@ -365,11 +387,17 @@ No guest-completion polling or automatic Arc onboarding is performed.
   A coach must inspect the guest and Run Command state before changing this tag.
   If the original request was accepted, mark it `submitted`; clear it for retry
   only if the request was not accepted and the guest agent is still available.
-- A VM creation interrupted before ownership tagging can therefore be retried
-  without recreating that VM. Existing passwords are neither verified nor reset:
+- Windows VM creation interrupted before ownership tagging can therefore be
+  retried without recreating that VM. New Linux VMs receive ownership and
+  submission tags in their creation request. Existing passwords are neither verified nor reset:
   if a reused VM did not originate from this lab's stable password, the dashboard
   password may not match it.
 - An existing failed VM deployment is not silently treated as a healthy VM.
+  In particular, a VM already left `Failed`/`submitting` by the previous Linux
+  managed-command attempt is not automatically deleted, redeployed or marked
+  successful. The coach must inspect its guest, deployment and Run Command
+  history and arrange explicit recovery/cleanup. Re-importing these hooks does
+  not convert that VM to cloud-init.
 - For the known legacy action Run Command case, both hooks can reuse an
   `Updating` VM only when its name is an expected lab VM, its ownership tag
   exactly matches the participant (unmarked reuse does not qualify), and
@@ -529,8 +557,12 @@ full quota accounting in that state, subscription-Owner-only deployments,
 tag-based shared reruns, conflicting Azure RG tags and legacy direct ownership.
 Detached-agent recovery is tested for both VM types and both hooks, including
 zero new quota demand, unchanged VM state, no repeated Run Commands, and rejection
-of missing/contradictory status data or submission tags. Both guests' managed
-asynchronous command options and provisioning responses are checked with mocks.
+of missing/contradictory status data or submission tags. Linux customData is
+decoded and checked against the actual guest script, permissions, command
+shape and initial tags, including from the isolated import package. Tests reject
+any Linux Run Command and preserve failed prior attempts without mutation.
+Windows managed asynchronous command options and provisioning responses are
+checked with mocks.
 The centralized legacy PowerShell creator's parameter sets are also checked
 against its three local templates.
 

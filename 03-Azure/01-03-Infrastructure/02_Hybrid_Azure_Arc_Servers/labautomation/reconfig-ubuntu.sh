@@ -1,10 +1,11 @@
 #!/bin/sh
+set -eu
 
 CURRENT_HOSTNAME=$(hostname)
 sudo service walinuxagent stop
 sudo waagent -deprovision -force
 sudo rm -rf /var/lib/waagent
-sudo hostnamectl set-hostname $CURRENT_HOSTNAME
+sudo hostnamectl set-hostname "$CURRENT_HOSTNAME"
 
 # export MSFT_ARC_TEST=true
 # sudo systemctl stop walinuxagent

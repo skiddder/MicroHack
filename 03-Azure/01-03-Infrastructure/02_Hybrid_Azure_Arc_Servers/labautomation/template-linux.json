@@ -67,6 +67,14 @@
         },
         "adminPassword": {
             "type": "secureString"
+        },
+        "customData": {
+            "type": "string",
+            "defaultValue": ""
+        },
+        "vmTags": {
+            "type": "object",
+            "defaultValue": {}
         }
     },
     "variables": {
@@ -147,6 +155,7 @@
             "type": "Microsoft.Compute/virtualMachines",
             "apiVersion": "2022-11-01",
             "location": "[parameters('location')]",
+            "tags": "[parameters('vmTags')]",
             "dependsOn": [
                 "[concat('Microsoft.Network/networkInterfaces/', parameters('networkInterfaceName'))]"
             ],
@@ -186,6 +195,7 @@
                     "computerName": "[parameters('virtualMachineComputerName')]",
                     "adminUsername": "[parameters('adminUsername')]",
                     "adminPassword": "[parameters('adminPassword')]",
+                    "customData": "[if(empty(parameters('customData')), json('null'), parameters('customData'))]",
                     "linuxConfiguration": {
                         "patchSettings": {
                             "patchMode": "ImageDefault"
