@@ -12,68 +12,53 @@ Please ensure that you successfully verified the [General prerequisits](../../Re
 
 > **Hackbox Console:** Skip RG creation and use your **Azure exercise
 > resource group** <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
-> for Arc onboarding and the screenshot
-> examples. The prepared Azure VMs are in the separate **Simulated on-prem resource
+> for Arc onboarding. The prepared Azure VMs are in the separate **Simulated on-prem resource
 > group** <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>;
-> do not select it as the Arc onboarding destination. In the default
-> `resourcegroup-with-subscriptionowner` mode, you have Owner on this group and
+> do not select it as the Arc onboarding destination. You have Owner permission on this group and
 > the shared subscription. Do not change other participants' resources.
 
 Sign in to the [Azure Portal](https://portal.azure.com/).
 
 For Hackbox Console, sign in as <secret group="Azure" name="Entra ID Username" show="always"></secret>
 and select subscription <secret group="Azure" name="Subscription ID" show="always"></secret>.
-Use your Console sign-in credentials, not the VM administrator account below.
+Use your Azure sign-in credentials <secret group="Azure" name="Entra ID TAP" show="false">, not the VM administrator account.
 
-* [Create Resource Group](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal#create-resource-groups)
-* On the **Tags** tab, set **SecurityControl** to **Ignore** before creating the
-  group. For a Console-provided group, verify this tag is present. It prevents
-  MCAPS Governance from disabling the lab's public-IP access; keep it throughout
-  the exercises.
+* If you are using your own environment instead of the prepared lab, [create a resource group](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal#create-resource-groups).
 
 *Please note: At the time of writing this solution, not all Azure Arc features are fully supported in all regions. We tested this solution in region Sweden Central.*
 
 ### Task 2: Create Service Principal
 
-> **Hackbox Console:** Entra application creation may require a coach. Ask the
-> coach to supply a per-user service principal and deliver its credentials
-> securely. Its Azure Connected Machine Onboarding role must cover only your RG.
-
 * [Create Service Principal](https://learn.microsoft.com/en-us/azure/azure-arc/servers/onboard-service-principal#create-a-service-principal-for-onboarding-at-scale)
 
 ### Task 3: Enable Service providers
 
-> **Hackbox Console:** The shared deployment hook registers the providers.
-> Coordinate any further registration or subscription-level troubleshooting with
-> the coach because the subscription is shared.
+> The required resource providers are already registered in the prepared lab.
+> Continue with Task 4. If you are using your own environment, follow the link below.
 
 * Enable Azure Resource Provider
   [Azure Arc Azure resource providers](https://learn.microsoft.com/en-us/azure/azure-arc/servers/prerequisites#azure-resource-providers)
 
 ### Task 4: Prepare on-prem Server OS
 
-> **Hackbox Console:** Ubuntu 24.04 LTS and Windows Server 2025 are provisioned.
-> Their OS reconfiguration was only submitted asynchronously: verify guest-agent
-> shutdown, IMDS blocking and Windows reboot completion as described in the
-> [automation guide](../../labautomation/README.md#credentials-and-asynchronous-reconfiguration).
-> Locate the underlying Azure VMs in the **Simulated on-prem resource
+> Your lab includes Ubuntu 24.04 LTS and Windows Server 2025.
+> Locate the Azure VMs in the **Simulated on-prem resource
 > group** <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>.
-> Their Arc representations will instead be created in the **Azure
+> Their Arc representations will be created in the **Azure
 > exercise resource group** <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
 > during onboarding.
-> Do not blindly rerun guest-agent-based preparation after that agent is stopped.
 
-For both Console-provisioned VMs, use administrator username
+For both prepared VMs, use administrator username
 <secret group="Lab-Deployment" name="VM Admin Username" show="always"></secret>
 and password <secret group="Lab-Deployment" name="VM Admin Password" show="false"></secret>.
 The password is initially hidden; click to reveal it or double-click to copy.
 
-* Have a server, windows or linux ready, perhaps on your own laptop/notebook
+For real world scnearios be sure that your servers fulfill these prerequisites:
 * For windows, please use Windows Server 2025 with the latest patch level. 💡 ATTENTION: Use Windows Update to apply the latest patch level!!
 
   [Supported operating systems @ Connected Machine agent prerequisites - Azure Arc | Microsoft Docs](https://docs.microsoft.com/en-us/azure/azure-arc/servers/prerequisites#supported-operating-systems)
 
-  This Server OS could be hosted as a VM on VMware, Hyper-V, Nutanix, AWS, GCP or bare metal. We are focused on-prem.
+  This Server OS could be hosted as a VM on VMware, Hyper-V, Nutanix, AWS, GCP or bare metal. The MicroHack is focused on-prem.
 
 #### Additional:
   * These servers should be able to reach the internet and Azure.
@@ -93,7 +78,7 @@ With these prerequisites in place, we can focus on building the differentiated k
 
 ### Task 5: Onboard Windows Server OS to Azure Arc
 
-For Hackbox Console, connect to the prepared Windows server using RDP at
+Connect to the prepared Windows server using RDP at
 <secret group="Lab-Deployment" name="vm-win2025-mh" show="always"></secret>.
 Use the VM administrator credentials from Task 4 and select your Azure exercise resource group
 <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
@@ -102,7 +87,7 @@ when generating the onboarding script. Screenshot values are examples, not your 
 * Onboard the recent installed or prepared Windows Server OS to Azure Arc, by using the documented steps
 1. Generate the installation script from the Azure portal [Link](https://learn.microsoft.com/en-us/azure/azure-arc/servers/onboard-service-principal#generate-the-installation-script-from-the-azure-portal)
 
-*Please note: As not all Azure Arc features are implemented in Germany West Central region, we highly recommended to use West Europe region to onboard your VMs at the time of writing!*
+*Please note: As not all Azure Arc features are implemented in all regions, we highly recommended to use swedencentral or westeurope region to onboard your VMs at the time of writing!*
 
 * Step by step
 ![image](./img/1.png)
@@ -130,7 +115,7 @@ when generating the onboarding script. Screenshot values are examples, not your 
 
 2. Connect to Linux server via SSH [Link] (https://devblogs.microsoft.com/powershell/using-the-openssh-beta-in-windows-10-fall-creators-update-and-windows-server-1709/)
 
-* For Hackbox Console, connect via SSH to
+* Connect via SSH to
   <secret group="Lab-Deployment" name="vm-linux-mh" show="always"></secret>
   using the VM administrator credentials from Task 4. Otherwise, use the account
   and password from your own setup. Select your Azure exercise resource group

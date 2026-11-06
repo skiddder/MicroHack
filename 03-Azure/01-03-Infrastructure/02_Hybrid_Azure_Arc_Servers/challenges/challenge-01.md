@@ -12,14 +12,11 @@ In challenge 1 you will prepare your Azure environemnt for onboarding of existin
 > <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
 > for Arc onboarding. The underlying Azure VMs are in the separate simulated on-prem resource group
 > <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>.
-> The coach supplies the Entra service principal if you lack
-> permission to create one; scope its onboarding role to your RG. Resource
-> providers are prepared by the shared deployment hook. The two VMs already have
-> asynchronous OS preparation requests, but you must verify that preparation
-> finished before onboarding. Windows Server 2012 R2 is not provisioned.
+> The required resource providers are already registered.
+> A Windows Server 2012 R2 machine is not included.
 
 - Verify all necessary Azure resources are in place
-  - Azure exercise resource group: <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret> (Tag: `SecurityControl=Ignore`)
+  - Azure exercise resource group: <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
 - Create service principal for onboarding your servers
 - Enable required resource providers (if not already enabled)
 - Prep existing servers' operating system on-prem
@@ -29,10 +26,10 @@ In challenge 1 you will prepare your Azure environemnt for onboarding of existin
 
 ## Success criteria
 
-- You verified your Console-provided Azure exercise resource group with `SecurityControl=Ignore`, or created and tagged your own group when working outside the Console
-- You created a service principal with the required role membership, or received a coach-provided one scoped to your resource group
-- Successfully prepared existing servers
-- Onboarded servers which is visible in the Azure Arc machines blade in the Azure Portal
+- You verified your resource group, or created and tagged your own group if you are using your own environment
+- You created a service principal with the required role membership
+- Successfully prepared existing servers (if not running in Hackbox environment)
+- Onboarded servers which are visible in the Azure Arc machines blade in the Azure Portal
 
 ## Learning resources
 

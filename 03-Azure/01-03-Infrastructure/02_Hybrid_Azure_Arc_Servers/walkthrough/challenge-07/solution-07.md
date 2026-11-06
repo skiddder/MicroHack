@@ -79,14 +79,11 @@ Find it here [AddKey.zip](../../labautomation/AddKey.zip).
 
 ### Create the Machine Configuration as Azure Policy
 
-> **Hackbox Console:** With the default subscription Owner role, participants can
-> publish custom policy definitions at subscription scope, coordinated with the
-> coach, and assign them to their own RG. The example in step 3 below instead
-> publishes at management-group scope and therefore still requires a coach with
-> corresponding management-group permissions. Subscription Owner does not grant
-> those permissions.
+> Ask your coach to help with step 3: its script publishes a policy for a
+> management group and requires permissions beyond this exercise's resource group.
+> Assign the resulting policy only to your own Azure exercise resource group.
 
-1. Create your Storage Account in the Azure exercise resource group <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>, upload the zip file, and create a SAS with read permissions. Record your chosen storage account and container names and enter them in the code block below; these resources are not supplied as Console credentials.
+1. Create your Storage Account in the Azure exercise resource group <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>, upload the zip file, and create a SAS with read permissions. Record your chosen storage account and container names and enter them in the code block below.
 
     > **Warning**
     >  The following commands cannot be run from Azure Cloud Shell! Please use a local Powershell.

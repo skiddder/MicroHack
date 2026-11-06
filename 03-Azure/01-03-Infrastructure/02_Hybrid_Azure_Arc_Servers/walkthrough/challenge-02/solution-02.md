@@ -8,7 +8,6 @@ Duration: 40 minutes - Allow additional time for policy evaluation, initial data
 
 - Complete [Challenge 1](../../challenges/challenge-01.md). Both servers must appear as **Connected** under **Azure Arc > Machines**, with their system-assigned managed identities enabled.
 - Use the **Arc machine resources** (`Microsoft.HybridCompute/machines`), not the underlying Azure IaaS VMs used to simulate on-premises servers. Their Azure VM guest agents were deliberately disabled; do not re-enable them or remove the IMDS block.
-- In the Hackbox Console's default `resourcegroup-with-subscriptionowner` mode, you have `Owner` on your participant RG and the shared subscription. Use your participant RG for this walkthrough and keep **`SecurityControl=Ignore`** on it. Coordinate subscription-wide changes or additional managed RGs with the coach; do not modify other participants' resources. Entra and management-group permissions are separate.
 - Here, **participant RG** means your **Azure exercise resource group** <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>, containing your Arc representations and exercise resources. The prepared Azure VMs live separately in the **Simulated on-prem resource group** <secret group="Lab-Deployment" name="Simulated on-prem resource group" show="always"></secret>. Do not select that infrastructure RG for workspaces, DCRs, Arc Run Command or Arc policy assignments.
 - Verify the [AMA supported operating systems](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-supported-operating-systems), [Change Tracking support matrix](https://learn.microsoft.com/en-us/azure/azure-change-tracking-inventory/change-tracking-inventory-support-matrix) and service availability for your assigned region.
 - Allow the documented outbound connections for [AMA](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-network-configuration), Azure Arc and your OS update sources. This exercise does not require opening additional public inbound ports.
@@ -89,7 +88,7 @@ Run Command for Arc is currently **preview** and has **no dedicated Azure portal
 
 For the script below, set **subscriptionId** to <secret group="Azure" name="Subscription ID" show="always"></secret>
 and **resourceGroup** to <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>.
-Copy these values into the quoted placeholders; Secret tags are not expanded inside code blocks.
+Copy these values into the quoted placeholders.
 Read the Arc machine names and locations from their portal resources as described above.
 
 ```bash
@@ -190,14 +189,13 @@ Keep the Task 2 log DCRs and their Log Analytics destination unchanged.
 
 1. In **Subscriptions > your event subscription > Resource providers**, verify that **Microsoft.Monitor** is **Registered**. Register it if necessary and wait for registration to finish. **Microsoft.Insights** must also be registered.
 2. Search for **Azure Monitor workspaces**, select **Create**, and choose your event subscription and **existing Azure exercise RG**, not the `-onprem` RG. This is a different resource type from Log Analytics.
-3. Choose a workspace name unique to your participant within the shared subscription. Use your Azure exercise resource group name displayed above as a participant-specific suffix. Do not have every participant use the same name: the automatically generated managed RG name must also be distinct within the shared subscription.
+3. Choose a workspace name unique to you. Use your Azure exercise resource group name displayed above as a suffix to avoid conflicts with other participants.
 4. Choose a service-supported workspace region agreed with the coach. Create the OTel DCR in this same region; it need not match the Arc machines' metadata locations or physical VM locations. This lab uses public endpoints; the metrics-based experience does not currently support Private Link.
 5. Review and create the workspace. Record its full **resource ID**. Azure also creates a service-managed RG, normally `MA_<workspace-name>_<location>_managed`, containing its default ingestion DCR and DCE.
 6. Open the workspace's **JSON View** and inspect `properties.defaultIngestionSettings`. Follow the referenced DCR/DCE resource IDs to identify the actual managed RG, rather than assuming ownership from its name. Record this RG and apply **`SecurityControl=Ignore`** to it as well. If naming/tag policies or a deny assignment prevent creation or tagging, stop and involve the coach; do not remove service-managed protections or modify another participant's managed RG.
 
-Keep the workspace in your Azure exercise RG and leave its service-managed resources where Azure created them. Do not mark the managed RG as an additional `exercise` RG.
+Keep the workspace in your Azure exercise RG and leave its service-managed resources where Azure created them.
 The managed ingestion DCR is **not** the guest-performance DCR used in the next steps.
-The [coach cleanup procedure](../../labautomation/README.md#cleaning-up-participant-and-linked-managed-resources) discovers these workspace links and verifies Azure's automatic managed-RG deletion when the owning workspace is deleted.
 
 Reference: [Create and manage an Azure Monitor workspace](https://learn.microsoft.com/en-us/azure/azure-monitor/metrics/azure-monitor-workspace-manage).
 
@@ -237,7 +235,7 @@ Instead, use the following existing, generic **Arc Linux policies** to enforce A
    - **Effect:** `DeployIfNotExists`.
    - **Data Collection Rule Resource Id or Data Collection Endpoint Resource Id** (`dcrResourceId`): the **OTel guest-performance DCR ID copied from Windows onboarding**.
    - **Resource Type** (`resourceType`): **`Microsoft.Insights/dataCollectionRules`**, not `Microsoft.Insights/dataCollectionEndpoints`.
-4. Configure this assignment's own **system-assigned remediation identity** and grant the roles requested by the definition. The DCR and Arc machines are in the same participant RG, so do not broaden permissions to the subscription or managed RG. Confirm the grants actually succeeded; subscription Owner on your participant account is not a role grant to either remediation identity.
+4. Configure this assignment's own **system-assigned remediation identity** and grant the roles requested by the definition. The DCR and Arc machines are in the same participant RG, so grant these permissions only at that RG. Confirm the grants succeeded; the policy identities need their own permissions, separate from your user account.
 5. Create both assignments, then **wait for their first policy evaluations to finish**. In **Policy > Compliance**, open each assignment and refresh until resource-level results exist for the **Linux Arc resource**. Empty results or **Not started** are not a completed evaluation. If Linux is absent, check the RG scope, `osName` and whether its **Arc metadata location** is supported by the selected built-in definition.
 6. Inspect the evaluated results. AMA should already be **Compliant** from Task 2; the missing OTel DCR association should be **Non-compliant**. Keep the original Syslog DCR association in place.
 7. **Only after evaluation**, open **Policy > Remediation** and create a remediation task for the **non-compliant DCR-association assignment**, selecting the existing Linux Arc machine. If the AMA installation policy is also non-compliant, remediate it and wait for the extension to succeed as well. Do not create an empty remediation task before Linux has been evaluated.
@@ -274,7 +272,7 @@ References: [Assess updates](https://learn.microsoft.com/en-us/azure/update-mana
 ## Task 5: Enable Change Tracking and Inventory with AMA
 
 Use the current **Change Tracking and Inventory** service, not an Automation-account-based onboarding workflow.
-There is no step here to activate Windows Server Azure benefits. Licensing/benefit decisions belong to the coach and are not an agent-installation prerequisite in the current quickstart.
+You do not need to activate Windows Server Azure benefits for this task.
 
 ### Manually enable the Windows server
 

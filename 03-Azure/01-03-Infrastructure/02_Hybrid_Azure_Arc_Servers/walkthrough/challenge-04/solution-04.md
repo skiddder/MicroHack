@@ -10,11 +10,9 @@ Please ensure that you successfully passed [challenge 3](../../Readme.md#challen
 
 ### Task 1: Verify Defender for Cloud settings
 
-> **Hackbox Console:** Ask the coach to enable/configure the subscription-wide
-> Defender plan and monitoring settings. Participants have subscription Owner in
-> the default Console mode, but changes affect all participants and can incur
-> charges. Do not change these settings without coach approval; continue with
-> inspection of your own Arc servers after coach preparation.
+> **Before you start:** Ask your coach whether Defender for Servers is enabled.
+> Changing Defender plans affects everyone in the lab and can incur charges.
+> Only make changes with your coach's approval.
 > These Arc resources are in your **Azure exercise resource group**
 > <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>,
 > not the **Simulated on-prem resource group**

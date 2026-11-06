@@ -10,8 +10,7 @@ This challenge is about interacting with the client operating system. We will ha
 
 > **Hackbox Console:** Use your Azure exercise resource group
 > <secret group="Lab-Deployment" name="Azure exercise resource group" show="always"></secret>
-> for resources and policy assignments. Publishing a custom policy definition at subscription or
-> management-group scope requires the coach; RG Owner alone is insufficient.
+> for resources and policy assignments.
 
 - Create all necessary Azure resources
   - Azure Storage account
