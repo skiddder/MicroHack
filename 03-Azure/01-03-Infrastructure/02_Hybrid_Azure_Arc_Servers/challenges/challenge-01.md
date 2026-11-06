@@ -16,7 +16,7 @@ In challenge 1 you will prepare your Azure environemnt for onboarding of existin
 > finished before onboarding. Windows Server 2012 R2 is not provisioned.
 
 - Verify all necessary Azure resources are in place
-  - Resource Group <secret group="Lab-Deployment" name="Azure exercise resource group" show="true"></secret>
+  - Resource Group <variable group="Lab-Deployment" name="Azure exercise resource group" show="true"></variable>
 - Service Principal (Name: LabUser-xx-arc-servers-sp)
 - Enable required Resource Providers (if not already enabled)
 - Prep existing servers` operating system on-prem
