@@ -361,6 +361,14 @@ No guest-completion polling or automatic Arc onboarding is performed.
   if a reused VM did not originate from this lab's stable password, the dashboard
   password may not match it.
 - An existing failed VM deployment is not silently treated as a healthy VM.
+- VMs in `Creating` or `Updating` are polled with `az vm show` in both hooks
+  before reuse, including after ownership tagging. There are at most 60 polls
+  per check, ten seconds apart (about ten minutes plus Azure API time).
+  Ownership, region and SKU are checked before waiting and on every response.
+  Failed, canceled or unknown states and API errors stop immediately; a VM
+  still busy at the limit also stops with a diagnostic. Inspect its Azure
+  Activity Log and deployment/Run Command status before retrying. Waiting does
+  not recreate VMs, clear reconfiguration tags or resubmit guest scripts.
 - Removing users or changing their assigned region first triggers a read-only
   subscription resource inventory. A stale mapping can be replaced if the entire
   subscription contains no resources other than resource groups and deployment

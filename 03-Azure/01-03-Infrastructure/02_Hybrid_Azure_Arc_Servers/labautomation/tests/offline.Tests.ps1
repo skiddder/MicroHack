@@ -26,6 +26,9 @@ function Reset-Mock {
         users = @($users | Select-Object -First $Count)
         placement = @()
         vms = @()
+        vmStates = @()
+        vmPollSleeps = 0
+        ownershipTagUpdating = $false
         groupTags = @{}
         groupLocations = @{}
         extraOwners = @()
@@ -76,6 +79,11 @@ function Reset-Mock {
 }
 
 function global:Update-MhhToken { $global:ArcMock.refreshes++ }
+function global:Start-Sleep {
+    param([int]$Seconds)
+    if ($Seconds -ne 10) { throw 'VM provisioning must poll at ten-second intervals.' }
+    $global:ArcMock.vmPollSleeps++
+}
 function global:Get-AzContext {
     $id = if ($global:ArcMock.wrongContext) { 'wrong' } else { $subscription }
     [pscustomobject]@{ Subscription = [pscustomobject]@{ Id = $id } }
@@ -352,7 +360,12 @@ function global:az {
         'vm show' {
             $name = Get-MockArgument $arguments '--name'
             $rg = Get-MockArgument $arguments '--resource-group'
-            $global:ArcMock.vms | Where-Object { $_.name -eq $name -and $_.resourceGroup -eq $rg }
+            $matchingVms = @($global:ArcMock.vms | Where-Object { $_.name -eq $name -and $_.resourceGroup -eq $rg })
+            if ($matchingVms.Count -eq 1 -and $global:ArcMock.vmStates.Count -gt 0) {
+                $matchingVms[0].provisioningState = $global:ArcMock.vmStates[0]
+                $global:ArcMock.vmStates = @($global:ArcMock.vmStates | Select-Object -Skip 1)
+            }
+            $matchingVms
         }
         'vm update' {
             $name = Get-MockArgument $arguments '--name'
@@ -395,6 +408,10 @@ function global:az {
             }
             $tag = (Get-MockArgument $arguments '--tags') -split '=', 2
             $vm[0].tags | Add-Member -NotePropertyName $tag[0] -NotePropertyValue $tag[1] -Force
+            if ($global:ArcMock.ownershipTagUpdating -and $tag[0] -eq 'microhackArcUserId') {
+                $vm[0].provisioningState = 'Updating'
+                $global:ArcMock.vmStates = @('Updating', 'Succeeded')
+            }
             @{ properties = @{ tags = $vm[0].tags } }
         }
         'vm run-command' {
@@ -947,6 +964,59 @@ foreach ($conflict in @('owner', 'location', 'size', 'state')) {
     Assert-Throws { Invoke-Lab } $pattern
     Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'tag' -and (Get-MockArgument $_ '--resource-id') -match '/providers/Microsoft.Compute/virtualMachines/' }).Count -eq 0) 'Conflicting VMs are not retagged by either deployment stage'
     Assert-Test ($global:ArcMock.deployments.Count -eq 0) 'Conflicting VMs are not redeployed'
+}
+
+foreach ($stage in @('shared', 'participant', 'ownership-tag')) {
+    foreach ($pending in @('Updating', 'Creating')) {
+        Reset-Mock -Count 1
+        Invoke-Shared
+        Invoke-Lab | Out-Null
+        $deployments = $global:ArcMock.deployments.Count
+        $runs = @($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'run-command' }).Count
+        if ($stage -eq 'ownership-tag') {
+            $global:ArcMock.vms[0].tags.PSObject.Properties.Remove('microhackArcUserId')
+            $global:ArcMock.ownershipTagUpdating = $true
+        } else {
+            $global:ArcMock.vms[0].provisioningState = $pending
+            $global:ArcMock.vmStates = @($pending, 'Succeeded')
+        }
+        if ($stage -eq 'shared') { Invoke-Shared } else { Invoke-Lab | Out-Null }
+        Assert-Test ($global:ArcMock.vmPollSleeps -gt 0) "$stage waits for transient VM provisioning"
+        Assert-Test ($global:ArcMock.vms[0].provisioningState -eq 'Succeeded') "$stage refreshes VM provisioning until success"
+        Assert-Test ($global:ArcMock.deployments.Count -eq $deployments) "$stage does not recreate busy VMs"
+        Assert-Test (@($global:ArcMock.calls | Where-Object { $_[0] -eq 'vm' -and $_[1] -eq 'run-command' }).Count -eq $runs) "$stage preserves submitted reconfiguration without contacting stopped agents"
+    }
+}
+foreach ($stage in @('shared', 'participant')) {
+    foreach ($outcome in @('timeout', 'Failed', 'Canceled', 'Unknown', 'api-error', 'owner', 'size')) {
+        Reset-Mock -Count 1
+        Invoke-Shared
+        Invoke-Lab | Out-Null
+        $global:ArcMock.vms[0].provisioningState = 'Updating'
+        $pattern = 'after 60 provisioning polls'
+        if ($outcome -in @('Failed', 'Canceled', 'Unknown')) {
+            $global:ArcMock.vmStates = @($outcome)
+            $pattern = 'not successfully provisioned'
+        } elseif ($outcome -eq 'api-error') {
+            $global:ArcMock.failCommand = 'vm show'
+            $pattern = 'Azure CLI failed'
+        } elseif ($outcome -eq 'owner') {
+            $global:ArcMock.vms[0].tags.microhackArcUserId = $users[1]
+            $pattern = 'not marked as belonging'
+        } elseif ($outcome -eq 'size') {
+            $global:ArcMock.vms[0].hardwareProfile.vmSize = 'Standard_D4ads_v5'
+            $pattern = 'No VM will be moved'
+        }
+        if ($stage -eq 'shared') {
+            Assert-Throws { Invoke-Shared } $pattern
+        } else {
+            Assert-Throws { Invoke-Lab } $pattern
+        }
+        $expectedSleeps = if ($outcome -eq 'timeout') { 60 } elseif ($outcome -in @('owner', 'size')) { 0 } else { 1 }
+        Assert-Test ($global:ArcMock.vmPollSleeps -eq $expectedSleeps) "$stage bounds polling and immediately rejects $outcome"
+        Assert-Test ($global:ArcMock.deployments.Count -eq 2) "$stage never redeploys a VM after $outcome"
+        Assert-Test ($global:ArcMock.vms[0].tags.microhackReconfiguration -eq 'submitted') "$stage preserves reconfiguration after $outcome"
+    }
 }
 
 Reset-Mock -Count 1

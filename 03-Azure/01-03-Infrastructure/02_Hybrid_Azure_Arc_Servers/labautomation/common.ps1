@@ -287,7 +287,7 @@ function Test-ArcCapacity {
                 $_.resourceGroup -eq $groupName -and $_.name -eq "vm-$type-mh"
             })
             if ($existing.Count -gt 0) {
-                Assert-ArcVm -Vm $existing[0] -Location $entry.location -Size $script:ArcVmSizes[$type] -UserId $entry.userId -AllowUnmarked
+                Wait-ArcVmProvisioning -Vm $existing[0] -Location $entry.location -Size $script:ArcVmSizes[$type] -UserId $entry.userId -AllowUnmarked | Out-Null
             } else {
                 $key = "$($entry.location)/$type"
                 if (-not $remaining.ContainsKey($key)) { $remaining[$key] = 0 }
@@ -348,7 +348,7 @@ function Get-ArcVmUserId {
 }
 
 function Assert-ArcVm {
-    param([object]$Vm, [string]$Location, [string]$Size, [string]$UserId = '', [switch]$AllowUnmarked)
+    param([object]$Vm, [string]$Location, [string]$Size, [string]$UserId = '', [switch]$AllowUnmarked, [switch]$AllowProvisioning)
 
     $owner = Get-ArcVmUserId -Vm $Vm
     if ($UserId -and $owner -ne $UserId -and (-not $AllowUnmarked -or $owner -ne '')) {
@@ -357,7 +357,29 @@ function Assert-ArcVm {
     if ($Vm.location -ne $Location -or $Vm.hardwareProfile.vmSize -ne $Size) {
         throw "Existing VM '$($Vm.name)' does not match assigned location/SKU. No VM will be moved or resized automatically."
     }
-    if ($Vm.provisioningState -ne 'Succeeded') {
+    if ($Vm.provisioningState -ne 'Succeeded' -and
+        -not ($AllowProvisioning -and $Vm.provisioningState -in @('Creating', 'Updating'))) {
         throw "Existing VM '$($Vm.name)' is not successfully provisioned: $($Vm.provisioningState). Resolve this before retrying."
+    }
+}
+
+function Wait-ArcVmProvisioning {
+    param([object]$Vm, [string]$Location, [string]$Size, [string]$UserId = '', [switch]$AllowUnmarked)
+
+    $name = $Vm.name
+    $group = $Vm.resourceGroup
+    for ($attempt = 0; $attempt -le 60; $attempt++) {
+        Assert-ArcVm -Vm $Vm -Location $Location -Size $Size -UserId $UserId -AllowUnmarked:$AllowUnmarked -AllowProvisioning
+        if ($Vm.provisioningState -eq 'Succeeded') { return $Vm }
+        if ($attempt -eq 60) {
+            throw "VM '$name' in '$group' is still $($Vm.provisioningState) after 60 provisioning polls. Inspect Azure Activity Log and deployment/Run Command status before retrying; no VM was recreated or reconfiguration resubmitted."
+        }
+        Write-Host "Waiting for VM '$name' in '$group': $($Vm.provisioningState) (poll $($attempt + 1)/60 in 10 seconds)."
+        Start-Sleep -Seconds 10
+        $latest = @(Invoke-ArcAz -Arguments @('vm', 'show', '--resource-group', $group, '--name', $name))
+        if ($latest.Count -ne 1 -or $latest[0].name -ne $name -or $latest[0].resourceGroup -ne $group) {
+            throw "Cannot verify provisioning of VM '$name' in '$group': Azure did not return the expected VM."
+        }
+        $Vm = $latest[0]
     }
 }

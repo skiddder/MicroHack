@@ -94,7 +94,7 @@ foreach ($type in $script:ArcVmTypes) {
         }
         $vm = @(Invoke-ArcAz -Arguments @('vm', 'show', '--resource-group', $onPremResourceGroupName, '--name', $vmName))
     }
-    Assert-ArcVm -Vm $vm[0] -Location $location -Size $script:ArcVmSizes[$type] -UserId $userId -AllowUnmarked
+    $vm = @(Wait-ArcVmProvisioning -Vm $vm[0] -Location $location -Size $script:ArcVmSizes[$type] -UserId $userId -AllowUnmarked)
     if ((Get-ArcVmUserId -Vm $vm[0]) -eq '') {
         if (-not $isNewVm) {
             Write-Warning "Adding missing ownership tag to existing VM '$vmName' in '$onPremResourceGroupName' under the approved reuse policy. Its origin and password are not verified; the password is not reset."
@@ -107,7 +107,7 @@ foreach ($type in $script:ArcVmTypes) {
             'vm', 'show', '--resource-group', $onPremResourceGroupName, '--name', $vmName
         ))
     }
-    Assert-ArcVm -Vm $vm[0] -Location $location -Size $script:ArcVmSizes[$type] -UserId $userId
+    $vm = @(Wait-ArcVmProvisioning -Vm $vm[0] -Location $location -Size $script:ArcVmSizes[$type] -UserId $userId)
     $state = ''
     if ($vm[0].tags -and $vm[0].tags.PSObject.Properties['microhackReconfiguration']) {
         $state = $vm[0].tags.microhackReconfiguration
