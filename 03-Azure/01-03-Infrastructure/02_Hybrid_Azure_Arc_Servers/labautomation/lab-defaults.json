@@ -3,5 +3,5 @@
   "groups": [],
   "deploymentType": "resourcegroup-with-subscriptionowner",
   "labsPerSubscription": 10,
-  "preferredLocation": "swedencentral, australiaeast, westus2"
+  "preferredLocation": "swedencentral, australiaeast, westus2, qatarcentral, westindia"
 }
