@@ -59,6 +59,9 @@ foreach ($role in @('master', 'worker')) {
     Assert-Test ($bootstrap -notmatch '\$\{(admin_user|k3s_version|cluster_token|master_ip)\}|\$\$\{') 'Unrendered Terraform template.'
     Assert-Test ($bootstrap.Contains('timeout 1800 bash')) 'Bootstrap must have a deadline.'
     Assert-Test ($bootstrap.Contains('gpg --batch --yes')) 'GPG must support non-interactive retries.'
+    Assert-Test ($bootstrap.Contains('timeout 600 cloud-init status --wait --long')) 'Every node must wait for cloud-init with a bounded deadline.'
+    Assert-Test ($bootstrap.IndexOf('cloud-init status') -lt $bootstrap.IndexOf('apt-get update')) 'Cloud-init must complete before any APT operation.'
+    Assert-Test (-not $bootstrap.Contains("`r")) 'Rendered bootstrap must retain Linux line endings.'
 }
 Assert-Throws { Get-K8sBootstrap -Role master -ClusterToken "bad'token" } 'alphanumeric'
 $workstationScript = Get-K8sWorkstationScript
@@ -477,6 +480,12 @@ Assert-Test ($global:K8sTestState.Groups.Count -eq 1 -and $global:K8sTestState.G
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ("microhack-k8s-tests-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temporary | Out-Null
 try {
+    foreach ($role in @('master', 'worker')) {
+        $bootstrap = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(
+            (Get-K8sBootstrap -Role $role -ClusterToken 'testtoken123' -MasterIp '10.1.1.10')
+        ))
+        [IO.File]::WriteAllText((Join-Path $temporary "bootstrap-$role.sh"), $bootstrap)
+    }
     foreach ($file in Get-ChildItem $root -Filter '*.bicep') {
         & az bicep build --file $file.FullName --outfile (Join-Path $temporary "$($file.BaseName).json")
         Assert-Test ($LASTEXITCODE -eq 0) "Bicep compilation failed: $($file.Name)"
@@ -506,7 +515,7 @@ try {
     $azPath = (Get-Command az).Source
     $python = Join-Path (Split-Path (Split-Path $azPath -Parent) -Parent) 'python.exe'
     if (-not (Test-Path -LiteralPath $python)) { $python = (Get-Command python3 -ErrorAction Stop).Source }
-    & $python (Join-Path $PSScriptRoot 'verify-artifacts.py') $root
+    & $python (Join-Path $PSScriptRoot 'verify-artifacts.py') $root $temporary
     Assert-Test ($LASTEXITCODE -eq 0) 'Artifact validation failed.'
 } finally {
     Remove-Item -LiteralPath $temporary -Recurse -Force

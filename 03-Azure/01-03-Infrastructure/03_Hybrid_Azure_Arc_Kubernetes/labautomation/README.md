@@ -85,7 +85,11 @@ setup, handling disconnected references left by an on-prem RG recycle.
 
 Passwords and the K3s token are stable across retries and are passed in secure
 ARM parameters and protected guest configuration, never public template outputs.
-K3s bootstrap commands are bounded to 30 minutes. The managed Run Command remains
+K3s bootstrap commands are bounded to 30 minutes. Before any package operation,
+both master and worker extensions wait up to 10 minutes for cloud-init to finish
+successfully. This prevents APT from racing cloud-init's initial repository and
+package configuration. A cloud-init error or timeout fails the extension before
+APT runs and directs the coach to the cloud-init logs. The managed Run Command remains
 bounded to 60 minutes and uses `treatFailureAsDeploymentFailure`, so Azure ARM
 only reports completion after the guest is done. Console polls ARM and the guest
 every 30 seconds, refreshes credentials before requests and reports state/elapsed
@@ -165,8 +169,17 @@ the archive:
 
 The packaging step does not modify any file in `lab`. Only bootstrap rendering
 removes Terraform escaping, substitutes the original parameters and makes
-GPG key creation non-interactive for retries. WSL script rendering additionally
+GPG key creation non-interactive for retries, and adds the bounded cloud-init
+check before executing either node script. WSL script rendering additionally
 replaces the latest-kubectl lookup with the matching K3s client version.
+
+If a previous attempt left an invalid `/etc/apt/sources.list`, waiting for
+cloud-init does not repair that file. Inspect the affected guest's cloud-init
+logs and repository configuration before retrying. Do not blindly rewrite
+sources or recycle successful participants. If the failed lab must be recreated,
+verify ownership and remove only its on-prem RG with the coach's approval,
+preserving the exercise RG and shared hub, then rerun the existing event with
+the updated complete automation package.
 
 ## Participant access
 
@@ -191,7 +204,9 @@ Offline tests parse every PowerShell file, compile every Bicep template, check
 archive/source equality, simulate the shared and participant hooks and verify
 scope separation, credential output, stable network assignments, legacy naming
 conflicts, interrupted submissions, transient status errors, recovery without
-duplicate guest execution, and failure/timeout paths.
+duplicate guest execution, and failure/timeout paths. Both rendered K3s scripts
+are executed against shell stubs to verify that APT starts only after cloud-init
+success and remains blocked on errors, degraded status and timeout.
 They require PowerShell 7 and Azure CLI with Bicep installed.
 
 For a platform-like local test use the

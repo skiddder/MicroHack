@@ -16,6 +16,36 @@ import zipfile
 import yaml
 
 root = pathlib.Path(sys.argv[1])
+bootstrap_root = pathlib.Path(sys.argv[2])
+git_bash = pathlib.Path(r"C:\Program Files\Git\bin\bash.exe")
+bash = str(git_bash) if os.name == "nt" and git_bash.exists() else shutil.which("bash")
+assert bash, "Bash is required to validate the guest scripts."
+for role in ("master", "worker"):
+    bootstrap = (bootstrap_root / f"bootstrap-{role}.sh").read_text()
+    subprocess.run([bash, "-n"], input=bootstrap, text=True, encoding="utf-8", check=True)
+    for cloud_init_status in (0, 1, 2, 124):
+        stub = f"""
+timeout() {{ echo "TIMEOUT_LIMIT=$1"; shift; "$@"; }}
+cloud-init() {{ echo "CLOUD_INIT=$*"; return {cloud_init_status}; }}
+apt-get() {{ echo "APT=$*"; exit 91; }}
+sleep() {{ :; }}
+export -f timeout cloud-init apt-get sleep
+"""
+        result = subprocess.run(
+            [bash, "-s"], input=stub + bootstrap,
+            text=True, encoding="utf-8", capture_output=True,
+        )
+        assert "TIMEOUT_LIMIT=1800" in result.stdout, result
+        assert "TIMEOUT_LIMIT=600" in result.stdout, result
+        assert "CLOUD_INIT=status --wait --long" in result.stdout, result
+        if cloud_init_status == 0:
+            assert result.returncode == 91 and "APT=update" in result.stdout, result
+            assert result.stdout.index("CLOUD_INIT=") < result.stdout.index("APT="), result
+        else:
+            assert result.returncode == cloud_init_status, result
+            assert "APT=" not in result.stdout, result
+            assert "refusing to run APT" in result.stderr, result
+print("Passed 8 rendered-bootstrap cloud-init cases and Bash syntax checks.", flush=True)
 runner = (root / "configure-workstation.sh").read_text()
 python_blocks = re.findall(r"<<'PY'\n(.*?)\nPY", runner, re.S)
 assert len(python_blocks) == 1
@@ -115,9 +145,6 @@ for count, ready, should_pass in ((3, True, True), (2, True, False), (3, False, 
 onboarding = (
     root.parent / "walkthrough" / "challenge-01" / "az_connect_k8s.sh"
 ).read_text(encoding="utf-8")
-git_bash = pathlib.Path(r"C:\Program Files\Git\bin\bash.exe")
-bash = str(git_bash) if os.name == "nt" and git_bash.exists() else shutil.which("bash")
-assert bash, "Bash is required to validate the onboarding script."
 subprocess.run([bash, "-n"], input=onboarding, text=True, encoding="utf-8", check=True)
 setup = onboarding.split("# Registering Azure Arc providers", 1)[0]
 account_command = "account show --query user.name --output tsv"
@@ -543,4 +570,4 @@ with tempfile.TemporaryDirectory(prefix="microhack-k8s-interactive-errors-") as 
         assert "Step 1 completed" not in result.stdout
         assert "UNEXPECTED_LOOKUP" not in result.stderr
 
-print("Validated guest artifacts, onboarding, monitoring, Ollama readiness and 3 data-service naming/template cases.")
+print("Validated cloud-init gating for both K3s roles, guest artifacts, onboarding, monitoring, Ollama readiness and 3 data-service naming/template cases.")

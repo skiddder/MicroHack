@@ -78,8 +78,18 @@ function Get-K8sBootstrap {
         Replace('${master_ip}', $MasterIp).
         Replace('$${', '${').
         Replace('gpg --dearmor -o', 'gpg --batch --yes --dearmor -o')
+    $preparation = @'
+echo "Waiting for cloud-init to finish before starting package operations..."
+if timeout 600 cloud-init status --wait --long; then
+    echo "cloud-init completed successfully."
+else
+    status=$?
+    echo "cloud-init did not complete successfully (exit $status); refusing to run APT. Inspect /var/log/cloud-init.log and /var/log/cloud-init-output.log." >&2
+    exit "$status"
+fi
+'@
     # Bound the legacy scripts' polling loops and package operations.
-    return ConvertTo-K8sBase64 ("#!/bin/bash`nset -euo pipefail`nexport DEBIAN_FRONTEND=noninteractive`ntimeout 1800 bash <<'MICROHACK_BOOTSTRAP'`n$text`nMICROHACK_BOOTSTRAP`n")
+    return ConvertTo-K8sBase64 ("#!/bin/bash`nset -euo pipefail`nexport DEBIAN_FRONTEND=noninteractive`ntimeout 1800 bash <<'MICROHACK_BOOTSTRAP'`nset -euo pipefail`n$preparation`n$text`nMICROHACK_BOOTSTRAP`n").Replace("`r`n", "`n")
 }
 
 function Get-K8sWorkstationScript {
