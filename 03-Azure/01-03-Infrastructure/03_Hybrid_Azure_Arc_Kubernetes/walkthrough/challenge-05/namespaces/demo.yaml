@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    name: demo
+  annotations:
+    contoso.com/owner: "demo@contoso.com"
+  name: itops
