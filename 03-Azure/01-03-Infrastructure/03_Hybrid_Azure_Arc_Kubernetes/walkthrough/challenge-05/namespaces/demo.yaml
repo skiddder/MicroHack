@@ -5,4 +5,4 @@ metadata:
     name: demo
   annotations:
     contoso.com/owner: "demo@contoso.com"
-  name: itops
+  name: demo
